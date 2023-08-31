@@ -15,7 +15,7 @@
 
 use bytes::BytesMut;
 use futures::SinkExt;
-use http::{header::HeaderValue, Request, Response, StatusCode};
+use webparse::{Request, Response, http::StatusCode};
 #[macro_use]
 extern crate serde_derive;
 use std::{env, error::Error, fmt, io};
@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // our worker threads, and start shipping sockets to those worker threads.
     let addr = env::args()
         .nth(1)
-        .unwrap_or_else(|| "127.0.0.1:8080".to_string());
+        .unwrap_or_else(|| "0.0.0.0:8080".to_string());
     let server = TcpListener::bind(&addr).await?;
     println!("Listening on: {}", addr);
 
@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
-    let mut transport = Framed::new(stream, Http);
+    let mut transport = Framed::new(stream, Http(None));
 
     while let Some(request) = transport.next().await {
         match request {
@@ -62,8 +62,9 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
 }
 
 async fn respond(req: Request<()>) -> Result<Response<String>, Box<dyn Error>> {
-    let mut response = Response::builder();
-    let body = match req.uri().path() {
+    let mut response = Response::builder().version(req.version().clone());
+    
+    let body = match &*req.url().path {
         "/plaintext" => {
             response = response.header("Content-Type", "text/plain");
             "Hello, World!".to_string()
@@ -80,13 +81,13 @@ async fn respond(req: Request<()>) -> Result<Response<String>, Box<dyn Error>> {
             })?
         }
         _ => {
-            response = response.status(StatusCode::NOT_FOUND);
+            response = response.status(404);
             String::new()
         }
     };
     let response = response
         .body(body)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
 
     Ok(response)
 }

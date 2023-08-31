@@ -1,12 +1,14 @@
 use std::{io, fmt};
 
-use bytes::BytesMut;
+use bytes::{BytesMut, BufMut, Buf};
 
-use http::{header::HeaderValue, Request, Response, StatusCode};
+// use http::{header::HeaderValue, Request, Response, StatusCode};
 
 use tokio_util::codec::{Encoder, Decoder};
+use webparse::{Response, Request, Serialize, BinaryMut, http::request::Parts, Version};
 
-pub struct Http;
+// http2协议保留头数据以做共享数据
+pub struct Http(pub Option<Parts>);
 
 /// Implementation of encoding an HTTP response into a `BytesMut`, basically
 /// just writing out an HTTP/1.1 response.
@@ -15,48 +17,11 @@ impl Encoder<Response<String>> for Http {
 
     fn encode(&mut self, item: Response<String>, dst: &mut BytesMut) -> io::Result<()> {
         use std::fmt::Write;
-
-        write!(
-            BytesWrite(dst),
-            "\
-             HTTP/1.1 {}\r\n\
-             Server: Example\r\n\
-             Content-Length: {}\r\n\
-             Date: {}\r\n\
-             ",
-            item.status(),
-            item.body().len(),
-            date::now()
-        )
-        .unwrap();
-
-        for (k, v) in item.headers() {
-            dst.extend_from_slice(k.as_str().as_bytes());
-            dst.extend_from_slice(b": ");
-            dst.extend_from_slice(v.as_bytes());
-            dst.extend_from_slice(b"\r\n");
-        }
-
-        dst.extend_from_slice(b"\r\n");
-        dst.extend_from_slice(item.body().as_bytes());
-
+        let mut buf = BinaryMut::new();
+        let _ = item.serialize(&mut buf);
+        dst.put_slice(buf.as_slice_all());
         return Ok(());
 
-        // Right now `write!` on `Vec<u8>` goes through io::Write and is not
-        // super speedy, so inline a less-crufty implementation here which
-        // doesn't go through io::Error.
-        struct BytesWrite<'a>(&'a mut BytesMut);
-
-        impl fmt::Write for BytesWrite<'_> {
-            fn write_str(&mut self, s: &str) -> fmt::Result {
-                self.0.extend_from_slice(s.as_bytes());
-                Ok(())
-            }
-
-            fn write_fmt(&mut self, args: fmt::Arguments<'_>) -> fmt::Result {
-                fmt::write(self, args)
-            }
-        }
     }
 }
 
@@ -69,68 +34,31 @@ impl Decoder for Http {
     type Error = io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> io::Result<Option<Request<()>>> {
-        // TODO: we should grow this headers array if parsing fails and asks
-        //       for more headers
-        let mut headers = [None; 16];
-        let (method, path, version, amt) = {
-            let mut parsed_headers = [httparse::EMPTY_HEADER; 16];
-            let mut r = httparse::Request::new(&mut parsed_headers);
-            let status = r.parse(src).map_err(|e| {
-                let msg = format!("failed to parse http request: {:?}", e);
-                io::Error::new(io::ErrorKind::Other, msg)
-            })?;
-
-            let amt = match status {
-                httparse::Status::Complete(amt) => amt,
-                httparse::Status::Partial => return Ok(None),
-            };
-
-            let toslice = |a: &[u8]| {
-                let start = a.as_ptr() as usize - src.as_ptr() as usize;
-                assert!(start < src.len());
-                (start, start + a.len())
-            };
-
-            for (i, header) in r.headers.iter().enumerate() {
-                let k = toslice(header.name.as_bytes());
-                let v = toslice(header.value);
-                headers[i] = Some((k, v));
-            }
-
-            (
-                toslice(r.method.unwrap().as_bytes()),
-                toslice(r.path.unwrap().as_bytes()),
-                r.version.unwrap(),
-                amt,
-            )
+        if !src.has_remaining() {
+            return Err(io::Error::new(io::ErrorKind::Interrupted, "Interrupted"));
+        }
+        let (req, result) = if self.0.is_some() && self.0.as_ref().unwrap().version == Version::Http2 {
+            let mut req = Request::new_by_parts(self.0.clone().unwrap());
+            let result = req.parse2(src.chunk());
+            (req, result)
+        } else {
+            let mut req = Request::new();
+            let result = req.parse(src.chunk());
+            (req, result)
         };
-        if version != 1 {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "only HTTP/1.1 accepted",
-            ));
+        match result {
+            Ok(len) => {
+                src.advance(len);
+                if req.is_http2() {
+                    self.0 = Some(req.parts().clone());
+                }
+                Ok(Some(req))
+            }
+            Err(err) => {
+                println!("remain === {:?}", src.remaining());
+                Err(io::Error::new(io::ErrorKind::Other, "partical"))
+            }
         }
-        let data = src.split_to(amt).freeze();
-        let mut ret = Request::builder();
-        ret = ret.method(&data[method.0..method.1]);
-        let s = data.slice(path.0..path.1);
-        let s = unsafe { String::from_utf8_unchecked(Vec::from(s.as_ref())) };
-        ret = ret.uri(s);
-        ret = ret.version(http::Version::HTTP_11);
-        for header in headers.iter() {
-            let (k, v) = match *header {
-                Some((ref k, ref v)) => (k, v),
-                None => break,
-            };
-            let value = HeaderValue::from_bytes(data.slice(v.0..v.1).as_ref())
-                .map_err(|_| io::Error::new(io::ErrorKind::Other, "header decode error"))?;
-            ret = ret.header(&data[k.0..k.1], value);
-        }
-
-        let req = ret
-            .body(())
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-        Ok(Some(req))
     }
 }
 
