@@ -16,7 +16,6 @@ impl Encoder<Response<String>> for Http {
     type Error = io::Error;
 
     fn encode(&mut self, mut item: Response<String>, dst: &mut BytesMut) -> io::Result<()> {
-        use std::fmt::Write;
         let mut buf = BinaryMut::new();
         let _ = Http2::serialize(&mut item, &mut buf);
         // let _ = item.serialize(&mut buf);
