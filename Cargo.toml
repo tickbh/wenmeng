@@ -1,0 +1,26 @@
+[package]
+name = "dmeng"
+version = "0.1.0"
+edition = "2021"
+authors = [ "tickbh <tickdream125@hotmail.com>" ]
+description = "a web parse"
+repository = "https://github.com/tickbh/dmeng"
+license = "Apache-2.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "1.32.0", features = ["full"] }
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+httparse = "1"
+httpdate = "1"
+tokio-util = { version = "0.7.1", features = ["full"] }
+tokio-stream = { version = "0.1.14" }
+futures = { version = "0.3.0", features = ["thread-pool"]}
+bytes = "1.4.0"
+http = "0.2"
+
+[dependencies.webparse]
+path="../webparse"
