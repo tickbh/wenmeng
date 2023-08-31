@@ -5,7 +5,7 @@ use bytes::{BytesMut, BufMut, Buf};
 // use http::{header::HeaderValue, Request, Response, StatusCode};
 
 use tokio_util::codec::{Encoder, Decoder};
-use webparse::{Response, Request, Serialize, BinaryMut, http::request::Parts, Version};
+use webparse::{Response, Request, Serialize, BinaryMut, http::{request::Parts, http2::Http2}, Version};
 
 // http2协议保留头数据以做共享数据
 pub struct Http(pub Option<Parts>);
@@ -15,10 +15,11 @@ pub struct Http(pub Option<Parts>);
 impl Encoder<Response<String>> for Http {
     type Error = io::Error;
 
-    fn encode(&mut self, item: Response<String>, dst: &mut BytesMut) -> io::Result<()> {
+    fn encode(&mut self, mut item: Response<String>, dst: &mut BytesMut) -> io::Result<()> {
         use std::fmt::Write;
         let mut buf = BinaryMut::new();
-        let _ = item.serialize(&mut buf);
+        let _ = Http2::serialize(&mut item, &mut buf);
+        // let _ = item.serialize(&mut buf);
         dst.put_slice(buf.as_slice_all());
         return Ok(());
 
