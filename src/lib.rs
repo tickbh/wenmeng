@@ -1,4 +1,4 @@
 
-mod codec;
+mod proto;
 
-pub use codec::Http;
+pub use proto::Http;

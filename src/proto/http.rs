@@ -5,7 +5,7 @@ use bytes::{BytesMut, BufMut, Buf};
 // use http::{header::HeaderValue, Request, Response, StatusCode};
 
 use tokio_util::codec::{Encoder, Decoder};
-use webparse::{Response, Request, Serialize, BinaryMut, http::{request::Parts, http2::Http2}, Version};
+use webparse::{Response, Request, Serialize, BinaryMut, http::{request::Parts, http2::{Http2, Frame}}, Version, Binary};
 
 // http2协议保留头数据以做共享数据
 pub struct Http(pub Option<Parts>);
@@ -17,6 +17,18 @@ impl Encoder<Response<String>> for Http {
 
     fn encode(&mut self, mut item: Response<String>, dst: &mut BytesMut) -> io::Result<()> {
         let mut buf = BinaryMut::new();
+        // if let Some(vec) = item.extensions().borrow().get::<Vec<Frame<Binary>>>() {
+        //     for v in vec {
+        //         let _ = v.serialize(&mut buf);
+        //     }
+        // }
+
+        let settings: Vec<u8> = vec![0x00,0x00,0x1e,0x04,0x00,0x00,0x00,0x00,0x00,0x00,0x03,0x00,0x00,0x00,0x64,0x00,0x04,0x00,0x10,0x00,0x00,0x00,0x09,0x00,0x00,0x00,0x01,0x00,0x08,0x00,0x00,0x00,0x01,0x00,0x01,0x00,0x00,0x20,0x00];
+        settings.serialize(&mut buf);
+
+        let settings: Vec<u8> = vec![0x00,0x00,0x00,0x04,0x01,0x00,0x00,0x00,0x00];
+        settings.serialize(&mut buf);
+        
         let _ = Http2::serialize(&mut item, &mut buf);
         // let _ = item.serialize(&mut buf);
         dst.put_slice(buf.as_slice_all());

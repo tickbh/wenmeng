@@ -22,5 +22,16 @@ futures = { version = "0.3.0", features = ["thread-pool"]}
 bytes = "1.4.0"
 http = "0.2"
 
+hyper="0.14.27"
+http-body = "0.4.5"
+
+
+tracing = { version = "0.1.21", default-features = false, features = ["std"] }
+futures-core = { version = "0.3", default-features = false }
+futures-sink = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false }
+
+# http-body-util = { version = "1", optional = true }
+
 [dependencies.webparse]
 path="../webparse"

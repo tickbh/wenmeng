@@ -15,10 +15,10 @@
 
 use bytes::BytesMut;
 use futures::SinkExt;
-use webparse::{Request, Response, http::StatusCode};
+use webparse::{Request, Response, http::{StatusCode, http2::Frame}, Binary};
 #[macro_use]
 extern crate serde_derive;
-use std::{env, error::Error, fmt, io};
+use std::{env, error::Error, fmt::{self,}, io, borrow::BorrowMut};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Decoder, Encoder, Framed};
@@ -27,6 +27,7 @@ use dmeng::{self, Http};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+
     // Parse the arguments, bind the TCP socket we'll be listening to, spin up
     // our worker threads, and start shipping sockets to those worker threads.
     let addr = env::args()
@@ -61,8 +62,13 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn respond(req: Request<()>) -> Result<Response<String>, Box<dyn Error>> {
+async fn respond(mut req: Request<()>) -> Result<Response<String>, Box<dyn Error>> {
     let mut response = Response::builder().version(req.version().clone());
+    if req.is_http2() {
+        if let Some(vec) = req.extensions().borrow_mut().remove::<Vec<Frame<Binary>>>() {
+            response.extensions_ref().unwrap().borrow_mut().insert(vec);
+        }
+    }
     
     let body = match &*req.url().path {
         "/plaintext" => {
@@ -91,3 +97,5 @@ async fn respond(req: Request<()>) -> Result<Response<String>, Box<dyn Error>> {
 
     Ok(response)
 }
+
+
