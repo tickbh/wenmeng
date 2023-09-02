@@ -106,10 +106,12 @@ where
     type Output = ProtoResult<Codec<T>>;
 
     fn poll(
-        self: std::pin::Pin<&mut Self>,
+        mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
-        todo!()
+        // ready!(self.codec.as_mut().unwrap().flush(cx)).map_err(crate::Error::from_io)?;
+
+        Poll::Ready(Ok(self.codec.take().unwrap()))
     }
 }
 
@@ -166,3 +168,13 @@ where
         }
     }
 }
+
+unsafe impl<T> Send for Handshake<T> {
+    
+}
+
+
+unsafe impl<T> Sync for Handshake<T> {
+    
+}
+

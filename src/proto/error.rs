@@ -28,3 +28,11 @@ impl From<WebError>  for ProtoError {
         ProtoError::WebError(value)
     }
 }
+
+unsafe impl Send for ProtoError {
+    
+}
+
+unsafe impl Sync for ProtoError {
+    
+}

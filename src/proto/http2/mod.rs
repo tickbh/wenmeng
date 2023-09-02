@@ -6,6 +6,7 @@ mod connection;
 
 pub use connection::Connection;
 pub use server::Builder;
+pub use handshake::Handshake;
 
 pub type FrameSize = u32;
 pub type WindowSize = u32;
