@@ -54,7 +54,10 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
 
                 println!("frame === {:?}", request);
             }
-            Err(e) => panic!("aaaaaa"),
+            Err(e) => {
+                println!("error = {:?}", e);
+                // panic!("aaaaaa");
+            },
         }
     }
     // let mut transport = Framed::new(stream, Http(None));

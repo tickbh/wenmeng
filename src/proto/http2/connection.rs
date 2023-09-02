@@ -12,10 +12,10 @@ use webparse::http::http2::frame::Frame;
 
 use crate::proto::{ProtoError, ProtoResult};
 
-use super::codec::FramedRead;
+use super::codec::{FramedRead, FramedWrite, Codec};
 
 pub struct Connection<T> {
-    inner: FramedRead<T>,
+    codec: Codec<T>,
 }
 
 
@@ -32,9 +32,15 @@ impl<T> Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(stream: T) -> Connection<T> {
+    pub fn new(io: T) -> Connection<T> {
         Connection {
-            inner: FramedRead::new(stream),
+            codec: Codec::new(io),
+        }
+    }
+
+    pub fn new_by_codec(codec: Codec<T>) -> Connection<T> {
+        Connection {
+            codec,
         }
     }
 }
@@ -49,11 +55,7 @@ where
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        // let xx = match ready!(Pin::new(&mut self.inner).poll_next(cx)) {
-        //     Some(frame) => Poll::Ready(())
-        // };
-        // Poll::Ready(None)
-        Pin::new(&mut self.inner).poll_next(cx)
+        Pin::new(&mut self.codec).poll_next(cx)
     }
 }
 

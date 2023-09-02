@@ -4,13 +4,15 @@ use std::task::{ready, Poll};
 use bytes::BytesMut;
 use futures_core::Stream;
 use tokio::io::AsyncRead;
-use tokio_util::codec::FramedRead as InnerFramedRead;
+use tokio_util::codec::{FramedRead as InnerFramedRead, length_delimited};
 use tokio_util::codec::{LengthDelimitedCodec, LengthDelimitedCodecError};
 use webparse::http::http2::frame::{Frame, Kind};
 use webparse::http::http2::{frame, Decoder, HeaderIndex};
 use webparse::{Binary, BinaryMut, WebResult};
 
 use crate::proto::{ProtoError, ProtoResult};
+
+use super::FramedWrite;
 
 #[derive(Debug)]
 pub struct FramedRead<T> {
@@ -39,18 +41,28 @@ enum Continuable {
     PushPromise(frame::PushPromise),
 }
 
+
+impl<T> FramedRead<T> {
+    pub fn get_mut(&mut self) -> &mut T {
+        self.inner.get_mut()
+    }
+}
+
 impl<T> FramedRead<T>
 where
     T: AsyncRead + Unpin,
 {
-    pub fn new(stream: T) -> FramedRead<T> {
+    pub fn new(delimited: InnerFramedRead<T, LengthDelimitedCodec>) -> FramedRead<T> {
+
         FramedRead {
-            inner: InnerFramedRead::new(stream, LengthDelimitedCodec::new()),
+            inner: delimited,
             decoder: Decoder::new(),
             max_header_list_size: 0,
             partial: None,
         }
     }
+    
+
 }
 
 impl<T> Stream for FramedRead<T>
@@ -64,6 +76,9 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
         loop {
+            println!("poll!!!!!!");
+            let xx = Pin::new(&mut self.inner).poll_next(cx);
+            println!("xxx = {:?}", xx);
             let bytes = match ready!(Pin::new(&mut self.inner).poll_next(cx)) {
                 Some(Ok(bytes)) => bytes,
                 Some(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
@@ -81,7 +96,6 @@ where
                 return Poll::Ready(Some(Ok(frame)));
             }
         }
-        todo!()
     }
 }
 
