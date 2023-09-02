@@ -12,7 +12,7 @@ use webparse::http::http2::frame::Frame;
 
 use crate::proto::{ProtoError, ProtoResult};
 
-use super::codec::{FramedRead, FramedWrite, Codec};
+use super::{codec::{FramedRead, FramedWrite, Codec}, handshake::Handshake};
 
 pub struct Connection<T> {
     codec: Codec<T>,
@@ -43,6 +43,14 @@ where
             codec,
         }
     }
+
+    // pub fn handshake(io: T) -> Handshake<T> {
+    //     Handshake {
+    //         builder: todo!(),
+    //         state: todo!(),
+    //         span: todo!(),
+    //     }
+    // }
 }
 
 impl<T> Stream for Connection<T>

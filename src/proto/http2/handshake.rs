@@ -1,9 +1,14 @@
-use crate::{Connection, ProtoResult, ProtoError};
+use crate::{Connection, ProtoError, ProtoResult};
 
 use super::{codec::Codec, Builder};
-use std::{future::Future, pin::Pin, task::{Poll, ready}, io};
+use std::{
+    future::Future,
+    io,
+    pin::Pin,
+    task::{ready, Poll},
+};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use webparse::{Binary, Buf, http::http2::HTTP2_MAGIC};
+use webparse::{http::http2::HTTP2_MAGIC, Binary, Buf};
 
 pub struct Handshake<T> {
     /// 默认参数
@@ -35,11 +40,14 @@ struct ReadPreface<T> {
     pos: usize,
 }
 
-impl<T> ReadPreface<T> where T: AsyncRead + AsyncWrite + Unpin {
+impl<T> ReadPreface<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
     pub fn new(codec: Codec<T>) -> Self {
         Self {
             codec: Some(codec),
-            pos: 0
+            pos: 0,
         }
     }
 
@@ -48,10 +56,16 @@ impl<T> ReadPreface<T> where T: AsyncRead + AsyncWrite + Unpin {
     }
 }
 
-impl<T> Future for Handshake<T> where T: AsyncRead + AsyncWrite + Unpin {
+impl<T> Future for Handshake<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
     type Output = ProtoResult<Connection<T>>;
 
-    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
         loop {
             match &mut self.state {
                 Handshaking::Flushing(flush) => {
@@ -65,15 +79,12 @@ impl<T> Future for Handshake<T> where T: AsyncRead + AsyncWrite + Unpin {
                             flushed
                         }
                     };
-                    self.state = Handshaking::ReadingPreface(
-                        ReadPreface::new(codec),
-                    );
+                    self.state = Handshaking::ReadingPreface(ReadPreface::new(codec));
                 }
                 Handshaking::ReadingPreface(read) => {
                     let codec = ready!(Pin::new(read).poll(cx)?);
 
                     self.state = Handshaking::Done;
-
 
                     tracing::trace!("connection established!");
                     let mut c = Connection::new_by_codec(codec);
@@ -88,25 +99,36 @@ impl<T> Future for Handshake<T> where T: AsyncRead + AsyncWrite + Unpin {
     }
 }
 
-impl<T> Future for Flush<T> where T: AsyncRead + AsyncWrite + Unpin {
+impl<T> Future for Flush<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
     type Output = ProtoResult<Codec<T>>;
 
-    fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
         todo!()
     }
 }
 
-impl<T> Future for ReadPreface<T> where T: AsyncRead + AsyncWrite + Unpin {
+impl<T> Future for ReadPreface<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
     type Output = ProtoResult<Codec<T>>;
 
-    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
         let mut buf = [0; 24];
         let mut rem = HTTP2_MAGIC.len() - self.pos;
 
         while rem > 0 {
             let mut buf = ReadBuf::new(&mut buf[..rem]);
-            ready!(Pin::new(self.inner_mut()).poll_read(cx, &mut buf))
-                .map_err(ProtoError::from)?;
+            ready!(Pin::new(self.inner_mut()).poll_read(cx, &mut buf)).map_err(ProtoError::from)?;
             let n = buf.filled().len();
             if n == 0 {
                 return Poll::Ready(Err(ProtoError::from(io::Error::new(
@@ -126,5 +148,21 @@ impl<T> Future for ReadPreface<T> where T: AsyncRead + AsyncWrite + Unpin {
         }
 
         Poll::Ready(Ok(self.codec.take().unwrap()))
+    }
+}
+
+impl<T> Handshake<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
+    pub fn handshake(io: T) -> Handshake<T> {
+        let build = Builder::new();
+        let codec = Codec::new(io);
+
+        Handshake {
+            builder: build,
+            state: Handshaking::Flushing(Flush { codec: Some(codec) }),
+            span: tracing::trace_span!("server_handshake"),
+        }
     }
 }
