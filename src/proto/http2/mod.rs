@@ -2,7 +2,9 @@
 mod server;
 mod handshake;
 mod codec;
+mod connection;
 
+pub use connection::Connection;
 pub use server::Builder;
 
 pub type FrameSize = u32;

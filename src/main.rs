@@ -15,7 +15,7 @@
 
 use bytes::BytesMut;
 use futures::SinkExt;
-use webparse::{Request, Response, http::{StatusCode, http2::Frame}, Binary};
+use webparse::{Request, Response, http::{StatusCode, http2::frame::Frame}, Binary};
 #[macro_use]
 extern crate serde_derive;
 use std::{env, error::Error, fmt::{self,}, io, borrow::BorrowMut};
@@ -23,7 +23,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
-use dmeng::{self, Http};
+use dmeng::{self, Http, Connection};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -47,17 +47,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
-    let mut transport = Framed::new(stream, Http(None));
-
-    while let Some(request) = transport.next().await {
+    let mut connect = Connection::new(stream);
+    while let Some(request) = connect.next().await {
         match request {
             Ok(request) => {
-                let response = respond(request).await?;
-                transport.send(response).await?;
+
+                println!("frame === {:?}", request);
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => panic!("aaaaaa"),
         }
     }
+    // let mut transport = Framed::new(stream, Http(None));
+
+    // while let Some(request) = transport.next().await {
+    //     match request {
+    //         Ok(request) => {
+    //             let response = respond(request).await?;
+    //             transport.send(response).await?;
+    //         }
+    //         Err(e) => return Err(e.into()),
+    //     }
+    // }
 
     Ok(())
 }

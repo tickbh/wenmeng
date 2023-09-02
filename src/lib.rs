@@ -1,4 +1,4 @@
 
 mod proto;
 
-pub use proto::Http;
+pub use proto::*;

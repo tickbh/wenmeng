@@ -1,11 +1,17 @@
-use std::{io, fmt};
+use std::{fmt, io};
 
-use bytes::{BytesMut, BufMut, Buf};
+use bytes::{Buf, BufMut, BytesMut};
 
 // use http::{header::HeaderValue, Request, Response, StatusCode};
 
-use tokio_util::codec::{Encoder, Decoder};
-use webparse::{Response, Request, Serialize, BinaryMut, http::{request::Parts, http2::{Http2, Frame}}, Version, Binary};
+use tokio_util::codec::{Decoder, Encoder};
+use webparse::{
+    http::{
+        http2::{Http2},
+        request::Parts,
+    },
+    Binary, BinaryMut, Request, Response, Serialize, Version,
+};
 
 // http2协议保留头数据以做共享数据
 pub struct Http(pub Option<Parts>);
@@ -23,17 +29,20 @@ impl Encoder<Response<String>> for Http {
         //     }
         // }
 
-        let settings: Vec<u8> = vec![0x00,0x00,0x1e,0x04,0x00,0x00,0x00,0x00,0x00,0x00,0x03,0x00,0x00,0x00,0x64,0x00,0x04,0x00,0x10,0x00,0x00,0x00,0x09,0x00,0x00,0x00,0x01,0x00,0x08,0x00,0x00,0x00,0x01,0x00,0x01,0x00,0x00,0x20,0x00];
+        let settings: Vec<u8> = vec![
+            0x00, 0x00, 0x1e, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+            0x64, 0x00, 0x04, 0x00, 0x10, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x01, 0x00,
+            0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x20, 0x00,
+        ];
         settings.serialize(&mut buf);
 
-        let settings: Vec<u8> = vec![0x00,0x00,0x00,0x04,0x01,0x00,0x00,0x00,0x00];
+        let settings: Vec<u8> = vec![0x00, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00];
         settings.serialize(&mut buf);
-        
+
         let _ = Http2::serialize(&mut item, &mut buf);
         // let _ = item.serialize(&mut buf);
         dst.put_slice(buf.as_slice_all());
         return Ok(());
-
     }
 }
 
@@ -49,15 +58,16 @@ impl Decoder for Http {
         if !src.has_remaining() {
             return Err(io::Error::new(io::ErrorKind::Interrupted, "Interrupted"));
         }
-        let (req, result) = if self.0.is_some() && self.0.as_ref().unwrap().version == Version::Http2 {
-            let mut req = Request::new_by_parts(self.0.clone().unwrap());
-            let result = req.parse2(src.chunk());
-            (req, result)
-        } else {
-            let mut req = Request::new();
-            let result = req.parse(src.chunk());
-            (req, result)
-        };
+        let (req, result) =
+            if self.0.is_some() && self.0.as_ref().unwrap().version == Version::Http2 {
+                let mut req = Request::new_by_parts(self.0.clone().unwrap());
+                let result = req.parse2(src.chunk());
+                (req, result)
+            } else {
+                let mut req = Request::new();
+                let result = req.parse(src.chunk());
+                (req, result)
+            };
         match result {
             Ok(len) => {
                 src.advance(len);
@@ -73,7 +83,6 @@ impl Decoder for Http {
         }
     }
 }
-
 
 mod date {
     use std::cell::RefCell;

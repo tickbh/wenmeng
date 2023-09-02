@@ -65,11 +65,11 @@ impl fmt::Display for SendError {
     }
 }
 
-impl From<io::Error> for SendError {
-    fn from(src: io::Error) -> Self {
-        Self::Connection(src.into())
-    }
-}
+// impl From<io::Error> for SendError {
+//     fn from(src: io::Error) -> Self {
+//         Self::Connection(src.into())
+//     }
+// }
 
 impl From<UserError> for SendError {
     fn from(src: UserError) -> Self {

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::{http::http2::Settings, Buf};
+use webparse::{Buf, http::http2::frame::Settings};
 
 use super::handshake::Handshake;
 
@@ -475,7 +475,7 @@ impl Builder {
     /// # pub fn main() {}
     /// ```
     pub fn handshake() {
-        
+
     }
     // pub fn handshake<T, B>(&self, io: T) -> Handshake<T, B>
     // where

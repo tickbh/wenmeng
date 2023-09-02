@@ -26,6 +26,8 @@ hyper="0.14.27"
 http-body = "0.4.5"
 
 
+log="0.4.20"
+
 tracing = { version = "0.1.21", default-features = false, features = ["std"] }
 futures-core = { version = "0.3", default-features = false }
 futures-sink = { version = "0.3", default-features = false }
