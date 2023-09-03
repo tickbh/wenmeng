@@ -8,14 +8,33 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
-use webparse::http::http2::frame::Frame;
+use webparse::http::http2::frame::{Frame, Reason};
 
-use crate::proto::{ProtoError, ProtoResult};
+use crate::{proto::{ProtoError, ProtoResult}, Initiator};
 
 use super::{codec::{FramedRead, FramedWrite, Codec}, handshake::Handshake};
 
 pub struct Connection<T> {
     codec: Codec<T>,
+    inner: InnerConnection,
+}
+
+struct InnerConnection {
+    state: State,
+
+}
+
+
+#[derive(Debug)]
+enum State {
+    /// Currently open in a sane state
+    Open,
+
+    /// The codec must be flushed
+    Closing(Reason, Initiator),
+
+    /// In a closed state
+    Closed(Reason, Initiator),
 }
 
 
@@ -35,12 +54,14 @@ where
     pub fn new(io: T) -> Connection<T> {
         Connection {
             codec: Codec::new(io),
+            inner: InnerConnection { state: State::Open }
         }
     }
 
     pub fn new_by_codec(codec: Codec<T>) -> Connection<T> {
         Connection {
             codec,
+            inner: InnerConnection { state: State::Open }
         }
     }
 
@@ -63,6 +84,8 @@ where
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
+        // Pin::new(&mut self.codec.get_mut()).poll_write(cx, &[1, 2]);
+        // self.codec
         Pin::new(&mut self.codec).poll_next(cx)
     }
 }

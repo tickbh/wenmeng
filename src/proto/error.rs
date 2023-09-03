@@ -10,6 +10,15 @@ pub enum ProtoError {
     WebError(WebError),
 }
 
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Initiator {
+    User,
+    Library,
+    Remote,
+}
+
+
 impl Display for ProtoError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
