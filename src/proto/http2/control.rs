@@ -1,18 +1,19 @@
 use std::{
     collections::HashMap,
-    task::{Context, Poll}, pin::Pin,
+    pin::Pin,
+    task::{Context, Poll},
 };
 
 use futures_core::{ready, Stream};
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{
     http::http2::frame::{Flag, Frame, Kind, StreamIdentifier},
-    Binary, Request, BinaryMut,
+    Binary, BinaryMut, Request,
 };
 
-use crate::{ProtoResult};
+use crate::ProtoResult;
 
-use super::{codec::Codec, state::StateHandshake, inner_stream::InnerStream, StateSettings};
+use super::{codec::Codec, inner_stream::InnerStream, state::StateHandshake, StateSettings};
 
 pub struct Control {
     /// 所有收到的帧, 如果收到Header结束就开始返回request, 后续收到Data再继续返回直至结束,
@@ -34,6 +35,14 @@ impl Control {
         }
     }
 
+    pub fn poll_ready<T>(&mut self, cx: &mut Context, codec: &mut Codec<T>) -> Poll<ProtoResult<()>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
+        ready!(codec.poll_flush(cx))?;
+        Poll::Ready(Ok(()))
+    }
+
     pub fn pull_request<T>(
         &mut self,
         cx: &mut Context<'_>,
@@ -43,26 +52,29 @@ impl Control {
         T: AsyncRead + AsyncWrite + Unpin,
     {
         ready!(self.handshake.pull_handle(cx, codec))?;
-        ready!(self.setting.pull_handle(cx, codec))?;
-        match ready!(Pin::new(codec).poll_next(cx)) {
-            Some(Ok(frame)) => {
-                let mut bytes = BinaryMut::new();
-                match frame {
-                    Frame::Settings(settings) => {
-                        self.setting.recv_setting(settings)?;
-                    },
-                    Frame::Data(_) => todo!(),
-                    Frame::Headers(_) => todo!(),
-                    Frame::Priority(_) => todo!(),
-                    Frame::PushPromise(_) => todo!(),
-                    Frame::Ping(_) => todo!(),
-                    Frame::GoAway(_) => todo!(),
-                    Frame::WindowUpdate(_) => todo!(),
-                    Frame::Reset(_) => todo!(),
+        loop {
+            ready!(self.setting.pull_handle(cx, codec))?;
+            ready!(self.poll_ready(cx, codec))?;
+            match ready!(Pin::new(&mut *codec).poll_next(cx)) {
+                Some(Ok(frame)) => {
+                    let mut bytes = BinaryMut::new();
+                    match frame {
+                        Frame::Settings(settings) => {
+                            self.setting.recv_setting(settings)?;
+                        }
+                        Frame::Data(_) => todo!(),
+                        Frame::Headers(_) => todo!(),
+                        Frame::Priority(_) => todo!(),
+                        Frame::PushPromise(_) => todo!(),
+                        Frame::Ping(_) => todo!(),
+                        Frame::GoAway(_) => todo!(),
+                        Frame::WindowUpdate(_) => todo!(),
+                        Frame::Reset(_) => todo!(),
+                    }
                 }
-            },
-            Some(Err(e)) => return Poll::Ready(Some(Err(e))),
-            None => return Poll::Ready(None),
+                Some(Err(e)) => return Poll::Ready(Some(Err(e))),
+                None => return Poll::Ready(None),
+            }
         }
         Poll::Pending
     }

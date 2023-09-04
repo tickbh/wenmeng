@@ -69,6 +69,11 @@ where
         self.framed_write().poll_ready(cx)
     }
 
+    /// Returns `Ready` when the codec can buffer a frame
+    pub fn poll_flush(&mut self, cx: &mut Context) -> Poll<io::Result<()>> {
+        self.framed_write().flush(cx)
+    }
+
     fn framed_write(&mut self) -> &mut FramedWrite<T> {
         self.inner.get_mut()
     }

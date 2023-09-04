@@ -47,9 +47,7 @@ impl StateSettings {
 
         self.remote = None;
         match &self.state {
-            LocalState::None => {
-                return Poll::Ready(Ok(()))
-            }
+            LocalState::None => return Poll::Ready(Ok(())),
             LocalState::Send(_) => todo!(),
             LocalState::WaitAck(_) => todo!(),
             LocalState::Done => todo!(),
@@ -88,11 +86,7 @@ impl StateSettings {
         Poll::Pending
     }
 
-    pub fn recv_setting(
-        &mut self,
-        setting: Settings
-    ) -> ProtoResult<()>
-    {
+    pub fn recv_setting(&mut self, setting: Settings) -> ProtoResult<()> {
         if setting.is_ack() {
             self.state = LocalState::Done;
             Ok(())
@@ -100,7 +94,5 @@ impl StateSettings {
             self.remote = Some(setting);
             Ok(())
         }
-
-
     }
 }
