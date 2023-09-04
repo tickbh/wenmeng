@@ -1,7 +1,7 @@
 use std::{
     io,
     pin::Pin,
-    task::{Context, Poll, ready},
+    task::{ready, Context, Poll},
 };
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -34,7 +34,7 @@ where
     pub fn get_mut(&mut self) -> &mut T {
         &mut self.inner
     }
-    
+
     pub fn get_bytes(&mut self) -> &mut BinaryMut {
         &mut self.binary
     }
@@ -59,16 +59,18 @@ where
     pub fn flush(&mut self, cx: &mut Context) -> Poll<io::Result<()>> {
         let span = tracing::trace_span!("FramedWrite::flush");
         let _e = span.enter();
+        if !self.binary.has_remaining() {
+            return Poll::Ready(Ok(()));
+        }
 
         let n = ready!(Pin::new(&mut self.inner).poll_write(cx, self.binary.chunk()))?;
         self.binary.advance(n);
-        if self.binary.remaining() == 0 && self.binary.cursor() > 10 * self.max_frame_size as usize {
+        if self.binary.remaining() == 0 && self.binary.cursor() > 10 * self.max_frame_size as usize
+        {
             self.binary = BinaryMut::new();
         }
         Poll::Ready(Ok(()))
     }
-
-
 }
 
 impl<T: AsyncRead + Unpin> AsyncRead for FramedWrite<T> {
