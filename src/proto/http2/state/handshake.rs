@@ -1,15 +1,15 @@
-use crate::{Connection, ProtoError, ProtoResult, Builder, proto::http2::codec::Codec};
+use crate::{proto::http2::codec::Codec, Builder, Connection, ProtoError, ProtoResult};
 
 use std::{
     future::Future,
     io,
     pin::Pin,
-    task::{ready, Poll, Context},
+    task::{ready, Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use webparse::{http::http2::HTTP2_MAGIC, Binary, Buf};
 
-pub struct Handshake {
+pub struct StateHandshake {
     /// 默认参数
     builder: Builder,
     /// 当前握手状态
@@ -43,9 +43,14 @@ impl ReadPreface {
         ReadPreface { pos: 0 }
     }
 
-    pub fn pull_handle<T>(&mut self, cx: &mut Context<'_>, codec: &mut Codec<T>) -> Poll<ProtoResult<()>> 
+    pub fn pull_handle<T>(
+        &mut self,
+        cx: &mut Context<'_>,
+        codec: &mut Codec<T>,
+    ) -> Poll<ProtoResult<()>>
     where
-    T: AsyncRead + AsyncWrite + Unpin, {
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
         let mut buf = [0; 24];
         let mut rem = HTTP2_MAGIC.len() - self.pos;
 
@@ -74,32 +79,36 @@ impl ReadPreface {
     }
 }
 
-
-
-impl Handshake
-{
-    pub fn new_server() -> Handshake {
-        Handshake { builder: Builder::new(), state: Handshaking::None, span: tracing::trace_span!("server_handshake") }
+impl StateHandshake {
+    pub fn new_server() -> StateHandshake {
+        StateHandshake {
+            builder: Builder::new(),
+            state: Handshaking::None,
+            span: tracing::trace_span!("server_handshake"),
+        }
     }
 
-    pub fn pull_handle<T>(&mut self, cx: &mut Context<'_>, codec: &mut Codec<T>) -> Poll<ProtoResult<()>> 
-        where
-        T: AsyncRead + AsyncWrite + Unpin, {
+    pub fn pull_handle<T>(
+        &mut self,
+        cx: &mut Context<'_>,
+        codec: &mut Codec<T>,
+    ) -> Poll<ProtoResult<()>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
         loop {
             match &mut self.state {
                 Handshaking::None => {
                     self.state = Handshaking::Flushing(Flush(Binary::new()));
                 }
                 Handshaking::Flushing(flush) => {
-                    match ready!(flush.pull_handle(cx, codec))  {
+                    match ready!(flush.pull_handle(cx, codec)) {
                         Ok(_) => {
                             tracing::trace!(flush.poll = %"Ready");
                             self.state = Handshaking::ReadingPreface(ReadPreface::new());
                             continue;
                         }
-                        Err(e) => {
-                            return Poll::Ready(Err(e))
-                        }
+                        Err(e) => return Poll::Ready(Err(e)),
                     };
                 }
                 Handshaking::ReadingPreface(read) => {
@@ -109,9 +118,7 @@ impl Handshake
                             self.state = Handshaking::Done;
                             return Poll::Ready(Ok(()));
                         }
-                        Err(e) => {
-                            return Poll::Ready(Err(e))
-                        }
+                        Err(e) => return Poll::Ready(Err(e)),
                     };
                 }
                 Handshaking::Done => {
@@ -120,43 +127,37 @@ impl Handshake
             }
         }
     }
-    
 }
 
 impl Flush {
-    pub fn pull_handle<T>(&mut self, cx: &mut Context<'_>, codec: &mut Codec<T>) -> Poll<ProtoResult<()>> 
+    pub fn pull_handle<T>(
+        &mut self,
+        cx: &mut Context<'_>,
+        codec: &mut Codec<T>,
+    ) -> Poll<ProtoResult<()>>
     where
-    T: AsyncRead + AsyncWrite + Unpin,{
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
         if !self.0.has_remaining() {
             return Poll::Ready(Ok(()));
         }
 
         // codec.get_mut().pull_write()
-        
-        loop {
 
+        loop {
             match ready!(Pin::new(codec.get_mut()).poll_write(cx, self.0.chunk())) {
                 Ok(n) => {
                     self.0.advance(n);
                 }
-                Err(e) => {
-                    return Poll::Ready(Err(e.into()))
-                }
+                Err(e) => return Poll::Ready(Err(e.into())),
             }
             if !self.0.has_remaining() {
-                return Poll::Ready(Ok(()))
+                return Poll::Ready(Ok(()));
             }
         }
-
     }
 }
 
-unsafe impl Send for Handshake {
-    
-}
+unsafe impl Send for StateHandshake {}
 
-
-unsafe impl Sync for Handshake {
-    
-}
-
+unsafe impl Sync for StateHandshake {}

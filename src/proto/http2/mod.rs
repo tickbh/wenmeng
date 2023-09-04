@@ -5,9 +5,9 @@ mod codec;
 mod connection;
 mod control;
 mod priority_queue;
-mod stream;
+mod inner_stream;
 
-pub use stream::Stream;
+pub use inner_stream::InnerStreams;
 pub use priority_queue::PriorityQueue;
 pub use control::Control;
 pub use connection::Connection;

@@ -1,4 +1,6 @@
 
 mod handshake;
+mod settings;
 
-pub use handshake::Handshake;
+pub use settings::StateSettings;    
+pub use handshake::StateHandshake;

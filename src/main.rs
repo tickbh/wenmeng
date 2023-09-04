@@ -23,7 +23,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
-use dmeng::{self, Http, Connection, Handshake};
+use dmeng::{self, Http, Connection, StateHandshake};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -48,7 +48,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
 
-    let mut connect = Handshake::handshake(stream).await.unwrap();
+    let mut connect = StateHandshake::handshake(stream).await.unwrap();
     while let Some(request) = connect.next().await {
         match request {
             Ok(request) => {
