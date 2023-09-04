@@ -78,15 +78,11 @@ where
     }
 
     pub fn pull_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtoResult<Request<Binary>>>> {
-        loop {
-            self.inner.control.pull_request(cx, &mut self.codec);
-        }
+        self.inner.control.pull_request(cx, &mut self.codec)
         // loop {
         //     ready!(Pin::new(&mut self.codec).poll_next(cx)?);
         // }
         
-        
-        Poll::Pending
     }
 
 }
@@ -96,7 +92,6 @@ where
     T: AsyncRead + AsyncWrite + Unpin,
 {
     type Item = ProtoResult<Request<Binary>>;
-
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,

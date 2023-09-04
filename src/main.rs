@@ -53,8 +53,9 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     while let Some(request) = connect.next().await {
         match request {
             Ok(request) => {
-
-                println!("frame === {:?}", request);
+                println!("request === {:?}", request);
+                let response = respond(request).await;
+                println!("response === {:?}", response);
             }
             Err(e) => {
                 println!("error = {:?}", e);
@@ -77,7 +78,7 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn respond(mut req: Request<()>) -> Result<Response<String>, Box<dyn Error>> {
+async fn respond(mut req: Request<Binary>) -> Result<Response<String>, Box<dyn Error>> {
     let mut response = Response::builder().version(req.version().clone());
     if req.is_http2() {
         if let Some(vec) = req.extensions().borrow_mut().remove::<Vec<Frame<Binary>>>() {

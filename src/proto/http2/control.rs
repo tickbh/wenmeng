@@ -7,7 +7,7 @@ use std::{
 use futures_core::{ready, Stream};
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{
-    http::http2::frame::{Flag, Frame, Kind, StreamIdentifier},
+    http::{http2::frame::{Flag, Frame, Kind, StreamIdentifier}, request},
     Binary, BinaryMut, Request,
 };
 
@@ -62,20 +62,38 @@ impl Control {
                         Frame::Settings(settings) => {
                             self.setting.recv_setting(settings)?;
                         }
-                        Frame::Data(_) => todo!(),
-                        Frame::Headers(_) => todo!(),
-                        Frame::Priority(_) => todo!(),
-                        Frame::PushPromise(_) => todo!(),
-                        Frame::Ping(_) => todo!(),
-                        Frame::GoAway(_) => todo!(),
-                        Frame::WindowUpdate(_) => todo!(),
-                        Frame::Reset(_) => todo!(),
+                        Frame::Data(_) => {
+
+                        },
+                        Frame::Headers(header) => {
+                            let mut stream_id = header.stream_id();
+                            let mut builder = header.into_request()?;
+                            let request = builder.body(Binary::new())?;
+                            return Poll::Ready(Some(Ok(request)));
+                        },
+                        Frame::Priority(_) => {
+
+                        },
+                        Frame::PushPromise(_) => {
+
+                        },
+                        Frame::Ping(_) => {
+
+                        },
+                        Frame::GoAway(_) => {
+
+                        },
+                        Frame::WindowUpdate(_) => {
+
+                        },
+                        Frame::Reset(_) => {
+                            
+                        },
                     }
                 }
                 Some(Err(e)) => return Poll::Ready(Some(Err(e))),
                 None => return Poll::Ready(None),
             }
         }
-        Poll::Pending
     }
 }
