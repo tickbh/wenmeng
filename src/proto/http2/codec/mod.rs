@@ -4,12 +4,13 @@ mod framed_write;
 
 use std::io;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
 
 use futures_core::Stream;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::length_delimited;
+use webparse::BinaryMut;
 use webparse::http::http2::encoder::Encoder;
 use webparse::http::http2::frame::Frame;
 use webparse::http::http2::HeaderIndex;
@@ -72,10 +73,15 @@ where
         self.inner.get_mut()
     }
 
-    pub fn send_frame(&mut self, frame: Frame) {
-        // let encoder = Encoder {
-        //     index: Arc::new(self.header_index)
-        // };
+    pub fn send_frame(&mut self, frame: Frame) -> ProtoResult<()> {
+        let mut encoder = Encoder {
+            index: Arc::new(RwLock::new(self.header_index.clone()))
+        };
+
+        let _ = frame.encode(self.framed_write().get_bytes(), &mut encoder);
+        // self.framed_write().flush(cx);
+
+        Ok(())
 
     }
 }

@@ -7,7 +7,7 @@ mod control;
 mod priority_queue;
 mod inner_stream;
 
-pub use inner_stream::InnerStreams;
+pub use inner_stream::InnerStream;
 pub use priority_queue::PriorityQueue;
 pub use control::Control;
 pub use connection::Connection;

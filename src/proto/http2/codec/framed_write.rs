@@ -30,8 +30,13 @@ where
             max_frame_size: DEFAULT_MAX_FRAME_SIZE,
         }
     }
+
     pub fn get_mut(&mut self) -> &mut T {
         &mut self.inner
+    }
+    
+    pub fn get_bytes(&mut self) -> &mut BinaryMut {
+        &mut self.binary
     }
 
     pub fn has_capacity(&self) -> bool {
@@ -62,6 +67,8 @@ where
         }
         Poll::Ready(Ok(()))
     }
+
+
 }
 
 impl<T: AsyncRead + Unpin> AsyncRead for FramedWrite<T> {

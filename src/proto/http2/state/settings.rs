@@ -1,7 +1,7 @@
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::http::http2::frame::Settings;
+use webparse::http::http2::frame::{Frame, Settings};
 
 use crate::{proto::http2::codec::Codec, ProtoResult};
 
@@ -29,7 +29,6 @@ impl StateSettings {
         }
     }
 
-    
     pub fn pull_handle<T>(
         &mut self,
         cx: &mut Context<'_>,
@@ -39,10 +38,22 @@ impl StateSettings {
         T: AsyncRead + AsyncWrite + Unpin,
     {
         if let Some(settings) = &self.remote {
-            if codec.poll_ready(cx)?.is_ready() {
-
+            if !codec.poll_ready(cx)?.is_ready() {
+                return Poll::Pending;
             }
+            let frame = Settings::ack();
+            codec.send_frame(Frame::Settings(frame))?;
         }
+
+        self.remote = None;
+        match &self.state {
+            LocalState::None => {
+                return Poll::Ready(Ok(()))
+            }
+            LocalState::Send(_) => todo!(),
+            LocalState::WaitAck(_) => todo!(),
+            LocalState::Done => todo!(),
+        };
 
         // loop {
         //     match &mut self.state {
@@ -74,6 +85,22 @@ impl StateSettings {
         //         }
         //     }
         // }
-        Poll::Pendings
+        Poll::Pending
+    }
+
+    pub fn recv_setting(
+        &mut self,
+        setting: Settings
+    ) -> ProtoResult<()>
+    {
+        if setting.is_ack() {
+            self.state = LocalState::Done;
+            Ok(())
+        } else {
+            self.remote = Some(setting);
+            Ok(())
+        }
+
+
     }
 }

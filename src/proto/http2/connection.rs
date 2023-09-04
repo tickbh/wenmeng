@@ -78,10 +78,12 @@ where
     }
 
     pub fn pull_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtoResult<Request<Binary>>>> {
-        
         loop {
-            ready!(Pin::new(&mut self.codec).poll_next(cx)?);
+            self.inner.control.pull_request(cx, &mut self.codec);
         }
+        // loop {
+        //     ready!(Pin::new(&mut self.codec).poll_next(cx)?);
+        // }
         
         
         Poll::Pending
