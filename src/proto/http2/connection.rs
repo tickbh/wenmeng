@@ -8,11 +8,17 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
-use webparse::http::http2::frame::{Frame, Reason};
+use webparse::{http::http2::frame::{Frame, Reason}, Request, Binary};
 
-use crate::{proto::{ProtoError, ProtoResult}, Initiator};
+use crate::{
+    proto::{ProtoError, ProtoResult},
+    Initiator,
+};
 
-use super::{codec::{FramedRead, FramedWrite, Codec}, handshake::Handshake};
+use super::{
+    codec::{Codec, FramedRead, FramedWrite},
+    Control,
+};
 
 pub struct Connection<T> {
     codec: Codec<T>,
@@ -22,8 +28,9 @@ pub struct Connection<T> {
 struct InnerConnection {
     state: State,
 
+    control: Control,
+    // store: rbtree::RBTree<>
 }
-
 
 #[derive(Debug)]
 enum State {
@@ -37,15 +44,9 @@ enum State {
     Closed(Reason, Initiator),
 }
 
+unsafe impl<T> Sync for Connection<T> {}
 
-unsafe impl<T> Sync for Connection<T> {
-    
-}
-
-unsafe impl<T> Send for Connection<T> {
-    
-}
-
+unsafe impl<T> Send for Connection<T> {}
 
 impl<T> Connection<T>
 where
@@ -54,39 +55,56 @@ where
     pub fn new(io: T) -> Connection<T> {
         Connection {
             codec: Codec::new(io),
-            inner: InnerConnection { state: State::Open }
+            inner: InnerConnection {
+                state: State::Open,
+                control: Control::new(),
+            },
         }
     }
 
     pub fn new_by_codec(codec: Codec<T>) -> Connection<T> {
         Connection {
             codec,
-            inner: InnerConnection { state: State::Open }
+            inner: InnerConnection {
+                state: State::Open,
+                control: Control::new(),
+            },
         }
     }
 
-    // pub fn handshake(io: T) -> Handshake<T> {
-    //     Handshake {
-    //         builder: todo!(),
-    //         state: todo!(),
-    //         span: todo!(),
-    //     }
-    // }
+    pub fn pull_accept(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtoResult<()>>> {
+        
+        Poll::Pending
+    }
+
+    pub fn pull_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtoResult<Request<Binary>>>> {
+        
+        loop {
+            ready!(Pin::new(&mut self.codec).poll_next(cx)?);
+        }
+        
+        
+        Poll::Pending
+    }
+
 }
 
 impl<T> Stream for Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = ProtoResult<Frame>;
+    type Item = ProtoResult<Request<Binary>>;
 
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        // Pin::new(&mut self.codec.get_mut()).poll_write(cx, &[1, 2]);
-        // self.codec
-        Pin::new(&mut self.codec).poll_next(cx)
+        // Pin::new(&mut self.codec.get_mut()).poll_write(cx, &[1, 2, 3, 3, 3, 4, 4, 5, 1]);
+        // println!("write");
+        // // self.codec
+        // Pin::new(&mut self.codec).poll_next(cx)
+
+        self.pull_request(cx)
     }
 }
 

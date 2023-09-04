@@ -33,6 +33,8 @@ futures-core = { version = "0.3", default-features = false }
 futures-sink = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 
+rbtree = "0.1.5"
+
 # http-body-util = { version = "1", optional = true }
 
 [dependencies.webparse]

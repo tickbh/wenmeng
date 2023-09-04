@@ -1,12 +1,18 @@
 
 mod server;
-mod handshake;
+mod state;
 mod codec;
 mod connection;
+mod control;
+mod priority_queue;
+mod stream;
 
+pub use stream::Stream;
+pub use priority_queue::PriorityQueue;
+pub use control::Control;
 pub use connection::Connection;
 pub use server::Builder;
-pub use handshake::Handshake;
+pub use state::*;
 
 pub type FrameSize = u32;
 pub type WindowSize = u32;

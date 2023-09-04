@@ -8,6 +8,7 @@ pub type ProtoResult<T> = Result<T, ProtoError>;
 pub enum ProtoError {
     IoError(io::Error),
     WebError(WebError),
+    Extension(&'static str),
 }
 
 

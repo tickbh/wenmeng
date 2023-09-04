@@ -3,8 +3,6 @@ use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{Buf, http::http2::frame::Settings};
 
-use super::handshake::Handshake;
-
 
 
 #[derive(Clone, Debug)]
