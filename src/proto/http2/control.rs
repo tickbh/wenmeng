@@ -4,7 +4,7 @@ use std::{
     task::{Context, Poll}, time::Duration,
 };
 
-use futures_core::{ready, Stream};
+use futures_core::{ready, Stream, stream};
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{
     http::{http2::frame::{Flag, Frame, Kind, StreamIdentifier, Settings}, request},
@@ -80,17 +80,29 @@ impl Control {
                 Some(Ok(frame)) => {
                     
                     let mut bytes = BinaryMut::new();
-                    match frame {
+                    match &frame {
                         Frame::Settings(settings) => {
-                            self.setting.recv_setting(codec, settings, &mut self.config)?;
+                            self.setting.recv_setting(codec, settings.clone(), &mut self.config)?;
                         }
                         Frame::Data(_) => {
                         },
                         Frame::Headers(header) => {
-                            let mut stream_id = header.stream_id();
-                            let mut builder = header.into_request()?;
-                            let request = builder.body(Binary::new())?;
-                            return Poll::Ready(Some(Ok(request)));
+                            // let mut stream_id = header.stream_id();
+                            // let mut builder = header.into_request()?;
+                            // let request = builder.body(Binary::new())?;
+                            // return Poll::Ready(Some(Ok(request)));
+                            
+                            match self.recv_frame(frame) {
+                                None => {
+                                    continue;
+                                }
+                                Some(Err(e)) => {
+                                    return Poll::Ready(Some(Err(e)));
+                                }
+                                Some(Ok(r)) => {
+                                    return Poll::Ready(Some(Ok(r)));
+                                }
+                            }
                         },
                         Frame::Priority(_) => {
 
@@ -134,7 +146,15 @@ impl Control {
         
         if !self.recv_frames.contains_key(&stream_id) {
             self.recv_frames.insert(stream_id, InnerStream::new(frame));
+        } else {
+            self.recv_frames.get_mut(&stream_id).map(|inner| inner.push(frame));
         }
-        None
+
+        if is_end_headers {
+            self.recv_frames.get_mut(&stream_id).unwrap().build_request()
+        } else {
+            None
+        }
+        
     } 
 }
