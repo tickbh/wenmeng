@@ -28,6 +28,31 @@ use dmeng::{self, Http, Connection, StateHandshake};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
 
+    // use std::sync::mpsc::channel;
+
+    // let (tx, rx) = channel();
+
+    // // This send is always successful
+    // tx.send(1).unwrap();
+    // tx.send(2).unwrap();
+    // tx.send(3).unwrap();
+    // for i in 0..1000 {
+    //     tx.send(i).unwrap();
+    // }
+
+
+    // for i in 0..1000 {
+    //     rx.recv().unwrap();
+    // }
+    // // This send will fail because the receiver is gone
+    // // drop(rx);
+    // // assert_eq!(tx.send(1).unwrap_err().0, 1);
+
+    // println!("aaa {:?}", rx.recv());
+    // println!("aaa {:?}", rx.recv());
+    // println!("aaa {:?}", rx.recv());
+    // println!("aaa {:?}", rx.recv());
+
     // Parse the arguments, bind the TCP socket we'll be listening to, spin up
     // our worker threads, and start shipping sockets to those worker threads.
     let addr = env::args()
@@ -78,7 +103,7 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn respond(mut req: Request<Binary>) -> Result<Response<String>, Box<dyn Error>> {
+async fn respond(mut req: Request<dmeng::RecvStream>) -> Result<Response<String>, Box<dyn Error>> {
     let mut response = Response::builder().version(req.version().clone());
     if req.is_http2() {
         if let Some(vec) = req.extensions().borrow_mut().remove::<Vec<Frame<Binary>>>() {

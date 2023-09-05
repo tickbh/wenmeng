@@ -17,7 +17,7 @@ use crate::{
 
 use super::{
     codec::{Codec, FramedRead, FramedWrite},
-    Control, control::ControlConfig,
+    Control, control::ControlConfig, RecvStream,
 };
 
 pub struct Connection<T> {
@@ -76,7 +76,7 @@ where
         Poll::Pending
     }
 
-    pub fn poll_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtoResult<Request<Binary>>>> {
+    pub fn poll_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtoResult<Request<RecvStream>>>> {
         self.inner.control.poll_request(cx, &mut self.codec)
         // loop {
         //     ready!(Pin::new(&mut self.codec).poll_next(cx)?);
@@ -90,7 +90,7 @@ impl<T> Stream for Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = ProtoResult<Request<Binary>>;
+    type Item = ProtoResult<Request<RecvStream>>;
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,

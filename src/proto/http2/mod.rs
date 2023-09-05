@@ -7,7 +7,9 @@ mod control;
 mod priority_queue;
 mod inner_stream;
 mod builder;
+mod recv_stream;
 
+pub use recv_stream::RecvStream;
 pub use inner_stream::InnerStream;
 pub use priority_queue::PriorityQueue;
 pub use control::Control;

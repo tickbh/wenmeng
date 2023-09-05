@@ -13,7 +13,7 @@ use webparse::{
 
 use crate::ProtoResult;
 
-use super::{codec::Codec, inner_stream::InnerStream, state::StateHandshake, StateSettings, WindowSize};
+use super::{codec::Codec, inner_stream::InnerStream, state::StateHandshake, StateSettings, WindowSize, RecvStream};
 
 
 #[derive(Debug, Clone)]
@@ -68,7 +68,7 @@ impl Control {
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
-    ) -> Poll<Option<ProtoResult<Request<Binary>>>>
+    ) -> Poll<Option<ProtoResult<Request<RecvStream>>>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -87,11 +87,6 @@ impl Control {
                         Frame::Data(_) => {
                         },
                         Frame::Headers(header) => {
-                            // let mut stream_id = header.stream_id();
-                            // let mut builder = header.into_request()?;
-                            // let request = builder.body(Binary::new())?;
-                            // return Poll::Ready(Some(Ok(request)));
-                            
                             match self.recv_frame(frame) {
                                 None => {
                                     continue;
@@ -135,7 +130,7 @@ impl Control {
         None
     }
 
-    pub fn recv_frame(&mut self, frame: Frame<Binary>) -> Option<ProtoResult<Request<Binary>>> {
+    pub fn recv_frame(&mut self, frame: Frame<Binary>) -> Option<ProtoResult<Request<RecvStream>>> {
         let stream_id = frame.stream_id();
         if stream_id.is_zero() {
             return None;
@@ -147,7 +142,7 @@ impl Control {
         if !self.recv_frames.contains_key(&stream_id) {
             self.recv_frames.insert(stream_id, InnerStream::new(frame));
         } else {
-            self.recv_frames.get_mut(&stream_id).map(|inner| inner.push(frame));
+            self.recv_frames.get_mut(&stream_id).unwrap().push(frame);
         }
 
         if is_end_headers {
