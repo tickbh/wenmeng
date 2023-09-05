@@ -8,16 +8,16 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
-use webparse::{http::http2::frame::{Frame, Reason}, Request, Binary};
+use webparse::{http::http2::frame::{Frame, Reason, Settings}, Request, Binary};
 
 use crate::{
     proto::{ProtoError, ProtoResult},
-    Initiator,
+    Initiator, Builder,
 };
 
 use super::{
     codec::{Codec, FramedRead, FramedWrite},
-    Control,
+    Control, control::ControlConfig,
 };
 
 pub struct Connection<T> {
@@ -29,7 +29,7 @@ struct InnerConnection {
     state: State,
 
     control: Control,
-    // store: rbtree::RBTree<>
+
 }
 
 #[derive(Debug)]
@@ -52,22 +52,21 @@ impl<T> Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(io: T) -> Connection<T> {
+    pub fn new(io: T, builder: Builder) -> Connection<T> {
         Connection {
             codec: Codec::new(io),
             inner: InnerConnection {
                 state: State::Open,
-                control: Control::new(),
-            },
-        }
-    }
-
-    pub fn new_by_codec(codec: Codec<T>) -> Connection<T> {
-        Connection {
-            codec,
-            inner: InnerConnection {
-                state: State::Open,
-                control: Control::new(),
+                control: Control::new(ControlConfig {
+                    next_stream_id: 2.into(),
+                    // Server does not need to locally initiate any streams
+                    initial_max_send_streams: 0,
+                    max_send_buffer_size: builder.max_send_buffer_size,
+                    reset_stream_duration: builder.reset_stream_duration,
+                    reset_stream_max: builder.reset_stream_max,
+                    remote_reset_stream_max: builder.pending_accept_reset_stream_max,
+                    settings: builder.settings.clone(),
+                }),
             },
         }
     }
@@ -77,8 +76,8 @@ where
         Poll::Pending
     }
 
-    pub fn pull_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtoResult<Request<Binary>>>> {
-        self.inner.control.pull_request(cx, &mut self.codec)
+    pub fn poll_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtoResult<Request<Binary>>>> {
+        self.inner.control.poll_request(cx, &mut self.codec)
         // loop {
         //     ready!(Pin::new(&mut self.codec).poll_next(cx)?);
         // }
@@ -101,7 +100,7 @@ where
         // // self.codec
         // Pin::new(&mut self.codec).poll_next(cx)
 
-        self.pull_request(cx)
+        self.poll_request(cx)
     }
 }
 

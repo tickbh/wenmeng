@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
 
     // let mut connect = StateHandshake::handshake(stream).await.unwrap();
-    let mut connect = Connection::new(stream);
+    let mut connect = dmeng::Builder::new().connection(stream);
     while let Some(request) = connect.next().await {
         match request {
             Ok(request) => {

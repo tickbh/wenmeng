@@ -1,6 +1,6 @@
-use std::{fmt::Display, io};
+use std::{fmt::{Display}, io};
 
-use webparse::WebError;
+use webparse::{WebError, Binary, http::http2::frame::Reason};
 
 pub type ProtoResult<T> = Result<T, ProtoError>;
 
@@ -8,6 +8,7 @@ pub type ProtoResult<T> = Result<T, ProtoError>;
 pub enum ProtoError {
     IoError(io::Error),
     WebError(WebError),
+    GoAway(Binary, Reason, Initiator),
     Extension(&'static str),
 }
 
@@ -45,4 +46,10 @@ unsafe impl Send for ProtoError {
 
 unsafe impl Sync for ProtoError {
     
+}
+
+impl ProtoError {
+    pub(crate) fn library_go_away(reason: Reason) -> Self {
+        Self::GoAway(Binary::new(), reason, Initiator::Library)
+    }
 }

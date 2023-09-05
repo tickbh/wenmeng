@@ -6,13 +6,15 @@ mod connection;
 mod control;
 mod priority_queue;
 mod inner_stream;
+mod builder;
 
 pub use inner_stream::InnerStream;
 pub use priority_queue::PriorityQueue;
 pub use control::Control;
 pub use connection::Connection;
-pub use server::Builder;
+// pub use server::Builder;
 pub use state::*;
+pub use builder::Builder;
 
 pub type FrameSize = u32;
 pub type WindowSize = u32;

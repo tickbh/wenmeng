@@ -89,6 +89,14 @@ where
         Ok(())
 
     }
+
+    pub fn set_send_header_table_size(&mut self, size: usize) {
+
+    }
+    
+    pub fn set_max_send_frame_size(&mut self, size: usize) {
+        
+    }
 }
 
 impl<T> Stream for Codec<T>

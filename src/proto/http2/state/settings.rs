@@ -1,9 +1,12 @@
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::http::http2::frame::{Frame, Settings};
+use webparse::http::http2::frame::{Frame, Reason, Settings};
 
-use crate::{proto::http2::codec::Codec, ProtoResult};
+use crate::{
+    proto::http2::{codec::Codec, control::ControlConfig, Control},
+    ProtoError, ProtoResult,
+};
 
 pub struct StateSettings {
     state: LocalState,
@@ -11,8 +14,6 @@ pub struct StateSettings {
 }
 
 enum LocalState {
-    /// 未初始化
-    None,
     /// 设置发送的settings
     Send(Settings),
     /// 设置等待确认settings
@@ -22,32 +23,29 @@ enum LocalState {
 }
 
 impl StateSettings {
-    pub fn new() -> Self {
+    pub fn new(settings: Settings) -> Self {
         StateSettings {
-            state: LocalState::Send(Settings::default()),
+            state: LocalState::Send(settings),
             remote: None,
         }
     }
 
-    pub fn pull_handle<T>(
+    pub fn poll_handle<T>(
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
+        config: &mut ControlConfig,
     ) -> Poll<ProtoResult<()>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-
         match &self.state {
-            LocalState::None => return Poll::Ready(Ok(())),
             LocalState::Send(settings) => {
                 codec.send_frame(Frame::Settings(settings.clone()))?;
                 self.state = LocalState::WaitAck(settings.clone());
-                return Poll::Ready(Ok(()))
-            },
-            LocalState::WaitAck(_) => {
-                return Poll::Ready(Ok(()))
-            },
+                return Poll::Ready(Ok(()));
+            }
+            LocalState::WaitAck(_) => {}
             LocalState::Done => (),
         };
 
@@ -57,50 +55,62 @@ impl StateSettings {
             }
             let frame = Settings::ack();
             codec.send_frame(Frame::Settings(frame))?;
+
+            config.apply_remote_settings(settings);
+            if let Some(val) = settings.header_table_size() {
+                codec.set_send_header_table_size(val as usize);
+            }
+
+            if let Some(val) = settings.max_frame_size() {
+                codec.set_max_send_frame_size(val as usize);
+            }
         }
 
         self.remote = None;
-
-        // loop {
-        //     match &mut self.state {
-        //         LocalState::None => {
-        //             self.state = Handshaking::Flushing(Flush(Binary::new()));
-        //         }
-        //         Handshaking::Flushing(flush) => {
-        //             match ready!(flush.pull_handle(cx, codec)) {
-        //                 Ok(_) => {
-        //                     tracing::trace!(flush.poll = %"Ready");
-        //                     self.state = Handshaking::ReadingPreface(ReadPreface::new());
-        //                     continue;
-        //                 }
-        //                 Err(e) => return Poll::Ready(Err(e)),
-        //             };
-        //         }
-        //         Handshaking::ReadingPreface(read) => {
-        //             match ready!(read.pull_handle(cx, codec)) {
-        //                 Ok(_) => {
-        //                     tracing::trace!(flush.poll = %"Ready");
-        //                     self.state = Handshaking::Done;
-        //                     return Poll::Ready(Ok(()));
-        //                 }
-        //                 Err(e) => return Poll::Ready(Err(e)),
-        //             };
-        //         }
-        //         Handshaking::Done => {
-        //             return Poll::Ready(Ok(()));
-        //         }
-        //     }
-        // }
-        return Poll::Ready(Ok(()))
+        return Poll::Ready(Ok(()));
     }
 
-    pub fn recv_setting(&mut self, setting: Settings) -> ProtoResult<()> {
+    pub fn recv_setting<T>(
+        &mut self,
+        codec: &mut Codec<T>,
+        setting: Settings,
+        config: &mut ControlConfig,
+    ) -> ProtoResult<()>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
         if setting.is_ack() {
+            match &self.state {
+                LocalState::WaitAck(settings) => {
+                    config.apply_remote_settings(settings);
+                    if let Some(val) = settings.header_table_size() {
+                        codec.set_send_header_table_size(val as usize);
+                    }
+
+                    if let Some(val) = settings.max_frame_size() {
+                        codec.set_max_send_frame_size(val as usize);
+                    }
+                }
+                _ => {
+                    return Err(ProtoError::library_go_away(Reason::PROTOCOL_ERROR));
+                }
+            }
             self.state = LocalState::Done;
             Ok(())
         } else {
             self.remote = Some(setting);
             Ok(())
+        }
+    }
+
+    pub fn send_settings(&mut self, setting: Settings) -> ProtoResult<()> {
+        assert!(!setting.is_ack());
+        match &self.state {
+            LocalState::Send(_) | LocalState::WaitAck(_) => Err(ProtoError::Extension("")),
+            LocalState::Done => {
+                self.state = LocalState::Send(setting);
+                Ok(())
+            }
         }
     }
 }

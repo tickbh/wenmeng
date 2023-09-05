@@ -43,7 +43,7 @@ impl ReadPreface {
         ReadPreface { pos: 0 }
     }
 
-    pub fn pull_handle<T>(
+    pub fn poll_handle<T>(
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
@@ -88,7 +88,7 @@ impl StateHandshake {
         }
     }
 
-    pub fn pull_handle<T>(
+    pub fn poll_handle<T>(
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
@@ -102,7 +102,7 @@ impl StateHandshake {
                     self.state = Handshaking::Flushing(Flush(Binary::new()));
                 }
                 Handshaking::Flushing(flush) => {
-                    match ready!(flush.pull_handle(cx, codec)) {
+                    match ready!(flush.poll_handle(cx, codec)) {
                         Ok(_) => {
                             tracing::trace!(flush.poll = %"Ready");
                             self.state = Handshaking::ReadingPreface(ReadPreface::new());
@@ -112,7 +112,7 @@ impl StateHandshake {
                     };
                 }
                 Handshaking::ReadingPreface(read) => {
-                    match ready!(read.pull_handle(cx, codec)) {
+                    match ready!(read.poll_handle(cx, codec)) {
                         Ok(_) => {
                             tracing::trace!(flush.poll = %"Ready");
                             self.state = Handshaking::Done;
@@ -130,7 +130,7 @@ impl StateHandshake {
 }
 
 impl Flush {
-    pub fn pull_handle<T>(
+    pub fn poll_handle<T>(
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
