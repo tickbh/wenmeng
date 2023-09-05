@@ -5,7 +5,7 @@ use webparse::{
         http2::frame::{Frame, Reason, StreamIdentifier},
         request,
     },
-    Binary, BinaryMut, Request,
+    Binary, BinaryMut, Request, Buf,
 };
 
 use crate::{ProtoError, ProtoResult};
@@ -17,8 +17,8 @@ pub struct InnerStream {
     id: StreamIdentifier,
     frames: Vec<Frame<Binary>>,
     sender: Option<Sender<(bool, Binary)>>,
-    content_len: u32,
-    recv_len: u32,
+    content_len: usize,
+    recv_len: usize,
     end_headers: bool,
     end_stream: bool,
 }
@@ -46,8 +46,12 @@ impl InnerStream {
         if let Some(sender) = &self.sender {
             match frame {
                 Frame::Data(d) => {
+                    self.recv_len += d.payload().remaining();
                     if let Err(_e) = sender.send((d.is_end_stream(), d.into_payload())) {
                         return Err(ProtoError::Extension("must be data frame"));
+                    }
+                    if self.recv_len > self.content_len {
+                        return Err(ProtoError::Extension("content len must not more"));
                     }
                 }
                 _ => {
@@ -85,6 +89,7 @@ impl InnerStream {
             self.sender = Some(sender);
             RecvStream::new(receiver, BinaryMut::new())
         };
+        self.content_len = builder.get_body_len();
         match builder.body(recv) {
             Err(e) => return Some(Err(e.into())),
             Ok(r) => return Some(Ok(r)),
