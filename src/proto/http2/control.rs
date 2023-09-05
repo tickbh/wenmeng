@@ -118,8 +118,8 @@ impl Control {
         }
     }
 
-    pub fn build_request(&mut self, frames: Vec<Frame<Binary>>) -> Option<ProtoResult<Request<Binary>>> {
-        
+    pub fn build_request(&mut self, frames: &Vec<Frame<Binary>>) -> Option<ProtoResult<Request<Binary>>> {
+
         None
     }
 
@@ -133,7 +133,7 @@ impl Control {
         let is_end_stream = frame.is_end_stream();
         
         if !self.recv_frames.contains_key(&stream_id) {
-
+            self.recv_frames.insert(stream_id, InnerStream::new(frame));
         }
         None
     } 
