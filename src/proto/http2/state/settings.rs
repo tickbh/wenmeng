@@ -24,7 +24,7 @@ enum LocalState {
 impl StateSettings {
     pub fn new() -> Self {
         StateSettings {
-            state: LocalState::None,
+            state: LocalState::Send(Settings::default()),
             remote: None,
         }
     }
@@ -37,6 +37,20 @@ impl StateSettings {
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
+
+        match &self.state {
+            LocalState::None => return Poll::Ready(Ok(())),
+            LocalState::Send(settings) => {
+                codec.send_frame(Frame::Settings(settings.clone()))?;
+                self.state = LocalState::WaitAck(settings.clone());
+                return Poll::Ready(Ok(()))
+            },
+            LocalState::WaitAck(_) => {
+                return Poll::Ready(Ok(()))
+            },
+            LocalState::Done => (),
+        };
+
         if let Some(settings) = &self.remote {
             if !codec.poll_ready(cx)?.is_ready() {
                 return Poll::Pending;
@@ -46,12 +60,6 @@ impl StateSettings {
         }
 
         self.remote = None;
-        match &self.state {
-            LocalState::None => return Poll::Ready(Ok(())),
-            LocalState::Send(_) => todo!(),
-            LocalState::WaitAck(_) => todo!(),
-            LocalState::Done => todo!(),
-        };
 
         // loop {
         //     match &mut self.state {
@@ -83,7 +91,7 @@ impl StateSettings {
         //         }
         //     }
         // }
-        Poll::Pending
+        return Poll::Ready(Ok(()))
     }
 
     pub fn recv_setting(&mut self, setting: Settings) -> ProtoResult<()> {
