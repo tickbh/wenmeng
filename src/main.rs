@@ -23,7 +23,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
-use dmeng::{self, Http, Connection, StateHandshake};
+use dmeng::{self, Http, Connection, StateHandshake, SendControl};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -79,8 +79,9 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
         match request {
             Ok(request) => {
                 println!("request === {:?}", request);
-                let response = respond(request).await;
-                println!("response === {:?}", response);
+                respond(request.0, request.1).await;
+
+                // println!("response === {:?}", response);
             }
             Err(e) => {
                 println!("error = {:?}", e);
@@ -103,7 +104,7 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn respond(mut req: Request<dmeng::RecvStream>) -> Result<Response<String>, Box<dyn Error>> {
+async fn respond(mut req: Request<dmeng::RecvStream>, mut control: SendControl) -> Result<(), Box<dyn Error>> {
     let mut response = Response::builder().version(req.version().clone());
     if req.is_http2() {
         if let Some(vec) = req.extensions().borrow_mut().remove::<Vec<Frame<Binary>>>() {
@@ -133,10 +134,11 @@ async fn respond(mut req: Request<dmeng::RecvStream>) -> Result<Response<String>
         }
     };
     let response = response
-        .body(body)
+        .body( Binary::from(body.into_bytes()))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
 
-    Ok(response)
+    control.send_response(response);
+    Ok(())
 }
 
 

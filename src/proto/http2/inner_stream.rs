@@ -68,17 +68,17 @@ impl InnerStream {
         self.frames.drain(..).collect()
     }
 
-    pub fn build_request(&mut self) -> Option<ProtoResult<Request<RecvStream>>> {
+    pub fn build_request(&mut self) -> ProtoResult<Request<RecvStream>> {
         let mut now_frames = self.take();
         let mut builder = request::Request::builder();
         for v in now_frames {
             match v {
                 Frame::Headers(header) => match header.into_request(builder) {
                     Ok(b) => builder = b,
-                    Err(e) => return Some(Err(e.into())),
+                    Err(e) => return Err(e.into()),
                 },
                 _ => {
-                    return Some(Err(ProtoError::library_go_away(Reason::PROTOCOL_ERROR)));
+                    return Err(ProtoError::library_go_away(Reason::PROTOCOL_ERROR));
                 }
             }
         }
@@ -91,8 +91,8 @@ impl InnerStream {
         };
         self.content_len = builder.get_body_len();
         match builder.body(recv) {
-            Err(e) => return Some(Err(e.into())),
-            Ok(r) => return Some(Ok(r)),
+            Err(e) => return Err(e.into()),
+            Ok(r) => return Ok(r),
         }
     }
 }
