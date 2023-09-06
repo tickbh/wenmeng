@@ -136,7 +136,11 @@ async fn respond(mut req: Request<dmeng::RecvStream>, mut control: SendControl) 
         .body( Binary::from(body.into_bytes()))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
 
-    control.send_response(response);
+    let mut send = control.send_response(response, false).unwrap();
+    send.send_data(Binary::from_static("hello ".as_bytes()), false);
+    send.send_data(Binary::from_static("world\r\n".as_bytes()), true);
+    
+    // send.send
     Ok(())
 }
 

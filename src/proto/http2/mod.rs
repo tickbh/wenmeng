@@ -8,10 +8,12 @@ mod send_response;
 mod inner_stream;
 mod builder;
 mod recv_stream;
+mod send_stream;
 mod priority_queue;
 
 pub use priority_queue::PriorityQueue;
 pub use recv_stream::RecvStream;
+pub use send_stream::SendStream;
 pub use inner_stream::InnerStream;
 pub use send_response::{SendResponse, SendControl};
 pub use control::Control;

@@ -78,8 +78,6 @@ impl Control {
         Ok(())
     }
 
-    
-
     pub fn poll_ready<T>(&mut self, cx: &mut Context, codec: &mut Codec<T>) -> Poll<ProtoResult<()>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
@@ -172,10 +170,12 @@ impl Control {
                 .build_request()
             {
                 Err(e) => return Some(Err(e)),
-                Ok(r) => Some(Ok((
+                Ok(r) => {
+                    let method = r.method().clone();
+                    Some(Ok((
                     r,
-                    SendControl::new(stream_id, self.reponse_queue.clone()),
-                ))),
+                    SendControl::new(stream_id, self.reponse_queue.clone(), method),
+                )))},
             }
         } else {
             None
