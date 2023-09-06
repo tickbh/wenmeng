@@ -138,7 +138,7 @@ async fn respond(mut req: Request<dmeng::RecvStream>, mut control: SendControl) 
 
     let mut send = control.send_response(response, false).unwrap();
     send.send_data(Binary::from_static("hello ".as_bytes()), false);
-    send.send_data(Binary::from_static("world\r\n".as_bytes()), true);
+    // send.send_data(Binary::from_static("world\r\n".as_bytes()), true);
     
     // send.send
     Ok(())

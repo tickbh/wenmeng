@@ -102,7 +102,19 @@ where
         // println!("write");
         // // self.codec
         // Pin::new(&mut self.codec).poll_next(cx)
-
-        self.poll_request(cx)
+        println!("aaaaaaa do connect");
+        loop {
+            match self.poll_request(cx) {
+                Poll::Pending => {
+                    println!("pending")
+                }
+                Poll::Ready(e) => {
+                    return Poll::Ready(e);
+                } 
+            }
+        }
+        // let xxx = self.poll_request(cx);
+        // println!("connect === {:?} ", xxx.is_pending());
+        // xxx
     }
 }

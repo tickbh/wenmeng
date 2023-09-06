@@ -5,6 +5,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+use tokio_stream::StreamExt;
 
 use futures_core::{ready, stream, Stream};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -101,9 +102,22 @@ impl Control {
     {
         ready!(self.handshake.poll_handle(cx, codec))?;
         loop {
+            // tokio::select! {
+            //     a = async {
+            //         codec.next().await
+            //     } => {
+            //         println!("aaaaaaa");
+            //     }
+            // };
+
+            println!("aaaaaaaaaaaaaaa");
+
+            
             ready!(self.setting.poll_handle(cx, codec, &mut self.config))?;
             ready!(self.poll_ready(cx, codec))?;
-            match ready!(Pin::new(&mut *codec).poll_next(cx)) {
+            let xxx = Pin::new(&mut *codec).poll_next(cx);
+            println!("xxxx = {:?}", xxx.is_pending());
+            match ready!(xxx) {
                 Some(Ok(frame)) => {
                     let mut bytes = BinaryMut::new();
                     match &frame {
