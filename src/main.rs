@@ -114,12 +114,11 @@ async fn respond(mut req: Request<dmeng::RecvStream>, mut control: SendControl) 
     
     let body = match &*req.url().path {
         "/plaintext" => {
-            response = response.header("Content-Type", "text/plain");
+            response = response.header("content-type", "text/plain");
             "Hello, World!".to_string()
         }
         "/json" => {
-            response = response.header("Content-Type", "application/json");
-
+            response = response.header("content-type", "application/json");
             #[derive(Serialize)]
             struct Message {
                 message: &'static str,

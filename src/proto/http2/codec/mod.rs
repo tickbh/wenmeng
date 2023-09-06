@@ -20,10 +20,14 @@ use crate::ProtoResult;
 pub use self::framed_read::FramedRead;
 pub use self::framed_write::FramedWrite;
 
+use super::{DEFAULT_SETTINGS_HEADER_TABLE_SIZE, FrameSize};
+
 #[derive(Debug)]
 pub struct Codec<T> {
     inner: FramedRead<FramedWrite<T>>,
-    header_index: HeaderIndex,
+    header_index: Arc<RwLock<HeaderIndex>>,
+    header_table_size: usize,
+    max_send_frame_size: usize,
 }
 
 impl<T> Codec<T>
@@ -56,7 +60,9 @@ where
 
         Codec {
             inner,
-            header_index: HeaderIndex::new(),
+            header_index: Arc::new(RwLock::new(HeaderIndex::new())),
+            header_table_size: super::DEFAULT_SETTINGS_HEADER_TABLE_SIZE,
+            max_send_frame_size: super::MAX_MAX_FRAME_SIZE as usize,
         }
     }
 
@@ -79,23 +85,19 @@ where
     }
 
     pub fn send_frame(&mut self, frame: Frame) -> ProtoResult<()> {
-        let mut encoder = Encoder {
-            index: Arc::new(RwLock::new(self.header_index.clone()))
-        };
-
+        let mut encoder = Encoder::new_index(self.header_index.clone(), self.max_send_frame_size);
         let _ = frame.encode(self.framed_write().get_bytes(), &mut encoder);
-        // self.framed_write().flush(cx);
 
         Ok(())
 
     }
 
     pub fn set_send_header_table_size(&mut self, size: usize) {
-
+        self.header_table_size = size;
     }
     
     pub fn set_max_send_frame_size(&mut self, size: usize) {
-        
+        self.max_send_frame_size = size;
     }
 }
 

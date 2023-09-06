@@ -28,10 +28,10 @@ impl SendResponse {
         let mut result = vec![];
         if !self.encode_header {
             let header = FrameHeader::new(Kind::Headers, Flag::end_headers(), self.stream_id);
-            let mut fields = self.response.headers().clone();
-            let val = self.response.status().as_str();
-            fields.insert(":status", val);
-            result.push(Frame::Headers(Headers::new(header, fields)));
+            let fields = self.response.headers().clone();
+            let mut header = Headers::new(header, fields);
+            header.set_status(self.response.status());
+            result.push(Frame::Headers(header));
             self.encode_header = true;
         }
         let header = FrameHeader::new(Kind::Data, Flag::end_stream(), self.stream_id);
