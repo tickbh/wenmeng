@@ -103,6 +103,10 @@ where
     pub fn set_max_send_frame_size(&mut self, size: usize) {
         self.max_send_frame_size = size;
     }
+
+    pub fn shutdown(&mut self, cx: &mut Context) -> Poll<io::Result<()>> {
+        self.framed_write().shutdown(cx)
+    }
 }
 
 impl<T> Stream for Codec<T>

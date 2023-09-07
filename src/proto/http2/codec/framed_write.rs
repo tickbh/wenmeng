@@ -71,6 +71,11 @@ where
         }
         Poll::Ready(Ok(()))
     }
+
+    pub fn shutdown(&mut self, cx: &mut Context) -> Poll<io::Result<()>> {
+        ready!(self.flush(cx))?;
+        Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
 }
 
 impl<T: AsyncRead + Unpin> AsyncRead for FramedWrite<T> {

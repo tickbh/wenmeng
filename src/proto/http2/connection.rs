@@ -145,6 +145,7 @@ where
                 Ok(())
             }
             Some(Err(e)) => {
+                self.inner.state = State::Closing(Reason::NO_ERROR, Initiator::Library);
                 return Err(e);
             }
             _ => {
@@ -225,10 +226,9 @@ where
                             continue;
                         }
                     };
-                    
                 },
                 State::Closing(reason, initiator) => {
-                    // ready!(self.codec.shutdown(cx))?;
+                    ready!(self.codec.shutdown(cx))?;
 
                     // Transition the state to error
                     self.inner.state = State::Closed(reason, initiator);
