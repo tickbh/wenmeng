@@ -1,7 +1,8 @@
-use std::{io::Read, sync::mpsc::Receiver};
+use std::{io::Read};
 
 use futures_core::Stream;
-use webparse::{Binary, BinaryMut, Serialize};
+use tokio::sync::mpsc::Receiver;
+use webparse::{Binary, BinaryMut, Serialize, Buf};
 
 use crate::ProtoResult;
 
@@ -32,12 +33,33 @@ impl RecvStream {
     pub fn is_end(&self) -> bool {
         self.is_end
     }
+
+    pub async fn read_all(&mut self) -> Option<BinaryMut> {
+        if self.is_end {
+            return Some(self.binary.clone());
+        }
+        if self.receiver.is_none() {
+            return None;
+        }
+        let receiver = self.receiver.as_mut().unwrap();
+        while let Some(v) = receiver.recv().await {
+            self.binary.put_slice(v.1.chunk());
+            self.is_end = v.0;
+            if self.is_end == true {
+                break;
+            }
+        }
+        Some(self.binary.clone())
+    }
 }
 
 impl Stream for RecvStream {
-    type Item=ProtoResult<Binary>;
+    type Item = ProtoResult<Binary>;
 
-    fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
         todo!()
     }
 }
@@ -49,15 +71,14 @@ impl Read for RecvStream {
 }
 
 impl Serialize for RecvStream {
-    fn serialize<B: webparse::Buf+webparse::BufMut+webparse::MarkBuf>(&self, buffer: &mut B) -> webparse::WebResult<usize> {
+    fn serialize<B: webparse::Buf + webparse::BufMut + webparse::MarkBuf>(
+        &self,
+        buffer: &mut B,
+    ) -> webparse::WebResult<usize> {
         Ok(0)
     }
 }
 
-unsafe impl Sync for RecvStream {
+unsafe impl Sync for RecvStream {}
 
-}
-
-unsafe impl Send for RecvStream {
-    
-}
+unsafe impl Send for RecvStream {}

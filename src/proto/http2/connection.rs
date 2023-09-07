@@ -124,6 +124,57 @@ where
         }
     }
 
+    fn handle_poll_result(&mut self, result: Option<ProtoResult<(Request<RecvStream>, SendControl)>>) -> ProtoResult<()> {
+        match result {
+            // 收到空包, 则关闭连接
+            None => {
+                self.inner.state = State::Closing(Reason::NO_ERROR, Initiator::Library);
+                Ok(())
+            }
+            Some(Err(ProtoError::GoAway(debug_data, reason, initiator))) => {
+                let e = ProtoError::GoAway(debug_data.clone(), reason, initiator);
+                tracing::debug!(error = ?e, "Connection::poll; connection error");
+
+                if self.inner.control.last_goaway_reason() == &reason {
+                    self.inner.state = State::Closing(reason, initiator);
+                    return Ok(())
+                }
+                self.inner.control.go_away_now_data(reason, debug_data);
+                // Reset all active streams
+                // self.streams.handle_error(e);
+                Ok(())
+            }
+            Some(Err(e)) => {
+                return Err(e);
+            }
+            _ => {
+                unreachable!();
+            }
+            // // Attempting to read a frame resulted in a stream level error.
+            // // This is handled by resetting the frame then trying to read
+            // // another frame.
+            // Err(Error::Reset(id, reason, initiator)) => {
+            //     debug_assert_eq!(initiator, Initiator::Library);
+            //     tracing::trace!(?id, ?reason, "stream error");
+            //     self.streams.send_reset(id, reason);
+            //     Ok(())
+            // }
+            // // Attempting to read a frame resulted in an I/O error. All
+            // // active streams must be reset.
+            // //
+            // // TODO: Are I/O errors recoverable?
+            // Err(Error::Io(e, inner)) => {
+            //     tracing::debug!(error = ?e, "Connection::poll; IO error");
+            //     let e = Error::Io(e, inner);
+
+            //     // Reset all active streams
+            //     self.streams.handle_error(e.clone());
+
+            //     // Return the error
+            //     Err(e)
+            // }
+        }
+    }
     
     fn take_error(&mut self, ours: Reason, initiator: Initiator) -> ProtoResult<()> {
         let (debug_data, theirs) = self
@@ -154,7 +205,6 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
 
-        println!("aaaaaaa do connect");
         loop {
             match self.inner.state {
                 State::Open => {
@@ -167,10 +217,15 @@ where
                             // }
                             return Poll::Pending;
                         }
-                        Poll::Ready(e) => {
-                            return Poll::Ready(e);
+                        Poll::Ready(Some(Ok(v))) => {
+                            return Poll::Ready(Some(Ok(v)));
                         }
-                    }
+                        Poll::Ready(v) => {
+                            let _ = self.handle_poll_result(v)?;
+                            continue;
+                        }
+                    };
+                    
                 },
                 State::Closing(reason, initiator) => {
                     // ready!(self.codec.shutdown(cx))?;

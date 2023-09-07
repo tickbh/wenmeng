@@ -8,6 +8,7 @@ use crate::{proto::http2::codec::Codec, ProtoResult};
 pub struct StateGoAway {
     close_now: bool,
     goaway: Option<GoAway>,
+    reason: Reason,
 }
 
 impl StateGoAway {
@@ -15,6 +16,7 @@ impl StateGoAway {
         StateGoAway {
             close_now: false,
             goaway: None,
+            reason: Reason::NO_ERROR,
         }
     }
 
@@ -36,5 +38,9 @@ impl StateGoAway {
 
     pub fn is_close_now(&self) -> bool {
         self.close_now
+    }
+
+    pub fn reason(&self) -> &Reason {
+        &self.reason
     }
 }

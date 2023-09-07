@@ -106,16 +106,19 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
 
 async fn respond(mut req: Request<dmeng::RecvStream>, mut control: SendControl) -> Result<(), Box<dyn Error>> {
     let mut response = Response::builder().version(req.version().clone());
-    if req.is_http2() {
-        if let Some(vec) = req.extensions().borrow_mut().remove::<Vec<Frame<Binary>>>() {
-            response.extensions_ref().unwrap().borrow_mut().insert(vec);
-        }
-    }
-    
     let body = match &*req.url().path {
         "/plaintext" => {
             response = response.header("content-type", "text/plain");
             "Hello, World!".to_string()
+        }
+        "/post" => {
+            let body = req.body_mut();
+            let binary = body.read_all().await.unwrap();
+
+            // body.
+            response = response.header("content-type", "text/plain");
+            // format!("Hello, World! {:?}", TryInto::<String>::try_into(binary)).to_string()
+            "".to_string()
         }
         "/json" => {
             response = response.header("content-type", "application/json");

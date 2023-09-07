@@ -149,17 +149,26 @@ impl Control {
                             self.setting
                                 .recv_setting(codec, settings.clone(), &mut self.config)?;
                         }
-                        Frame::Data(_) => {}
-                        Frame::Headers(header) => match self.recv_frame(frame) {
-                            None => {
-                                continue;
-                            }
-                            Some(Err(e)) => {
-                                return Poll::Ready(Some(Err(e)));
-                            }
-                            Some(Ok(r)) => {
-                                return Poll::Ready(Some(Ok(r)));
-                            }
+                        Frame::Data(d) => {
+                            match ready!(self.recv_frame(frame)?) {
+                                Some(r) => return Poll::Ready(Some(Ok(r))),
+                                _ => continue,
+                            };
+                        }
+                        Frame::Headers(_) => {
+                            match ready!(self.recv_frame(frame)?) {
+                                Some(r) => return Poll::Ready(Some(Ok(r))),
+                                _ => continue,
+                            };
+                            // None => {
+                            //     continue;
+                            // }
+                            // Some(Err(e)) => {
+                            //     return Poll::Ready(Some(Err(e)));
+                            // }
+                            // Some(Ok(r)) => {
+                            //     return Poll::Ready(Some(Ok(r)));
+                            // }
                         },
                         Frame::Priority(_) => {}
                         Frame::PushPromise(_) => {}
@@ -185,10 +194,10 @@ impl Control {
     pub fn recv_frame(
         &mut self,
         frame: Frame<Binary>,
-    ) -> Option<ProtoResult<(Request<RecvStream>, SendControl)>> {
+    ) -> Poll<Option<ProtoResult<(Request<RecvStream>, SendControl)>>> {
         let stream_id = frame.stream_id();
         if stream_id.is_zero() {
-            return None;
+            return Poll::Ready(None);
         }
 
         let is_end_headers = frame.is_end_headers();
@@ -209,10 +218,10 @@ impl Control {
                 .unwrap()
                 .build_request()
             {
-                Err(e) => return Some(Err(e)),
+                Err(e) => return Poll::Ready(Some(Err(e))),
                 Ok(r) => {
                     let method = r.method().clone();
-                    Some(Ok((
+                    Poll::Ready(Some(Ok((
                         r,
                         SendControl::new(
                             stream_id,
@@ -220,16 +229,25 @@ impl Control {
                             method,
                             self.write_sender.clone(),
                         ),
-                    )))
+                    ))))
                 }
             }
         } else {
-            None
+            Poll::Ready(None)
         }
     }
 
     pub fn go_away_now(&mut self, e: Reason) {
         let frame = GoAway::new(self.last_stream_id, e);
         self.goaway.go_away_now(frame);
+    }
+
+    pub fn go_away_now_data(&mut self, e: Reason, data: Binary) {
+        let frame = GoAway::with_debug_data(self.last_stream_id, e, data);
+        self.goaway.go_away_now(frame);
+    }
+    
+    pub fn last_goaway_reason(&mut self) -> &Reason {
+        self.goaway.reason()
     }
 }

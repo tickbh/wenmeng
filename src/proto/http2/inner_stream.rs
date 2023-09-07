@@ -1,5 +1,5 @@
-use std::sync::mpsc::{channel, Sender};
 
+use tokio::sync::mpsc::{channel, Sender};
 use webparse::{
     http::{
         http2::frame::{Frame, Reason, StreamIdentifier},
@@ -47,7 +47,7 @@ impl InnerStream {
             match frame {
                 Frame::Data(d) => {
                     self.recv_len += d.payload().remaining();
-                    if let Err(_e) = sender.send((d.is_end_stream(), d.into_payload())) {
+                    if let Err(_e) = sender.try_send((d.is_end_stream(), d.into_payload())) {
                         return Err(ProtoError::Extension("must be data frame"));
                     }
                     if self.recv_len > self.content_len {
@@ -85,7 +85,7 @@ impl InnerStream {
         let recv = if self.end_stream {
             RecvStream::empty()
         } else {
-            let (sender, receiver) = channel::<(bool, Binary)>();
+            let (sender, receiver) = channel::<(bool, Binary)>(20);
             self.sender = Some(sender);
             RecvStream::new(receiver, BinaryMut::new())
         };
