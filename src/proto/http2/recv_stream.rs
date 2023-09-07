@@ -1,8 +1,8 @@
-use std::{io::Read};
+use std::io::Read;
 
 use futures_core::Stream;
 use tokio::sync::mpsc::Receiver;
-use webparse::{Binary, BinaryMut, Serialize, Buf};
+use webparse::{Binary, BinaryMut, Buf, Serialize};
 
 use crate::ProtoResult;
 
@@ -32,6 +32,20 @@ impl RecvStream {
 
     pub fn is_end(&self) -> bool {
         self.is_end
+    }
+
+    pub fn try_recv(&mut self) {
+        if self.receiver.is_none() {
+            return;
+        }
+        let receiver = self.receiver.as_mut().unwrap();
+        while let Ok(v) = receiver.try_recv() {
+            self.binary.put_slice(v.1.chunk());
+            self.is_end = v.0;
+            if self.is_end == true {
+                break;
+            }
+        }
     }
 
     pub async fn read_all(&mut self) -> Option<BinaryMut> {
@@ -66,7 +80,10 @@ impl Stream for RecvStream {
 
 impl Read for RecvStream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        todo!()
+        self.try_recv();
+        let len = std::cmp::min(buf.len(), self.binary.remaining());
+        self.binary.copy_to_slice(&mut buf[..len]);
+        Ok(len)
     }
 }
 

@@ -18,7 +18,7 @@ use futures::SinkExt;
 use webparse::{Request, Response, http::{StatusCode, http2::frame::Frame}, Binary};
 #[macro_use]
 extern crate serde_derive;
-use std::{env, error::Error, fmt::{self,}, io, borrow::BorrowMut, time::Duration};
+use std::{env, error::Error, fmt::{self,}, io::{self, Read}, borrow::BorrowMut, time::Duration};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Decoder, Encoder, Framed};
@@ -113,9 +113,15 @@ async fn respond(mut req: Request<dmeng::RecvStream>, mut control: SendControl) 
         }
         "/post" => {
             let body = req.body_mut();
-            let binary = body.read_all().await.unwrap();
 
+            let mut buf = [0u8; 10];
+            if let Ok(len) = body.read(&mut buf) {
+                println!("skip = {:?}", &buf[..len]);
+            }
+            let binary = body.read_all().await.unwrap();
             println!("binary = {:?}", binary);
+
+            
             // body.
             response = response.header("content-type", "text/plain");
             format!("Hello, World! {:?}", TryInto::<String>::try_into(binary)).to_string()
