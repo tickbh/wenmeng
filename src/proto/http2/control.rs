@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    io,
     pin::Pin,
     sync::{Arc, Mutex},
     task::{Context, Poll},
@@ -8,10 +9,13 @@ use std::{
 use tokio_stream::StreamExt;
 
 use futures_core::{ready, stream, Stream};
-use tokio::{io::{AsyncRead, AsyncWrite}, sync::mpsc::Sender};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    sync::mpsc::Sender,
+};
 use webparse::{
     http::{
-        http2::frame::{Flag, Frame, Kind, Settings, StreamIdentifier},
+        http2::frame::{Flag, Frame, Kind, Reason, Settings, StreamIdentifier, GoAway},
         request,
     },
     Binary, BinaryMut, Request, Response,
@@ -21,7 +25,7 @@ use crate::ProtoResult;
 
 use super::{
     codec::Codec, inner_stream::InnerStream, send_response::SendControl, state::StateHandshake,
-    PriorityQueue, RecvStream, SendResponse, StateSettings, WindowSize,
+    PriorityQueue, RecvStream, SendResponse, StateGoAway, StatePingPong, StateSettings, WindowSize,
 };
 
 #[derive(Debug, Clone)]
@@ -43,13 +47,19 @@ pub struct Control {
     /// 所有收到的帧, 如果收到Header结束就开始返回request, 后续收到Data再继续返回直至结束,
     /// id为0的帧为控制帧, 需要立即做处理
     recv_frames: HashMap<StreamIdentifier, InnerStream>,
+    last_stream_id: StreamIdentifier,
     send_frames: PriorityQueue,
     reponse_queue: Arc<Mutex<Vec<SendResponse>>>,
 
     handshake: StateHandshake,
     setting: StateSettings,
+    goaway: StateGoAway,
+    ping_pong: StatePingPong,
+
+    pub error: Option<GoAway>,
+
     config: ControlConfig,
-    
+
     write_sender: Sender<()>,
 }
 
@@ -61,6 +71,10 @@ impl Control {
             reponse_queue: Arc::new(Mutex::new(Vec::new())),
             setting: StateSettings::new(config.settings.clone()),
             handshake: StateHandshake::new_server(),
+            goaway: StateGoAway::new(),
+            ping_pong: StatePingPong::new(),
+            last_stream_id: StreamIdentifier::zero(),
+            error: None,
             config,
             write_sender,
         }
@@ -82,11 +96,24 @@ impl Control {
         Ok(())
     }
 
+    fn poll_go_away<T>(
+        &mut self,
+        cx: &mut Context,
+        codec: &mut Codec<T>,
+    ) -> Poll<Option<ProtoResult<Reason>>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
+        self.goaway.poll_handle(cx, codec)
+    }
+
     pub fn poll_write<T>(&mut self, cx: &mut Context, codec: &mut Codec<T>) -> Poll<ProtoResult<()>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
         self.encode_response(codec)?;
+        ready!(self.goaway.poll_handle(cx, codec));
+        ready!(self.ping_pong.poll_handle(cx, codec))?;
         match ready!(self.send_frames.poll_handle(cx, codec)) {
             Some(Err(e)) => return Poll::Ready(Err(e)),
             _ => (),
@@ -105,7 +132,6 @@ impl Control {
     {
         ready!(self.handshake.poll_handle(cx, codec))?;
         loop {
-
             println!("aaaaaaaaaaaaaaa");
             ready!(self.setting.poll_handle(cx, codec, &mut self.config))?;
             // 写入如果pending不直接pending, 等尝试读pending则返回
@@ -174,6 +200,8 @@ impl Control {
             self.recv_frames.get_mut(&stream_id).unwrap().push(frame);
         }
 
+        self.last_stream_id = self.last_stream_id.max(stream_id);
+
         if is_end_headers {
             match self
                 .recv_frames
@@ -185,12 +213,23 @@ impl Control {
                 Ok(r) => {
                     let method = r.method().clone();
                     Some(Ok((
-                    r,
-                    SendControl::new(stream_id, self.reponse_queue.clone(), method, self.write_sender.clone()),
-                )))},
+                        r,
+                        SendControl::new(
+                            stream_id,
+                            self.reponse_queue.clone(),
+                            method,
+                            self.write_sender.clone(),
+                        ),
+                    )))
+                }
             }
         } else {
             None
         }
+    }
+
+    pub fn go_away_now(&mut self, e: Reason) {
+        let frame = GoAway::new(self.last_stream_id, e);
+        self.goaway.go_away_now(frame);
     }
 }

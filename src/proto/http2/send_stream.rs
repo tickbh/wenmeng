@@ -34,17 +34,21 @@ impl SendStream {
         self.sender.as_ref().map(|s| s.capacity() > 0).unwrap_or(false)
     }
 
-    pub fn send_data(&mut self, binary: Binary, is_end_stream: bool) -> Result<(), TrySendError<(bool, Binary)>> {
+    /// 返回Some则表示数据发送不成功，需要重新进行投递
+    pub fn send_data(&mut self, binary: Binary, is_end_stream: bool) -> Option<(bool, Binary)> {
         if let Some(Err(e)) = self.sender.as_ref().map(|s| {
             println!("capacity == {:?} ", s.capacity());
             s.try_send((is_end_stream, binary))
         }) {
-            return Err(e);
+            return Some(match e {
+                TrySendError::Closed(v) => v,
+                TrySendError::Full(v) => v,
+            });
         }
         self.write_sender.as_ref().map(|s| {
             s.try_send(()) 
         });
-        Ok(())
+        None
     }
 
     pub fn is_end(&self) -> bool {

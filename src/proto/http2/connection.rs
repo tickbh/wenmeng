@@ -37,6 +37,8 @@ struct InnerConnection {
 
     control: Control,
 
+
+
     receiver: Option<Receiver<()>>,
 }
 
@@ -109,21 +111,35 @@ where
     pub async fn incoming(&mut self) -> Option<ProtoResult<(Request<RecvStream>, SendControl)>> {
         use futures_util::stream::StreamExt;
         let mut receiver = self.inner.receiver.take().unwrap();
-        // if let Some(_) = receiver.recv().await {
-        //     println!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        // }
         loop {
             tokio::select! {
                 _ = receiver.recv() => {
                     let _ = poll_fn(|cx| Poll::Ready(self.poll_write(cx))).await;
-                    println!("zzzzzz111111111111111111111111111111111111111");
-                    // Pin::new(&self.codec).
                 },
                 v = self.next() => {
                     self.inner.receiver = Some(receiver);
                     return v;
                 }
             }
+        }
+    }
+
+    
+    fn take_error(&mut self, ours: Reason, initiator: Initiator) -> ProtoResult<()> {
+        let (debug_data, theirs) = self
+            .inner
+            .control
+            .error
+            .take()
+            .as_ref()
+            .map_or((Binary::new(), Reason::NO_ERROR), |frame| {
+                (frame.debug_data().clone(), frame.reason())
+            });
+
+        match (ours, theirs) {
+            (Reason::NO_ERROR, Reason::NO_ERROR) => Ok(()),
+            (ours, Reason::NO_ERROR) => Err(ProtoError::GoAway(Binary::new(), ours, initiator)),
+            (_, theirs) => Err(ProtoError::GoAway(debug_data, theirs, Initiator::Remote)),
         }
     }
 }
@@ -137,26 +153,44 @@ where
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        // Pin::new(&mut self.codec.get_mut()).poll_write(cx, &[1, 2, 3, 3, 3, 4, 4, 5, 1]);
-        // println!("write");
-        // // self.codec
-        // Pin::new(&mut self.codec).poll_next(cx)
 
         println!("aaaaaaa do connect");
         loop {
-            match self.poll_request(cx) {
-                Poll::Pending => {
-                    // ready!(self.poll_write(cx))?;
-                    println!("pending");
-                    return Poll::Pending;
-                }
-                Poll::Ready(e) => {
-                    return Poll::Ready(e);
-                }
+            match self.inner.state {
+                State::Open => {
+                    match self.poll_request(cx) {
+                        Poll::Pending => {
+                            println!("pending");
+                            // if self.inner.control.error.is_some() {
+                            //     self.inner.control.go_away_now(Reason::NO_ERROR);
+                            //     continue;
+                            // }
+                            return Poll::Pending;
+                        }
+                        Poll::Ready(e) => {
+                            return Poll::Ready(e);
+                        }
+                    }
+                },
+                State::Closing(reason, initiator) => {
+                    // ready!(self.codec.shutdown(cx))?;
+
+                    // Transition the state to error
+                    self.inner.state = State::Closed(reason, initiator);
+                },
+                State::Closed(reason, initiator) =>  {
+                    if let Err(e) = self.take_error(reason, initiator) {
+                        return Poll::Ready(Some(Err(e)));
+                    }
+                    return Poll::Ready(None);
+                },
             }
+            
         }
         // let xxx = self.poll_request(cx);
         // println!("connect === {:?} ", xxx.is_pending());
         // xxx
     }
+
+    
 }
