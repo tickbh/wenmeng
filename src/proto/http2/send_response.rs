@@ -1,6 +1,6 @@
-use std::sync::{Arc, Mutex, mpsc::Sender};
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::{Arc, Mutex};
 use rbtree::RBTree;
+use tokio::sync::mpsc::{Sender, channel, Receiver};
 use webparse::BinaryMut;
 use webparse::{
     http::http2::{frame::{Frame, Priority, PriorityFrame, StreamIdentifier, FrameHeader, Kind, Flag, Headers, Data}, Decoder},
@@ -21,10 +21,11 @@ pub struct SendResponse {
 
     pub method: Method,
     pub receiver: Option<Receiver<(bool, Binary)>>,
+    pub write_sender: Sender<()>,
 }
 
 impl SendResponse {
-    pub fn new(stream_id: StreamIdentifier, response: Response<Binary>, method: Method, is_end_stream: bool) -> Self {
+    pub fn new(stream_id: StreamIdentifier, response: Response<Binary>, method: Method, is_end_stream: bool, write_sender: Sender<()>) -> Self {
         SendResponse {
             stream_id,
             response,
@@ -33,6 +34,7 @@ impl SendResponse {
             is_end_stream,
             method,
             receiver: None,
+            write_sender,
         }
     }
 
@@ -53,7 +55,7 @@ impl SendResponse {
             result.push(Frame::Data(data));
             self.encode_body = true;
         }
-        if let Some(recv) = &self.receiver {
+        if let Some(recv) = &mut self.receiver {
             while let Ok(val) = recv.try_recv() {
                 let flag = if val.0 { Flag::end_stream() } else { Flag::zero() };
                 self.is_end_stream = val.0;
@@ -69,11 +71,9 @@ impl SendResponse {
         if self.method.res_nobody() || self.is_end_stream {
             SendStream::empty()
         } else {
-            let (sender, receiver) = channel::<(bool, Binary)>();
-
+            let (sender, receiver) = channel::<(bool, Binary)>(100);
             self.receiver = Some(receiver);
-
-            SendStream::new(sender, BinaryMut::new())
+            SendStream::new(sender, self.write_sender.clone(), BinaryMut::new())
 
         }
     }
@@ -84,20 +84,22 @@ pub struct SendControl {
     pub stream_id: StreamIdentifier,
     pub queue: Arc<Mutex<Vec<SendResponse>>>,
     pub method: Method,
+    pub write_sender: Sender<()>,
 }
 
 impl SendControl {
-    pub fn new(stream_id: StreamIdentifier, queue: Arc<Mutex<Vec<SendResponse>>>, method: Method) -> Self {
+    pub fn new(stream_id: StreamIdentifier, queue: Arc<Mutex<Vec<SendResponse>>>, method: Method, write_sender: Sender<()>) -> Self {
         SendControl {
             stream_id,
             queue,
             method,
+            write_sender,
         }
     }
 
     pub fn send_response(&mut self, res: Response<Binary>, is_end_stream: bool) -> ProtoResult<SendStream> {
         let mut data = self.queue.lock().unwrap();
-        let mut response = SendResponse::new(self.stream_id, res, self.method.clone(), is_end_stream);
+        let mut response = SendResponse::new(self.stream_id, res, self.method.clone(), is_end_stream, self.write_sender.clone());
         let steam = response.create_sendstream();
         data.push(response);
         Ok(steam)

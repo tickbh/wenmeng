@@ -5,7 +5,7 @@ mod framed_write;
 use std::io;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
-use std::task::{Context, Poll};
+use std::task::{Context, Poll};use tokio::io::{Interest, Ready, AsyncReadExt};
 
 use futures_core::Stream;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -69,6 +69,10 @@ where
     pub fn get_mut(&mut self) -> &mut T {
         self.inner.get_mut().get_mut()
     }
+
+    // pub async fn ready(&self, interest: Interest) -> io::Result<Ready> {
+    //     // self.get_mut().read_exact(buf)
+    // }
 
     /// Returns `Ready` when the codec can buffer a frame
     pub fn poll_ready(&mut self, cx: &mut Context) -> Poll<io::Result<()>> {

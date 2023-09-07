@@ -75,7 +75,7 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
 
     // let mut connect = StateHandshake::handshake(stream).await.unwrap();
     let mut connect = dmeng::Builder::new().connection(stream);
-    while let Some(request) = connect.next().await {
+    while let Some(request) = connect.incoming().await {
         match request {
             Ok(request) => {
                 println!("request === {:?}", request);
@@ -137,10 +137,13 @@ async fn respond(mut req: Request<dmeng::RecvStream>, mut control: SendControl) 
         .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
 
     let mut send = control.send_response(response, false).unwrap();
-    send.send_data(Binary::from_static("hello ".as_bytes()), false);
-    // send.send_data(Binary::from_static("world\r\n".as_bytes()), true);
+    tokio::spawn(async move {
+        // for i in 1..10000 {
+        //     send.send_data(Binary::from_static("hello ".as_bytes()), false);
+        // }
+        send.send_data(Binary::from_static("world\r\n".as_bytes()), true);
+    });
     
-    // send.send
     Ok(())
 }
 

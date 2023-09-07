@@ -1,6 +1,7 @@
-use std::{io::Read, sync::mpsc::{Receiver, Sender}};
+use std::{io::Read};
 
 use futures_core::Stream;
+use tokio::sync::mpsc::Sender;
 use webparse::{Binary, BinaryMut, Serialize};
 
 use crate::ProtoResult;
@@ -8,6 +9,7 @@ use crate::ProtoResult;
 #[derive(Debug)]
 pub struct SendStream {
     sender: Option<Sender<(bool, Binary)>>,
+    write_sender: Option<Sender<()>>,
     binary: BinaryMut,
     is_end: bool,
 }
@@ -16,14 +18,16 @@ impl SendStream {
     pub fn empty() -> SendStream {
         SendStream {
             sender: None,
+            write_sender: None,
             binary: BinaryMut::new(),
             is_end: true,
         }
     }
 
-    pub fn new(sender: Sender<(bool, Binary)>, binary: BinaryMut) -> SendStream {
+    pub fn new(sender: Sender<(bool, Binary)>, write_sender: Sender<()>, binary: BinaryMut) -> SendStream {
         SendStream {
             sender: Some(sender),
+            write_sender: Some(write_sender),
             binary,
             is_end: false,
         }
@@ -33,7 +37,12 @@ impl SendStream {
         println!("aaaaaaaaaaaaaaaaaaa {:?}", self.sender);
         self.sender.as_ref().map(|s| {
             println!("send data!!!!!!!!!!!");
-            s.send((is_end_stream, binary)) 
+            s.try_send((is_end_stream, binary)) 
+        });
+
+        self.write_sender.as_ref().map(|s| {
+            println!("send notify write data!!!!!!!!!!!");
+            s.try_send(()) 
         });
     }
 

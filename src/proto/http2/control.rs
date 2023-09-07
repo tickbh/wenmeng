@@ -8,7 +8,7 @@ use std::{
 use tokio_stream::StreamExt;
 
 use futures_core::{ready, stream, Stream};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{io::{AsyncRead, AsyncWrite}, sync::mpsc::Sender};
 use webparse::{
     http::{
         http2::frame::{Flag, Frame, Kind, Settings, StreamIdentifier},
@@ -49,10 +49,12 @@ pub struct Control {
     handshake: StateHandshake,
     setting: StateSettings,
     config: ControlConfig,
+    
+    write_sender: Sender<()>,
 }
 
 impl Control {
-    pub fn new(config: ControlConfig) -> Self {
+    pub fn new(config: ControlConfig, write_sender: Sender<()>) -> Self {
         Control {
             recv_frames: HashMap::new(),
             send_frames: PriorityQueue::new(),
@@ -60,6 +62,7 @@ impl Control {
             setting: StateSettings::new(config.settings.clone()),
             handshake: StateHandshake::new_server(),
             config,
+            write_sender,
         }
     }
 
@@ -79,7 +82,7 @@ impl Control {
         Ok(())
     }
 
-    pub fn poll_ready<T>(&mut self, cx: &mut Context, codec: &mut Codec<T>) -> Poll<ProtoResult<()>>
+    pub fn poll_write<T>(&mut self, cx: &mut Context, codec: &mut Codec<T>) -> Poll<ProtoResult<()>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -102,19 +105,14 @@ impl Control {
     {
         ready!(self.handshake.poll_handle(cx, codec))?;
         loop {
-            // tokio::select! {
-            //     a = async {
-            //         codec.next().await
-            //     } => {
-            //         println!("aaaaaaa");
-            //     }
-            // };
 
             println!("aaaaaaaaaaaaaaa");
-
-            
             ready!(self.setting.poll_handle(cx, codec, &mut self.config))?;
-            ready!(self.poll_ready(cx, codec))?;
+            // 写入如果pending不直接pending, 等尝试读pending则返回
+            match self.poll_write(cx, codec) {
+                Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e))),
+                _ => (),
+            }
             let xxx = Pin::new(&mut *codec).poll_next(cx);
             println!("xxxx = {:?}", xxx.is_pending());
             match ready!(xxx) {
@@ -188,7 +186,7 @@ impl Control {
                     let method = r.method().clone();
                     Some(Ok((
                     r,
-                    SendControl::new(stream_id, self.reponse_queue.clone(), method),
+                    SendControl::new(stream_id, self.reponse_queue.clone(), method, self.write_sender.clone()),
                 )))},
             }
         } else {
