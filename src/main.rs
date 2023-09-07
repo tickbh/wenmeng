@@ -117,8 +117,8 @@ async fn respond(mut req: Request<dmeng::RecvStream>, mut control: SendControl) 
 
             // body.
             response = response.header("content-type", "text/plain");
-            // format!("Hello, World! {:?}", TryInto::<String>::try_into(binary)).to_string()
-            "".to_string()
+            format!("Hello, World! {:?}", TryInto::<String>::try_into(binary)).to_string()
+            // "".to_string()
         }
         "/json" => {
             response = response.header("content-type", "application/json");
