@@ -18,7 +18,7 @@ use futures::SinkExt;
 use webparse::{Request, Response, http::{StatusCode, http2::frame::Frame}, Binary};
 #[macro_use]
 extern crate serde_derive;
-use std::{env, error::Error, fmt::{self,}, io, borrow::BorrowMut};
+use std::{env, error::Error, fmt::{self,}, io, borrow::BorrowMut, time::Duration};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Decoder, Encoder, Framed};
@@ -138,9 +138,10 @@ async fn respond(mut req: Request<dmeng::RecvStream>, mut control: SendControl) 
 
     let mut send = control.send_response(response, false).unwrap();
     tokio::spawn(async move {
-        // for i in 1..10000 {
-        //     send.send_data(Binary::from_static("hello ".as_bytes()), false);
-        // }
+        for i in 1..99 {
+            send.send_data(Binary::from(format!("hello{} ", i).into_bytes()), false);
+            tokio::time::sleep(Duration::new(0, 1000)).await;
+        }
         send.send_data(Binary::from_static("world\r\n".as_bytes()), true);
     });
     

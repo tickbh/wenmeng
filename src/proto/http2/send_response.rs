@@ -73,7 +73,7 @@ impl SendResponse {
         } else {
             let (sender, receiver) = channel::<(bool, Binary)>(100);
             self.receiver = Some(receiver);
-            SendStream::new(sender, self.write_sender.clone(), BinaryMut::new())
+            SendStream::new(sender, self.write_sender.clone())
 
         }
     }

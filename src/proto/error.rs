@@ -8,6 +8,7 @@ pub type ProtoResult<T> = Result<T, ProtoError>;
 pub enum ProtoError {
     IoError(io::Error),
     WebError(WebError),
+    SenderError(),
     GoAway(Binary, Reason, Initiator),
     Extension(&'static str),
 }
@@ -39,6 +40,13 @@ impl From<WebError>  for ProtoError {
         ProtoError::WebError(value)
     }
 }
+
+// impl<T> From<TrySendError<T>>  for ProtoError {
+//     fn from(value: TrySendError<T>) -> Self {
+//         ma
+//         ProtoError::WebError(value)
+//     }
+// }
 
 unsafe impl Send for ProtoError {
     

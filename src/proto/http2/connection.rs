@@ -7,7 +7,8 @@ use futures_core::Stream;
 use futures_util::future::poll_fn;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::TcpStream, sync::mpsc::{Receiver, Sender},
+    net::TcpStream,
+    sync::mpsc::{Receiver, Sender},
 };
 use webparse::{
     http::http2::frame::{Frame, Reason, Settings},
@@ -22,7 +23,8 @@ use crate::{
 use super::{
     codec::{Codec, FramedRead, FramedWrite},
     control::ControlConfig,
-    Control, RecvStream, SendResponse, send_response::SendControl,
+    send_response::SendControl,
+    Control, RecvStream, SendResponse,
 };
 
 pub struct Connection<T> {
@@ -64,16 +66,19 @@ where
             codec: Codec::new(io),
             inner: InnerConnection {
                 state: State::Open,
-                control: Control::new(ControlConfig {
-                    next_stream_id: 2.into(),
-                    // Server does not need to locally initiate any streams
-                    initial_max_send_streams: 0,
-                    max_send_buffer_size: builder.max_send_buffer_size,
-                    reset_stream_duration: builder.reset_stream_duration,
-                    reset_stream_max: builder.reset_stream_max,
-                    remote_reset_stream_max: builder.pending_accept_reset_stream_max,
-                    settings: builder.settings.clone(),
-                }, sender),
+                control: Control::new(
+                    ControlConfig {
+                        next_stream_id: 2.into(),
+                        // Server does not need to locally initiate any streams
+                        initial_max_send_streams: 0,
+                        max_send_buffer_size: builder.max_send_buffer_size,
+                        reset_stream_duration: builder.reset_stream_duration,
+                        reset_stream_max: builder.reset_stream_max,
+                        remote_reset_stream_max: builder.pending_accept_reset_stream_max,
+                        settings: builder.settings.clone(),
+                    },
+                    sender,
+                ),
                 receiver: Some(receiver),
             },
         }
@@ -93,11 +98,7 @@ where
         // }
     }
 
-    
-    pub fn poll_write(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<ProtoResult<()>> {
+    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtoResult<()>> {
         println!("poll write!!!!!!!");
         self.inner.control.poll_write(cx, &mut self.codec)
         // loop {
@@ -140,7 +141,7 @@ where
         // println!("write");
         // // self.codec
         // Pin::new(&mut self.codec).poll_next(cx)
-        
+
         println!("aaaaaaa do connect");
         loop {
             match self.poll_request(cx) {
@@ -151,7 +152,7 @@ where
                 }
                 Poll::Ready(e) => {
                     return Poll::Ready(e);
-                } 
+                }
             }
         }
         // let xxx = self.poll_request(cx);

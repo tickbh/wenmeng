@@ -1,7 +1,7 @@
 use std::{io::Read};
 
 use futures_core::Stream;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{Sender, error::TrySendError};
 use webparse::{Binary, BinaryMut, Serialize};
 
 use crate::ProtoResult;
@@ -10,7 +10,6 @@ use crate::ProtoResult;
 pub struct SendStream {
     sender: Option<Sender<(bool, Binary)>>,
     write_sender: Option<Sender<()>>,
-    binary: BinaryMut,
     is_end: bool,
 }
 
@@ -19,31 +18,33 @@ impl SendStream {
         SendStream {
             sender: None,
             write_sender: None,
-            binary: BinaryMut::new(),
             is_end: true,
         }
     }
 
-    pub fn new(sender: Sender<(bool, Binary)>, write_sender: Sender<()>, binary: BinaryMut) -> SendStream {
+    pub fn new(sender: Sender<(bool, Binary)>, write_sender: Sender<()>) -> SendStream {
         SendStream {
             sender: Some(sender),
             write_sender: Some(write_sender),
-            binary,
             is_end: false,
         }
     }
 
-    pub fn send_data(&mut self, binary: Binary, is_end_stream: bool) {
-        println!("aaaaaaaaaaaaaaaaaaa {:?}", self.sender);
-        self.sender.as_ref().map(|s| {
-            println!("send data!!!!!!!!!!!");
-            s.try_send((is_end_stream, binary)) 
-        });
+    pub fn is_ready(&self) -> bool {
+        self.sender.as_ref().map(|s| s.capacity() > 0).unwrap_or(false)
+    }
 
+    pub fn send_data(&mut self, binary: Binary, is_end_stream: bool) -> Result<(), TrySendError<(bool, Binary)>> {
+        if let Some(Err(e)) = self.sender.as_ref().map(|s| {
+            println!("capacity == {:?} ", s.capacity());
+            s.try_send((is_end_stream, binary))
+        }) {
+            return Err(e);
+        }
         self.write_sender.as_ref().map(|s| {
-            println!("send notify write data!!!!!!!!!!!");
             s.try_send(()) 
         });
+        Ok(())
     }
 
     pub fn is_end(&self) -> bool {
