@@ -115,6 +115,7 @@ async fn respond(mut req: Request<dmeng::RecvStream>, mut control: SendControl) 
             let body = req.body_mut();
             let binary = body.read_all().await.unwrap();
 
+            println!("binary = {:?}", binary);
             // body.
             response = response.header("content-type", "text/plain");
             format!("Hello, World! {:?}", TryInto::<String>::try_into(binary)).to_string()

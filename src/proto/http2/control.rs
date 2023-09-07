@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, LinkedList},
     io,
     pin::Pin,
     sync::{Arc, Mutex},
@@ -15,7 +15,7 @@ use tokio::{
 };
 use webparse::{
     http::{
-        http2::frame::{Flag, Frame, Kind, Reason, Settings, StreamIdentifier, GoAway},
+        http2::frame::{Flag, Frame, GoAway, Kind, Reason, Settings, StreamIdentifier},
         request,
     },
     Binary, BinaryMut, Request, Response,
@@ -47,9 +47,11 @@ pub struct Control {
     /// 所有收到的帧, 如果收到Header结束就开始返回request, 后续收到Data再继续返回直至结束,
     /// id为0的帧为控制帧, 需要立即做处理
     recv_frames: HashMap<StreamIdentifier, InnerStream>,
+
+    ready_queue: LinkedList<StreamIdentifier>,
     last_stream_id: StreamIdentifier,
     send_frames: PriorityQueue,
-    reponse_queue: Arc<Mutex<Vec<SendResponse>>>,
+    response_queue: Arc<Mutex<Vec<SendResponse>>>,
 
     handshake: StateHandshake,
     setting: StateSettings,
@@ -68,7 +70,8 @@ impl Control {
         Control {
             recv_frames: HashMap::new(),
             send_frames: PriorityQueue::new(),
-            reponse_queue: Arc::new(Mutex::new(Vec::new())),
+            ready_queue: LinkedList::new(),
+            response_queue: Arc::new(Mutex::new(Vec::new())),
             setting: StateSettings::new(config.settings.clone()),
             handshake: StateHandshake::new_server(),
             goaway: StateGoAway::new(),
@@ -84,7 +87,7 @@ impl Control {
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-        let mut list = self.reponse_queue.lock().unwrap();
+        let mut list = self.response_queue.lock().unwrap();
         let vals = (*list).drain(..).collect::<Vec<SendResponse>>();
         for mut l in vals {
             let (isend, vec) = l.encode_frames();
@@ -139,10 +142,8 @@ impl Control {
                 Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e))),
                 _ => (),
             }
-            let xxx = Pin::new(&mut *codec).poll_next(cx);
-            println!("xxxx = {:?}", xxx.is_pending());
-            match ready!(xxx) {
-                Some(Ok(frame)) => {
+            match Pin::new(&mut *codec).poll_next(cx) {
+                Poll::Ready(Some(Ok(frame))) => {
                     let mut bytes = BinaryMut::new();
                     match &frame {
                         Frame::Settings(settings) => {
@@ -150,16 +151,10 @@ impl Control {
                                 .recv_setting(codec, settings.clone(), &mut self.config)?;
                         }
                         Frame::Data(d) => {
-                            match ready!(self.recv_frame(frame)?) {
-                                Some(r) => return Poll::Ready(Some(Ok(r))),
-                                _ => continue,
-                            };
+                            let _ = self.recv_frame(frame)?;
                         }
                         Frame::Headers(_) => {
-                            match ready!(self.recv_frame(frame)?) {
-                                Some(r) => return Poll::Ready(Some(Ok(r))),
-                                _ => continue,
-                            };
+                            let _ = self.recv_frame(frame)?;
                             // None => {
                             //     continue;
                             // }
@@ -169,7 +164,7 @@ impl Control {
                             // Some(Ok(r)) => {
                             //     return Poll::Ready(Some(Ok(r)));
                             // }
-                        },
+                        }
                         Frame::Priority(_) => {}
                         Frame::PushPromise(_) => {}
                         Frame::Ping(_) => {}
@@ -178,8 +173,16 @@ impl Control {
                         Frame::Reset(_) => {}
                     }
                 }
-                Some(Err(e)) => return Poll::Ready(Some(Err(e))),
-                None => return Poll::Ready(None),
+                Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Pending => {
+                    match ready!(self.build_frame()?) {
+                        Some(r) => {
+                            return Poll::Ready(Some(Ok(r)));
+                        },
+                        None => return Poll::Pending,
+                    }
+                }
             }
         }
     }
@@ -191,10 +194,34 @@ impl Control {
         None
     }
 
-    pub fn recv_frame(
-        &mut self,
-        frame: Frame<Binary>,
-    ) -> Poll<Option<ProtoResult<(Request<RecvStream>, SendControl)>>> {
+    pub fn build_frame(&mut self) -> Poll<Option<ProtoResult<(Request<RecvStream>, SendControl)>>> {
+        if self.ready_queue.is_empty() {
+            return Poll::Ready(None);
+        }
+        let stream_id = self.ready_queue.pop_front().unwrap();
+        match self
+            .recv_frames
+            .get_mut(&stream_id)
+            .unwrap()
+            .build_request()
+        {
+            Err(e) => return Poll::Ready(Some(Err(e))),
+            Ok(r) => {
+                let method = r.method().clone();
+                Poll::Ready(Some(Ok((
+                    r,
+                    SendControl::new(
+                        stream_id,
+                        self.response_queue.clone(),
+                        method,
+                        self.write_sender.clone(),
+                    ),
+                ))))
+            }
+        }
+    }
+
+    pub fn recv_frame(&mut self, frame: Frame<Binary>) -> Poll<Option<ProtoResult<bool>>> {
         let stream_id = frame.stream_id();
         if stream_id.is_zero() {
             return Poll::Ready(None);
@@ -212,26 +239,8 @@ impl Control {
         self.last_stream_id = self.last_stream_id.max(stream_id);
 
         if is_end_headers {
-            match self
-                .recv_frames
-                .get_mut(&stream_id)
-                .unwrap()
-                .build_request()
-            {
-                Err(e) => return Poll::Ready(Some(Err(e))),
-                Ok(r) => {
-                    let method = r.method().clone();
-                    Poll::Ready(Some(Ok((
-                        r,
-                        SendControl::new(
-                            stream_id,
-                            self.reponse_queue.clone(),
-                            method,
-                            self.write_sender.clone(),
-                        ),
-                    ))))
-                }
-            }
+            self.ready_queue.push_back(stream_id);
+            Poll::Ready(Some(Ok(true)))
         } else {
             Poll::Ready(None)
         }
@@ -246,7 +255,7 @@ impl Control {
         let frame = GoAway::with_debug_data(self.last_stream_id, e, data);
         self.goaway.go_away_now(frame);
     }
-    
+
     pub fn last_goaway_reason(&mut self) -> &Reason {
         self.goaway.reason()
     }

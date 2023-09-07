@@ -22,11 +22,11 @@ impl RecvStream {
         }
     }
 
-    pub fn new(receiver: Receiver<(bool, Binary)>, binary: BinaryMut) -> RecvStream {
+    pub fn new(receiver: Receiver<(bool, Binary)>, binary: BinaryMut, is_end: bool) -> RecvStream {
         RecvStream {
             receiver: Some(receiver),
             binary,
-            is_end: false,
+            is_end,
         }
     }
 
