@@ -127,6 +127,11 @@ impl StateHandshake {
             }
         }
     }
+
+    
+    pub fn set_handshake_ok(&mut self) {
+        self.state = Handshaking::Done
+    }
 }
 
 impl Flush {

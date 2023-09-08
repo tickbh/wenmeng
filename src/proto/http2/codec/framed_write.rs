@@ -76,6 +76,10 @@ where
         ready!(self.flush(cx))?;
         Pin::new(&mut self.inner).poll_shutdown(cx)
     }
+    
+    pub fn set_cache_buf(&mut self, write_buf: BinaryMut) {
+        self.binary.put_slice(write_buf.chunk());
+    }
 }
 
 impl<T: AsyncRead + Unpin> AsyncRead for FramedWrite<T> {

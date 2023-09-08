@@ -107,6 +107,11 @@ where
     pub fn shutdown(&mut self, cx: &mut Context) -> Poll<io::Result<()>> {
         self.framed_write().shutdown(cx)
     }
+
+    pub fn set_cache_buf(&mut self, read_buf: BinaryMut, write_buf: BinaryMut) {
+        self.inner.set_cache_buf(read_buf);
+        self.framed_write().set_cache_buf(write_buf);
+    }
 }
 
 impl<T> Stream for Codec<T>

@@ -1,14 +1,14 @@
 use std::pin::Pin;
 use std::task::{ready, Poll};
 
-use bytes::BytesMut;
+use bytes::{BytesMut, BufMut};
 use futures_core::Stream;
 use tokio::io::AsyncRead;
 use tokio_util::codec::{FramedRead as InnerFramedRead, length_delimited};
 use tokio_util::codec::{LengthDelimitedCodec, LengthDelimitedCodecError};
 use webparse::http::http2::frame::{Frame, Kind};
 use webparse::http::http2::{frame, Decoder, HeaderIndex};
-use webparse::{Binary, BinaryMut, WebResult};
+use webparse::{Binary, BinaryMut, WebResult, Buf};
 
 use crate::proto::{ProtoError, ProtoResult};
 
@@ -62,6 +62,9 @@ where
         }
     }
     
+    pub fn set_cache_buf(&mut self, read_buf: BinaryMut) {
+        self.inner.read_buffer_mut().put_slice(read_buf.chunk());
+    }
 
 }
 

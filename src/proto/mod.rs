@@ -1,6 +1,6 @@
 mod server;
-mod http1;
-mod http2;
+pub mod http1;
+pub mod http2;
 mod error;
 
 mod recv_stream;

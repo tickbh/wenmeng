@@ -1,6 +1,6 @@
 use std::{fmt::{Display}, io};
 
-use webparse::{WebError, Binary, http::http2::frame::Reason};
+use webparse::{WebError, Binary, http::http2::frame::Reason, BinaryMut};
 
 pub type ProtoResult<T> = Result<T, ProtoError>;
 
@@ -11,6 +11,7 @@ pub enum ProtoError {
     SenderError(),
     GoAway(Binary, Reason, Initiator),
     Extension(&'static str),
+    UpgradeHttp2,
 }
 
 

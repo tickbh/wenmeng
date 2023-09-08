@@ -3,28 +3,35 @@ use std::{
     task::{ready, Context, Poll},
 };
 
+use futures_util::future::poll_fn;
 use http::request;
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::{io::{AsyncRead, AsyncWrite, ReadBuf}, sync::mpsc::Sender};
 use tokio_util::io::poll_read_buf;
-use webparse::{BinaryMut, BufMut, Request, Buf};
+use webparse::{BinaryMut, BufMut, Request, Buf, WebError, http::http2, Binary, Serialize, Response};
 
-use crate::{ProtoResult, RecvStream};
+use crate::{ProtoResult, RecvStream, ProtoError};
 
 pub struct IoBuffer<T> {
     io: T,
     read_buf: BinaryMut,
     write_buf: BinaryMut,
+    write_sender: Sender<()>,
+    read_sender: Option<Sender<(bool, Binary)>>,
+    is_builder: bool,
 }
 
 impl<T> IoBuffer<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(io: T) -> Self {
+    pub fn new(io: T, write_sender: Sender<()>) -> Self {
         Self {
             io: io,
             read_buf: BinaryMut::new(),
             write_buf: BinaryMut::new(),
+            write_sender,
+            read_sender: None,
+            is_builder: false,
         }
     }
 
@@ -55,10 +62,12 @@ where
 
     pub fn poll_read_all(&mut self, cx: &mut Context<'_>) -> Poll<ProtoResult<usize>> {
         let mut size = 0;
-        match self.poll_read(cx)? {
-            Poll::Ready(0) => return Poll::Ready(Ok(0)),
-            Poll::Ready(n) => size += n,
-            Poll::Pending => (),
+        loop {
+            match self.poll_read(cx)? {
+                Poll::Ready(0) => return Poll::Ready(Ok(0)),
+                Poll::Ready(n) => size += n,
+                Poll::Pending => break,
+            }
         }
         Poll::Ready(Ok(size))
     }
@@ -72,16 +81,67 @@ where
             0 => return Poll::Ready(None),
             // 收到新的消息头, 解析包体消息
             _ => {
+                if self.is_builder {
+                    if let Some(sender) = &self.read_sender {
+                        let binary = Binary::from(self.read_buf.chunk().to_vec());
+                        if let Ok(_) = sender.try_send((false, binary)) {
+                            self.read_buf.advance_all();
+                        }
+                    }
+                    return Poll::Pending;
+                }
                 let mut request = Request::new();
-                let size = request.parse_buffer(&mut self.read_buf.clone())?;
+                println!("data = {:?}", self.read_buf.chunk());
+                let size = match request.parse_buffer(&mut self.read_buf.clone()) {
+                    Err(e) => {
+                        if e.is_partial() {
+                            return Poll::Pending;
+                        } else {
+                            if self.read_buf.remaining() >= http2::MAIGC_LEN && &self.read_buf[..http2::MAIGC_LEN] == http2::HTTP2_MAGIC {
+                                self.read_buf.advance(http2::MAIGC_LEN);
+                                let err = ProtoError::UpgradeHttp2;
+                                return Poll::Ready(Some(Err(err)))
+                            }
+                            return Poll::Ready(Some(Err(e.into())));
+                        }
+                    }
+                    Ok(n) => n,
+                };
+                // let size = request.parse_buffer(&mut self.read_buf.clone())?;
                 if request.is_partial() {
                     return Poll::Pending;
                 }
                 
+                self.is_builder = true;
                 self.read_buf.advance(size);
-                let new_request = request.into(RecvStream::empty()).0;
+                let body_len = request.get_body_len();
+                let new_request = if request.method().is_nobody() {
+                    request.into(RecvStream::empty()).0
+                } else {
+                    let (sender, receiver) = tokio::sync::mpsc::channel::<(bool, Binary)>(30);
+                    self.read_sender = Some(sender);
+                    let mut binary = BinaryMut::new();
+                    binary.put_slice(self.read_buf.chunk());
+                    self.read_buf.advance(self.read_buf.remaining());
+                    let is_end = body_len <= binary.remaining();
+                    request.into(RecvStream::new(receiver, binary, is_end)).0
+                };
                 return Poll::Ready(Some(Ok(new_request)));
             }
         }
+    }
+
+    pub fn into(self) -> (T, BinaryMut, BinaryMut) {
+        (self.io, self.read_buf, self.write_buf)
+    }
+    
+    pub async fn send_response<R: Serialize>(&mut self, res: Response<R>) -> ProtoResult<()> {
+        // self.io.
+        let mut buffer = BinaryMut::new();
+        res.serialize(&mut buffer);
+        self.write_buf.put_slice(buffer.chunk());
+        let _ = poll_fn(|cx| self.poll_write(cx));
+        
+        Ok(())
     }
 }

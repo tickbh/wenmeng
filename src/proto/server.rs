@@ -1,7 +1,8 @@
+use futures_core::Future;
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::Request;
+use webparse::{Binary, Request, Response, Serialize};
 
-use crate::{H2Connection, ProtoResult, RecvStream};
+use crate::{H2Connection, ProtoError, ProtoResult, RecvStream, SendStream};
 
 use super::http1::H1Connection;
 
@@ -24,9 +25,53 @@ where
         }
     }
 
-    
-    pub async fn incoming(&mut self) -> Option<ProtoResult<Request<RecvStream>>> {
+    pub async fn send_response<R: Serialize>(&mut self, res: Response<R>) -> ProtoResult<()> {
+        let result = if let Some(h1) = &mut self.http1 {
+            h1.send_response(res).await?;
+        } else if let Some(h2) = &mut self.http2 {
+        };
+
+        Ok(())
+    }
+
+    pub async fn incoming<F, Fut>(&mut self, mut f: F) -> ProtoResult<()>
+    where
+        F: FnMut(Request<RecvStream>) -> Fut,
+        Fut: Future<Output = ProtoResult<Option<Response<Binary>>>>,
+    {
         use futures_util::stream::StreamExt;
+        loop {
+            let result = if let Some(h1) = &mut self.http1 {
+                h1.incoming().await
+            } else if let Some(h2) = &mut self.http2 {
+                h2.incoming().await
+            } else {
+                None
+            };
+            match result {
+                None => return Ok(()),
+                Some(Err(ProtoError::UpgradeHttp2)) => {
+                    if self.http1.is_some() {
+                        self.http2 = Some(self.http1.take().unwrap().into_h2());
+                        continue;
+                    }
+                    return Err(ProtoError::UpgradeHttp2);
+                }
+                Some(Err(e)) => return Err(e),
+                Some(Ok(r)) => {
+                    match f(r).await? {
+                        Some(res) => {
+                            println!("recv res = {:?}", res);
+                            self.send_response(res).await?;
+                        }
+                        None => (),
+                    }
+                    // async {
+                    //     f(r).await
+                    // }.await;
+                }
+            };
+        }
         // loop {
         //     tokio::select! {
         //         _ = receiver.recv() => {
@@ -38,6 +83,5 @@ where
         //         }
         //     }
         // }
-        None
     }
 }

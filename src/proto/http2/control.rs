@@ -129,7 +129,7 @@ impl Control {
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
-    ) -> Poll<Option<ProtoResult<(Request<RecvStream>, SendControl)>>>
+    ) -> Poll<Option<ProtoResult<Request<RecvStream>>>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -175,14 +175,12 @@ impl Control {
                 }
                 Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),
                 Poll::Ready(None) => return Poll::Ready(None),
-                Poll::Pending => {
-                    match ready!(self.build_frame()?) {
-                        Some(r) => {
-                            return Poll::Ready(Some(Ok(r)));
-                        },
-                        None => return Poll::Pending,
+                Poll::Pending => match ready!(self.build_frame()?) {
+                    Some(r) => {
+                        return Poll::Ready(Some(Ok(r)));
                     }
-                }
+                    None => return Poll::Pending,
+                },
             }
         }
     }
@@ -194,7 +192,7 @@ impl Control {
         None
     }
 
-    pub fn build_frame(&mut self) -> Poll<Option<ProtoResult<(Request<RecvStream>, SendControl)>>> {
+    pub fn build_frame(&mut self) -> Poll<Option<ProtoResult<Request<RecvStream>>>> {
         if self.ready_queue.is_empty() {
             return Poll::Ready(None);
         }
@@ -206,17 +204,15 @@ impl Control {
             .build_request()
         {
             Err(e) => return Poll::Ready(Some(Err(e))),
-            Ok(r) => {
+            Ok(mut r) => {
                 let method = r.method().clone();
-                Poll::Ready(Some(Ok((
-                    r,
-                    SendControl::new(
-                        stream_id,
-                        self.response_queue.clone(),
-                        method,
-                        self.write_sender.clone(),
-                    ),
-                ))))
+                r.extensions_mut().insert(SendControl::new(
+                    stream_id,
+                    self.response_queue.clone(),
+                    method,
+                    self.write_sender.clone(),
+                ));
+                Poll::Ready(Some(Ok(r)))
             }
         }
     }
@@ -258,5 +254,9 @@ impl Control {
 
     pub fn last_goaway_reason(&mut self) -> &Reason {
         self.goaway.reason()
+    }
+
+    pub fn set_handshake_ok(&mut self) {
+        self.handshake.set_handshake_ok()
     }
 }

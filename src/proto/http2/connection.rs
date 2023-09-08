@@ -12,7 +12,7 @@ use tokio::{
 };
 use webparse::{
     http::http2::frame::{Frame, Reason, Settings},
-    Binary, Request,
+    Binary, Request, BinaryMut,
 };
 
 use crate::{
@@ -91,7 +91,7 @@ where
     pub fn poll_request(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtoResult<(Request<RecvStream>, SendControl)>>> {
+    ) -> Poll<Option<ProtoResult<Request<RecvStream>>>> {
         self.inner.control.poll_request(cx, &mut self.codec)
         // loop {
         //     ready!(Pin::new(&mut self.codec).poll_next(cx)?);
@@ -106,7 +106,7 @@ where
         // }
     }
 
-    pub async fn incoming(&mut self) -> Option<ProtoResult<(Request<RecvStream>, SendControl)>> {
+    pub async fn incoming(&mut self) -> Option<ProtoResult<Request<RecvStream>>> {
         use futures_util::stream::StreamExt;
         let mut receiver = self.inner.receiver.take().unwrap();
         loop {
@@ -122,7 +122,7 @@ where
         }
     }
 
-    fn handle_poll_result(&mut self, result: Option<ProtoResult<(Request<RecvStream>, SendControl)>>) -> ProtoResult<()> {
+    fn handle_poll_result(&mut self, result: Option<ProtoResult<Request<RecvStream>>>) -> ProtoResult<()> {
         match result {
             // 收到空包, 则关闭连接
             None => {
@@ -192,13 +192,21 @@ where
             (_, theirs) => Err(ProtoError::GoAway(debug_data, theirs, Initiator::Remote)),
         }
     }
+
+    pub fn set_cache_buf(&mut self, read_buf: BinaryMut, write_buf: BinaryMut) {
+        self.codec.set_cache_buf(read_buf, write_buf)
+    }
+
+    pub fn set_handshake_ok(&mut self) {
+        self.inner.control.set_handshake_ok()
+    }
 }
 
 impl<T> Stream for H2Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = ProtoResult<(Request<RecvStream>, SendControl)>;
+    type Item = ProtoResult<Request<RecvStream>>;
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,

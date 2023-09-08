@@ -1,10 +1,10 @@
-use std::{task::{Context, Poll}, future::poll_fn};
+use std::{task::{Context, Poll}, future::poll_fn, pin::Pin};
 
 use futures_core::Stream;
 use tokio::{io::{AsyncRead, AsyncWrite}, sync::mpsc::Receiver};
-use webparse::Request;
+use webparse::{Request, Serialize, Response};
 
-use crate::{ProtoResult, RecvStream};
+use crate::{ProtoResult, RecvStream, H2Connection};
 
 use super::IoBuffer;
 
@@ -23,9 +23,10 @@ where
     T: AsyncRead + AsyncWrite + Unpin,
 {
     pub fn new(io: T) -> Self {
+        let (sender, receiver) = tokio::sync::mpsc::channel::<()>(1);
         H1Connection {
-            io: IoBuffer::new(io),
-            receiver: None,
+            io: IoBuffer::new(io, sender),
+            receiver: Some(receiver),
         }
     }
 
@@ -46,6 +47,13 @@ where
         self.io.poll_request(cx)
     }
 
+    pub fn into_h2(self) -> H2Connection<T> {
+        let (io, read_buf, write_buf) = self.io.into();
+        let mut connect = crate::http2::Builder::new().connection(io);
+        connect.set_cache_buf(read_buf, write_buf);
+        connect.set_handshake_ok();
+        connect
+    }
     
     pub async fn incoming(&mut self) -> Option<ProtoResult<Request<RecvStream>>> {
         use futures_util::stream::StreamExt;
@@ -62,6 +70,10 @@ where
             }
         }
     }
+
+    pub async fn send_response<R: Serialize>(&mut self, res: Response<R>) -> ProtoResult<()> {
+        self.io.send_response(res).await
+    }
 }
 
 
@@ -74,7 +86,7 @@ where
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        Poll::Pending
+        Pin::new(&mut self.io).poll_request(cx)
         // loop {
         //     match self.inner.state {
         //         State::Open => {
