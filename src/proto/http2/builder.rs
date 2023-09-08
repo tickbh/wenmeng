@@ -3,7 +3,7 @@ use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{Buf, http::http2::frame::Settings};
 
-use crate::Connection;
+use crate::H2Connection;
 
 
 
@@ -94,10 +94,10 @@ impl Builder {
         self
     }
 
-    pub fn connection<T>(self, io: T) -> Connection<T>
+    pub fn connection<T>(self, io: T) -> H2Connection<T>
     where
         T: AsyncRead + AsyncWrite + Unpin, {
-            Connection::new(io, self)
+            H2Connection::new(io, self)
     }
 
 }

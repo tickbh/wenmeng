@@ -21,11 +21,11 @@ use webparse::{
     Binary, BinaryMut, Request, Response,
 };
 
-use crate::ProtoResult;
+use crate::{ProtoResult, RecvStream};
 
 use super::{
     codec::Codec, inner_stream::InnerStream, send_response::SendControl, state::StateHandshake,
-    PriorityQueue, RecvStream, SendResponse, StateGoAway, StatePingPong, StateSettings, WindowSize,
+    PriorityQueue, SendResponse, StateGoAway, StatePingPong, StateSettings, WindowSize,
 };
 
 #[derive(Debug, Clone)]

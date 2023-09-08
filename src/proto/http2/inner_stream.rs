@@ -10,7 +10,7 @@ use webparse::{
 
 use crate::{ProtoError, ProtoResult};
 
-use super::RecvStream;
+use crate::RecvStream;
 
 /// 组成帧的基本数据
 pub struct InnerStream {

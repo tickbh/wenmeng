@@ -1,4 +1,4 @@
-use crate::{proto::http2::codec::Codec, Builder, Connection, ProtoError, ProtoResult};
+use crate::{proto::http2::codec::Codec, Builder, H2Connection, ProtoError, ProtoResult};
 
 use std::{
     future::Future,

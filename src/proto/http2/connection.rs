@@ -17,17 +17,17 @@ use webparse::{
 
 use crate::{
     proto::{ProtoError, ProtoResult},
-    Builder, Initiator,
+    Builder, Initiator, RecvStream,
 };
 
 use super::{
     codec::{Codec, FramedRead, FramedWrite},
     control::ControlConfig,
     send_response::SendControl,
-    Control, RecvStream, SendResponse,
+    Control, SendResponse,
 };
 
-pub struct Connection<T> {
+pub struct H2Connection<T> {
     codec: Codec<T>,
     inner: InnerConnection,
 }
@@ -36,8 +36,6 @@ struct InnerConnection {
     state: State,
 
     control: Control,
-
-
 
     receiver: Option<Receiver<()>>,
 }
@@ -54,17 +52,17 @@ enum State {
     Closed(Reason, Initiator),
 }
 
-unsafe impl<T> Sync for Connection<T> {}
+unsafe impl<T> Sync for H2Connection<T> {}
 
-unsafe impl<T> Send for Connection<T> {}
+unsafe impl<T> Send for H2Connection<T> {}
 
-impl<T> Connection<T>
+impl<T> H2Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(io: T, builder: Builder) -> Connection<T> {
+    pub fn new(io: T, builder: Builder) -> H2Connection<T> {
         let (sender, receiver) = tokio::sync::mpsc::channel::<()>(1);
-        Connection {
+        H2Connection {
             codec: Codec::new(io),
             inner: InnerConnection {
                 state: State::Open,
@@ -196,7 +194,7 @@ where
     }
 }
 
-impl<T> Stream for Connection<T>
+impl<T> Stream for H2Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {

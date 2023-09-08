@@ -1,15 +1,20 @@
-use std::sync::{Arc, Mutex};
 use rbtree::RBTree;
-use tokio::sync::mpsc::{Sender, channel, Receiver};
+use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 use webparse::BinaryMut;
 use webparse::{
-    http::http2::{frame::{Frame, Priority, PriorityFrame, StreamIdentifier, FrameHeader, Kind, Flag, Headers, Data}, Decoder},
-    Binary, Serialize, Response, Method,
+    http::http2::{
+        frame::{
+            Data, Flag, Frame, FrameHeader, Headers, Kind, Priority, PriorityFrame,
+            StreamIdentifier,
+        },
+        Decoder,
+    },
+    Binary, Method, Response, Serialize,
 };
 
 use crate::ProtoResult;
-
-use super::SendStream;
+use crate::SendStream;
 
 #[derive(Debug)]
 pub struct SendResponse {
@@ -25,7 +30,13 @@ pub struct SendResponse {
 }
 
 impl SendResponse {
-    pub fn new(stream_id: StreamIdentifier, response: Response<Binary>, method: Method, is_end_stream: bool, write_sender: Sender<()>) -> Self {
+    pub fn new(
+        stream_id: StreamIdentifier,
+        response: Response<Binary>,
+        method: Method,
+        is_end_stream: bool,
+        write_sender: Sender<()>,
+    ) -> Self {
         SendResponse {
             stream_id,
             response,
@@ -49,7 +60,11 @@ impl SendResponse {
             self.encode_header = true;
         }
         if !self.method.res_nobody() && !self.encode_body {
-            let flag = if self.is_end_stream { Flag::end_stream() } else { Flag::zero() };
+            let flag = if self.is_end_stream {
+                Flag::end_stream()
+            } else {
+                Flag::zero()
+            };
             let header = FrameHeader::new(Kind::Data, flag, self.stream_id);
             let data = Data::new(header, self.response.body().clone());
             result.push(Frame::Data(data));
@@ -57,7 +72,11 @@ impl SendResponse {
         }
         if let Some(recv) = &mut self.receiver {
             while let Ok(val) = recv.try_recv() {
-                let flag = if val.0 { Flag::end_stream() } else { Flag::zero() };
+                let flag = if val.0 {
+                    Flag::end_stream()
+                } else {
+                    Flag::zero()
+                };
                 self.is_end_stream = val.0;
                 let header = FrameHeader::new(Kind::Data, flag, self.stream_id);
                 let data = Data::new(header, val.1);
@@ -74,7 +93,6 @@ impl SendResponse {
             let (sender, receiver) = channel::<(bool, Binary)>(100);
             self.receiver = Some(receiver);
             SendStream::new(sender, self.write_sender.clone())
-
         }
     }
 }
@@ -88,7 +106,12 @@ pub struct SendControl {
 }
 
 impl SendControl {
-    pub fn new(stream_id: StreamIdentifier, queue: Arc<Mutex<Vec<SendResponse>>>, method: Method, write_sender: Sender<()>) -> Self {
+    pub fn new(
+        stream_id: StreamIdentifier,
+        queue: Arc<Mutex<Vec<SendResponse>>>,
+        method: Method,
+        write_sender: Sender<()>,
+    ) -> Self {
         SendControl {
             stream_id,
             queue,
@@ -97,19 +120,25 @@ impl SendControl {
         }
     }
 
-    pub fn send_response(&mut self, res: Response<Binary>, is_end_stream: bool) -> ProtoResult<SendStream> {
+    pub fn send_response(
+        &mut self,
+        res: Response<Binary>,
+        is_end_stream: bool,
+    ) -> ProtoResult<SendStream> {
         let mut data = self.queue.lock().unwrap();
-        let mut response = SendResponse::new(self.stream_id, res, self.method.clone(), is_end_stream, self.write_sender.clone());
+        let mut response = SendResponse::new(
+            self.stream_id,
+            res,
+            self.method.clone(),
+            is_end_stream,
+            self.write_sender.clone(),
+        );
         let steam = response.create_sendstream();
         data.push(response);
         Ok(steam)
     }
 }
 
-unsafe impl Sync for SendControl {
+unsafe impl Sync for SendControl {}
 
-}
-
-unsafe impl Send for SendControl {
-
-}
+unsafe impl Send for SendControl {}

@@ -1,5 +1,4 @@
 
-mod server;
 mod state;
 mod codec;
 mod connection;
@@ -7,17 +6,13 @@ mod control;
 mod send_response;
 mod inner_stream;
 mod builder;
-mod recv_stream;
-mod send_stream;
 mod priority_queue;
 
 pub use priority_queue::PriorityQueue;
-pub use recv_stream::RecvStream;
-pub use send_stream::SendStream;
 pub use inner_stream::InnerStream;
 pub use send_response::{SendResponse, SendControl};
 pub use control::Control;
-pub use connection::Connection;
+pub use connection::H2Connection;
 // pub use server::Builder;
 pub use state::*;
 pub use builder::Builder;
@@ -31,8 +26,6 @@ pub const DEFAULT_REMOTE_RESET_STREAM_MAX: usize = 20;
 pub const DEFAULT_RESET_STREAM_MAX: usize = 10;
 pub const DEFAULT_RESET_STREAM_SECS: u64 = 30;
 pub const DEFAULT_MAX_SEND_BUFFER_SIZE: usize = 1024 * 400;
-
-
 
 /// The default value of SETTINGS_HEADER_TABLE_SIZE
 pub const DEFAULT_SETTINGS_HEADER_TABLE_SIZE: usize = 4_096;

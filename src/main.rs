@@ -23,7 +23,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
-use dmeng::{self, Http, Connection, StateHandshake, SendControl};
+use dmeng::{self, H2Connection, StateHandshake, SendControl};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
