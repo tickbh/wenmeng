@@ -2,7 +2,7 @@ use futures_core::Future;
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{Binary, Request, Response, Serialize};
 
-use crate::{H2Connection, ProtoError, ProtoResult, RecvStream, SendStream};
+use crate::{H2Connection, ProtoError, ProtoResult, RecvStream, SendStream, SendControl};
 
 use super::http1::H1Connection;
 
@@ -58,11 +58,16 @@ where
                     return Err(ProtoError::UpgradeHttp2);
                 }
                 Some(Err(e)) => return Err(e),
-                Some(Ok(r)) => {
+                Some(Ok(mut r)) => {
+                    // let send_control = r.extensions_mut().remove::<SendControl>();
                     match f(r).await? {
                         Some(res) => {
                             println!("recv res = {:?}", res);
-                            self.send_response(res).await?;
+                            // if let Some(mut send_control) = send_control {
+                            //     send_control.send_response(res, true)?;
+                            // } else {
+                                self.send_response(res).await?;
+                            // }
                         }
                         None => (),
                     }
