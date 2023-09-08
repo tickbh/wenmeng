@@ -34,7 +34,7 @@ where
         Ok(())
     }
 
-    pub async fn incoming<F, Fut>(&mut self, mut f: F) -> ProtoResult<()>
+    pub async fn incoming<F, Fut>(&mut self, mut f: F) -> ProtoResult<Option<()>>
     where
         F: FnMut(Request<RecvStream>) -> Fut,
         Fut: Future<Output = ProtoResult<Option<Response<Binary>>>>,
@@ -49,7 +49,7 @@ where
                 None
             };
             match result {
-                None => return Ok(()),
+                None => return Ok(None),
                 Some(Err(ProtoError::UpgradeHttp2)) => {
                     if self.http1.is_some() {
                         self.http2 = Some(self.http1.take().unwrap().into_h2());

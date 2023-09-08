@@ -36,12 +36,29 @@ where
     }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtoResult<()>> {
+        println!("!!!!!!!!!!!!!!!!!!!!!!!");
+
+
+
+
+
+
+
+
+        
+        if self.write_buf.is_empty() {
+            return Poll::Ready(Ok(()))
+        }
+        match ready!(Pin::new(&mut self.io).poll_write(cx, &self.write_buf.chunk()))? {
+            n => {
+                self.write_buf.advance(n);
+                if self.write_buf.is_empty() {
+                    return Poll::Ready(Ok(()))
+                }
+            }
+        };
         println!("poll write!!!!!!!");
         Poll::Pending
-        // self.inner.control.poll_write(cx, &mut self.codec)
-        // loop {
-        //     ready!(Pin::new(&mut self.codec).poll_next(cx)?);
-        // }
     }
 
     pub fn poll_read(&mut self, cx: &mut Context<'_>) -> Poll<ProtoResult<usize>> {
@@ -76,6 +93,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Option<ProtoResult<Request<RecvStream>>>> {
+        let _ = self.poll_write(cx);
         match ready!(self.poll_read_all(cx)?) {
             // socket被断开, 提前结束
             0 => return Poll::Ready(None),

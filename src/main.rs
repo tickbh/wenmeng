@@ -132,7 +132,7 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     // let mut connect = StateHandshake::handshake(stream).await.unwrap();
     // let mut connect = dmeng::Builder::new().connection(stream);
     let mut server = Server::new(stream);
-    while let Ok(_) = server.incoming(operate).await {
+    while let Ok(Some(_)) = server.incoming(operate).await {
 
     }
     // while let Some(request) = server.incoming(operate).await {
