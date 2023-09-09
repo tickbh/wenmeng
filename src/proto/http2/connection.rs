@@ -11,8 +11,8 @@ use tokio::{
     sync::mpsc::{Receiver, Sender},
 };
 use webparse::{
-    http::http2::frame::{Frame, Reason, Settings},
-    Binary, Request, BinaryMut,
+    http::http2::frame::{Frame, Reason, Settings, StreamIdentifier},
+    Binary, Request, BinaryMut, Serialize, Response,
 };
 
 use crate::{
@@ -199,6 +199,10 @@ where
 
     pub fn set_handshake_ok(&mut self) {
         self.inner.control.set_handshake_ok()
+    }
+
+    pub async fn send_response<R: Serialize>(&mut self, res: Response<R>, stream_id: StreamIdentifier) -> ProtoResult<()> {
+        self.inner.control.send_response(res, stream_id).await
     }
 }
 

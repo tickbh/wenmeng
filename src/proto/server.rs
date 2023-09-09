@@ -1,6 +1,6 @@
-use futures_core::Future;
+use futures_core::{Future, stream};
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::{Binary, Request, Response, Serialize};
+use webparse::{Binary, Request, Response, Serialize, http::http2::frame::StreamIdentifier};
 
 use crate::{H2Connection, ProtoError, ProtoResult, RecvStream, SendStream, SendControl};
 
@@ -25,10 +25,13 @@ where
         }
     }
 
-    pub async fn send_response<R: Serialize>(&mut self, res: Response<R>) -> ProtoResult<()> {
+    pub async fn send_response<R: Serialize>(&mut self, res: Response<R>, stream_id: Option<StreamIdentifier>) -> ProtoResult<()> {
         let result = if let Some(h1) = &mut self.http1 {
             h1.send_response(res).await?;
         } else if let Some(h2) = &mut self.http2 {
+            if let Some(stream_id) = stream_id {
+                h2.send_response(res, stream_id).await?;
+            }
         };
 
         Ok(())
@@ -59,15 +62,12 @@ where
                 }
                 Some(Err(e)) => return Err(e),
                 Some(Ok(mut r)) => {
-                    // let send_control = r.extensions_mut().remove::<SendControl>();
+                    let stream_id = r.extensions_mut().remove::<StreamIdentifier>();
+                    // let mut send_control = r.extensions_mut().get::<SendControl>().map(|c| c.clone());
                     match f(r).await? {
                         Some(res) => {
                             println!("recv res = {:?}", res);
-                            // if let Some(mut send_control) = send_control {
-                            //     send_control.send_response(res, true)?;
-                            // } else {
-                                self.send_response(res).await?;
-                            // }
+                            self.send_response(res, stream_id).await?;
                         }
                         None => (),
                     }

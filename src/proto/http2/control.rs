@@ -14,6 +14,7 @@ use tokio::{
     sync::mpsc::Sender,
 };
 use webparse::{
+    Serialize,
     http::{
         http2::frame::{Flag, Frame, GoAway, Kind, Reason, Settings, StreamIdentifier},
         request,
@@ -43,7 +44,7 @@ impl ControlConfig {
     pub fn apply_remote_settings(&mut self, settings: &Settings) {}
 }
 
-pub struct Control {
+pub struct Control<R: Serialize> {
     /// 所有收到的帧, 如果收到Header结束就开始返回request, 后续收到Data再继续返回直至结束,
     /// id为0的帧为控制帧, 需要立即做处理
     recv_frames: HashMap<StreamIdentifier, InnerStream>,
@@ -51,7 +52,7 @@ pub struct Control {
     ready_queue: LinkedList<StreamIdentifier>,
     last_stream_id: StreamIdentifier,
     send_frames: PriorityQueue,
-    response_queue: Arc<Mutex<Vec<SendResponse>>>,
+    response_queue: Arc<Mutex<Vec<SendResponse<R>>>>,
 
     handshake: StateHandshake,
     setting: StateSettings,
@@ -206,6 +207,7 @@ impl Control {
             Err(e) => return Poll::Ready(Some(Err(e))),
             Ok(mut r) => {
                 let method = r.method().clone();
+                r.extensions_mut().insert(stream_id);
                 r.extensions_mut().insert(SendControl::new(
                     stream_id,
                     self.response_queue.clone(),
@@ -258,5 +260,18 @@ impl Control {
 
     pub fn set_handshake_ok(&mut self) {
         self.handshake.set_handshake_ok()
+    }
+
+    pub async fn send_response<R: Serialize>(&mut self, res: Response<R>, stream_id: StreamIdentifier) -> ProtoResult<()> {
+        let mut data = self.response_queue.lock().unwrap();
+        let mut response = SendResponse::new(
+            stream_id,
+            res,
+            webparse::Method::Get,
+            true,
+            self.write_sender.clone(),
+        );
+        data.push(response);
+        Ok(())
     }
 }

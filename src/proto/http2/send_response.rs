@@ -17,9 +17,9 @@ use crate::ProtoResult;
 use crate::SendStream;
 
 #[derive(Debug)]
-pub struct SendResponse {
+pub struct SendResponse<R: Serialize> {
     pub stream_id: StreamIdentifier,
-    pub response: Response<Binary>,
+    pub response: Response<R>,
     pub encode_header: bool,
     pub encode_body: bool,
     pub is_end_stream: bool,
@@ -29,10 +29,10 @@ pub struct SendResponse {
     pub write_sender: Sender<()>,
 }
 
-impl SendResponse {
+impl<R: Serialize> SendResponse<R> {
     pub fn new(
         stream_id: StreamIdentifier,
-        response: Response<Binary>,
+        response: Response<R>,
         method: Method,
         is_end_stream: bool,
         write_sender: Sender<()>,
@@ -98,17 +98,17 @@ impl SendResponse {
 }
 
 #[derive(Debug, Clone)]
-pub struct SendControl {
+pub struct SendControl<R: Serialize> {
     pub stream_id: StreamIdentifier,
-    pub queue: Arc<Mutex<Vec<SendResponse>>>,
+    pub queue: Arc<Mutex<Vec<SendResponse<R>>>>,
     pub method: Method,
     pub write_sender: Sender<()>,
 }
 
-impl SendControl {
+impl<R:Serialize> SendControl<R> {
     pub fn new(
         stream_id: StreamIdentifier,
-        queue: Arc<Mutex<Vec<SendResponse>>>,
+        queue: Arc<Mutex<Vec<SendResponse<R>>>>,
         method: Method,
         write_sender: Sender<()>,
     ) -> Self {
@@ -139,6 +139,6 @@ impl SendControl {
     }
 }
 
-unsafe impl Sync for SendControl {}
+unsafe impl<R:Serialize> Sync for SendControl<R> {}
 
-unsafe impl Send for SendControl {}
+unsafe impl<R:Serialize> Send for SendControl<R> {}
