@@ -2,7 +2,7 @@ use std::io::Read;
 
 use bytes::buf;
 use futures_core::Stream;
-use tokio::sync::mpsc::Receiver;
+use tokio::{sync::mpsc::Receiver, join};
 use webparse::{Binary, BinaryMut, Buf, Serialize};
 
 use crate::ProtoResult;
@@ -90,10 +90,14 @@ impl Read for RecvStream {
 
 impl Serialize for RecvStream {
     fn serialize<B: webparse::Buf + webparse::BufMut + webparse::MarkBuf>(
-        &self,
+        &mut self,
         buffer: &mut B,
     ) -> webparse::WebResult<usize> {
         buffer.put_slice(self.binary.chunk());
+        // self.receiver.unwrap().blocking_recv()
+        // let h = tokio::spawn(async { println!("aaa"); });
+        // join(h);
+        // join!(h);
         // self.receiver.as_ref().unwrap().recv();
         Ok(0)
     }

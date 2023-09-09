@@ -71,7 +71,7 @@ impl Read for SendStream {
 }
 
 impl Serialize for SendStream {
-    fn serialize<B: webparse::Buf+webparse::BufMut+webparse::MarkBuf>(&self, buffer: &mut B) -> webparse::WebResult<usize> {
+    fn serialize<B: webparse::Buf+webparse::BufMut+webparse::MarkBuf>(&mut self, buffer: &mut B) -> webparse::WebResult<usize> {
         Ok(0)
     }
 }

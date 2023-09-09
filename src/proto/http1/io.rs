@@ -153,7 +153,7 @@ where
         (self.io, self.read_buf, self.write_buf)
     }
     
-    pub async fn send_response<R: Serialize>(&mut self, res: Response<R>) -> ProtoResult<()> {
+    pub async fn send_response<R: Serialize>(&mut self, mut res: Response<R>) -> ProtoResult<()> {
         // self.io.
         let mut buffer = BinaryMut::new();
         res.serialize(&mut buffer);
