@@ -15,7 +15,7 @@
 
 use bytes::BytesMut;
 use futures::SinkExt;
-use webparse::{Request, Response, http::{StatusCode, http2::frame::Frame}, Binary};
+use webparse::{Request, Response, http::{StatusCode, http2::frame::Frame}, Binary, BinaryMut};
 #[macro_use]
 extern crate serde_derive;
 use std::{env, error::Error, fmt::{self,}, io::{self, Read}, borrow::BorrowMut, time::Duration};
@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Binary>>> {
+async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<RecvStream>>> {
     let mut response = Response::builder().version(req.version().clone());
     let body = match &*req.url().path {
         "/plaintext" => {
@@ -85,7 +85,8 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Bi
             if let Ok(len) = body.read(&mut buf) {
                 println!("skip = {:?}", &buf[..len]);
             }
-            let binary = body.read_all().await.unwrap();
+            let mut binary = BinaryMut::new();
+            body.read_all(&mut binary).await.unwrap();
             println!("binary = {:?}", binary);
 
             response = response.header("content-type", "text/plain");
@@ -107,7 +108,7 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Bi
         }
     };
     let response = response
-        .body( Binary::from(body.into_bytes()))
+        .body( RecvStream::only(Binary::from(body.into_bytes())))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
 
     let control = req.extensions_mut().get_mut::<SendControl>();
@@ -164,59 +165,5 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-async fn respond(mut req: Request<dmeng::RecvStream>) -> Result<(), Box<dyn Error>> {
-
-    let mut response = Response::builder().version(req.version().clone());
-    let body = match &*req.url().path {
-        "/plaintext" => {
-            response = response.header("content-type", "text/plain");
-            "Hello, World!".to_string()
-        }
-        "/post" => {
-            let body = req.body_mut();
-
-            let mut buf = [0u8; 10];
-            if let Ok(len) = body.read(&mut buf) {
-                println!("skip = {:?}", &buf[..len]);
-            }
-            let binary = body.read_all().await.unwrap();
-            println!("binary = {:?}", binary);
-
-            response = response.header("content-type", "text/plain");
-            format!("Hello, World! {:?}", TryInto::<String>::try_into(binary)).to_string()
-        }
-        "/json" => {
-            response = response.header("content-type", "application/json");
-            #[derive(Serialize)]
-            struct Message {
-                message: &'static str,
-            }
-            serde_json::to_string(&Message {
-                message: "Hello, World!",
-            })?
-        }
-        _ => {
-            response = response.status(404);
-            String::new()
-        }
-    };
-    let response = response
-        .body( Binary::from(body.into_bytes()))
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
-
-    let control = req.extensions_mut().get_mut::<SendControl>();
-    if control.is_some() {
-        let mut send = control.unwrap().send_response(response, false).unwrap();
-        tokio::spawn(async move {
-            for i in 1..99 {
-                send.send_data(Binary::from(format!("hello{} ", i).into_bytes()), false);
-                tokio::time::sleep(Duration::new(0, 1000)).await;
-            }
-            send.send_data(Binary::from_static("world\r\n".as_bytes()), true);
-        });
-    }
-    
-    Ok(())
-}
 
 

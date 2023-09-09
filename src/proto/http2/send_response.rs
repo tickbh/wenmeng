@@ -19,7 +19,7 @@ use crate::SendStream;
 #[derive(Debug)]
 pub struct SendResponse {
     pub stream_id: StreamIdentifier,
-    pub response: Response<Binary>,
+    pub response: Response<RecvStream>,
     pub encode_header: bool,
     pub encode_body: bool,
     pub is_end_stream: bool,
@@ -32,7 +32,7 @@ pub struct SendResponse {
 impl SendResponse {
     pub fn new(
         stream_id: StreamIdentifier,
-        response: Response<Binary>,
+        response: Response<RecvStream>,
         method: Method,
         is_end_stream: bool,
         write_sender: Sender<()>,
@@ -66,7 +66,7 @@ impl SendResponse {
                 Flag::zero()
             };
             let header = FrameHeader::new(Kind::Data, flag, self.stream_id);
-            let data = Data::new(header, self.response.body().clone());
+            let data = Data::new(header, self.response.body_mut().binary());
             result.push(Frame::Data(data));
             self.encode_body = true;
         }
@@ -122,7 +122,7 @@ impl SendControl {
 
     pub fn send_response(
         &mut self,
-        res: Response<Binary>,
+        res: Response<RecvStream>,
         is_end_stream: bool,
     ) -> ProtoResult<SendStream> {
         let mut data = self.queue.lock().unwrap();

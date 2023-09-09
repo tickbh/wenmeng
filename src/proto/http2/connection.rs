@@ -201,7 +201,7 @@ where
         self.inner.control.set_handshake_ok()
     }
 
-    pub async fn send_response(&mut self, res: Response<Binary>, stream_id: StreamIdentifier) -> ProtoResult<()> {
+    pub async fn send_response(&mut self, res: Response<RecvStream>, stream_id: StreamIdentifier) -> ProtoResult<()> {
         self.inner.control.send_response(res, stream_id).await
     }
 }

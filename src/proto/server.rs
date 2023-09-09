@@ -30,7 +30,9 @@ where
             h1.send_response(res).await?;
         } else if let Some(h2) = &mut self.http2 {
             if let Some(stream_id) = stream_id {
-                h2.send_response(res.into_binary(), stream_id).await?;
+                let recv = RecvStream::only(Binary::new());
+                let (mut res, mut r) = res.into(recv);
+                h2.send_response(res, stream_id).await?;
             }
         };
 
@@ -40,7 +42,7 @@ where
     pub async fn incoming<F, Fut>(&mut self, mut f: F) -> ProtoResult<Option<()>>
     where
         F: FnMut(Request<RecvStream>) -> Fut,
-        Fut: Future<Output = ProtoResult<Option<Response<Binary>>>>,
+        Fut: Future<Output = ProtoResult<Option<Response<RecvStream>>>>,
     {
         use futures_util::stream::StreamExt;
         loop {

@@ -1,8 +1,11 @@
-use std::io::Read;
+use std::{io::Read, time};
 
 use bytes::buf;
 use futures_core::Stream;
-use tokio::{sync::mpsc::Receiver, join};
+use tokio::{
+    join,
+    sync::mpsc::{error::TryRecvError, Receiver},
+};
 use webparse::{Binary, BinaryMut, Buf, Serialize};
 
 use crate::ProtoResult;
@@ -10,7 +13,8 @@ use crate::ProtoResult;
 #[derive(Debug)]
 pub struct RecvStream {
     receiver: Option<Receiver<(bool, Binary)>>,
-    binary: BinaryMut,
+    binary: Option<Binary>,
+    binary_mut: Option<BinaryMut>,
     is_end: bool,
 }
 
@@ -18,7 +22,17 @@ impl RecvStream {
     pub fn empty() -> RecvStream {
         RecvStream {
             receiver: None,
-            binary: BinaryMut::new(),
+            binary: None,
+            binary_mut: None,
+            is_end: true,
+        }
+    }
+
+    pub fn only(binary: Binary) -> RecvStream {
+        RecvStream {
+            receiver: None,
+            binary: Some(binary),
+            binary_mut: None,
             is_end: true,
         }
     }
@@ -26,9 +40,14 @@ impl RecvStream {
     pub fn new(receiver: Receiver<(bool, Binary)>, binary: BinaryMut, is_end: bool) -> RecvStream {
         RecvStream {
             receiver: Some(receiver),
-            binary,
+            binary: None,
+            binary_mut: Some(binary),
             is_end,
         }
+    }
+
+    pub fn binary(&mut self) -> Binary {
+        self.binary.take().unwrap_or(Binary::new())
     }
 
     pub fn is_end(&self) -> bool {
@@ -41,7 +60,10 @@ impl RecvStream {
         }
         let receiver = self.receiver.as_mut().unwrap();
         while let Ok(v) = receiver.try_recv() {
-            self.binary.put_slice(v.1.chunk());
+            if self.binary_mut.is_none() {
+                self.binary_mut = Some(BinaryMut::new());
+            }
+            self.binary_mut.as_mut().unwrap().put_slice(v.1.chunk());
             self.is_end = v.0;
             if self.is_end == true {
                 break;
@@ -49,22 +71,31 @@ impl RecvStream {
         }
     }
 
-    pub async fn read_all(&mut self) -> Option<BinaryMut> {
+    pub async fn read_all(&mut self, buffer: &mut BinaryMut) -> Option<usize> {
+        let mut size = 0;
+        if let Some(binary) = &mut self.binary {
+            size += buffer.put_slice(binary.chunk());
+            binary.advance_all();
+        }
+        if let Some(binary) = &mut self.binary_mut {
+            size += buffer.put_slice(binary.chunk());
+            binary.advance_all();
+        }
         if self.is_end {
-            return Some(self.binary.clone());
+            return Some(size);
         }
         if self.receiver.is_none() {
-            return None;
+            return Some(size);
         }
         let receiver = self.receiver.as_mut().unwrap();
         while let Some(v) = receiver.recv().await {
-            self.binary.put_slice(v.1.chunk());
+            size += buffer.put_slice(v.1.chunk());
             self.is_end = v.0;
             if self.is_end == true {
                 break;
             }
         }
-        Some(self.binary.clone())
+        Some(size)
     }
 }
 
@@ -82,9 +113,20 @@ impl Stream for RecvStream {
 impl Read for RecvStream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.try_recv();
-        let len = std::cmp::min(buf.len(), self.binary.remaining());
-        self.binary.copy_to_slice(&mut buf[..len]);
-        Ok(len)
+        let mut read_bytes = 0;
+        if let Some(bin) = &mut self.binary {
+            if  bin.remaining() > 0 {
+                let len = std::cmp::min(buf.len() - read_bytes, bin.remaining());
+                read_bytes += bin.copy_to_slice(&mut buf[read_bytes..len]);
+            }
+        }
+        if let Some(bin) = &mut self.binary {
+            if  bin.remaining() > 0 {
+                let len = std::cmp::min(buf.len() - read_bytes, bin.remaining());
+                read_bytes += bin.copy_to_slice(&mut buf[read_bytes..len]);
+            }
+        }
+        Ok(read_bytes)
     }
 }
 
@@ -93,13 +135,31 @@ impl Serialize for RecvStream {
         &mut self,
         buffer: &mut B,
     ) -> webparse::WebResult<usize> {
-        buffer.put_slice(self.binary.chunk());
-        // self.receiver.unwrap().blocking_recv()
-        // let h = tokio::spawn(async { println!("aaa"); });
-        // join(h);
-        // join!(h);
-        // self.receiver.as_ref().unwrap().recv();
-        Ok(0)
+        let mut size = 0;
+        if let Some(bin) = self.binary.take() {
+            size += buffer.put_slice(bin.chunk());
+        }
+        if let Some(bin) = self.binary_mut.take() {
+            size += buffer.put_slice(bin.chunk());
+        }
+        if self.receiver.is_some() && !self.is_end {
+            loop {
+                match self.receiver.as_mut().unwrap().try_recv() {
+                    Ok((is_end, mut bin)) => {
+                        size += bin.serialize(buffer)?;
+                        self.is_end = is_end;
+                    }
+                    Err(TryRecvError::Disconnected) => {
+                        self.is_end = true;
+                        return Ok(size);
+                    }
+                    Err(TryRecvError::Empty) => {
+                        std::thread::sleep(time::Duration::from_millis(10));
+                    }
+                }
+            }
+        }
+        Ok(size)
     }
 }
 

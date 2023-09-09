@@ -262,7 +262,7 @@ impl Control {
         self.handshake.set_handshake_ok()
     }
 
-    pub async fn send_response(&mut self, res: Response<Binary>, stream_id: StreamIdentifier) -> ProtoResult<()> {
+    pub async fn send_response(&mut self, res: Response<RecvStream>, stream_id: StreamIdentifier) -> ProtoResult<()> {
         let mut data = self.response_queue.lock().unwrap();
         let response = SendResponse::new(
             stream_id,
