@@ -1,5 +1,6 @@
 use std::io::Read;
 
+use bytes::buf;
 use futures_core::Stream;
 use tokio::sync::mpsc::Receiver;
 use webparse::{Binary, BinaryMut, Buf, Serialize};
@@ -92,6 +93,8 @@ impl Serialize for RecvStream {
         &self,
         buffer: &mut B,
     ) -> webparse::WebResult<usize> {
+        buffer.put_slice(self.binary.chunk());
+        // self.receiver.as_ref().unwrap().recv();
         Ok(0)
     }
 }

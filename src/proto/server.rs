@@ -30,7 +30,7 @@ where
             h1.send_response(res).await?;
         } else if let Some(h2) = &mut self.http2 {
             if let Some(stream_id) = stream_id {
-                h2.send_response(res, stream_id).await?;
+                h2.send_response(res.into_binary(), stream_id).await?;
             }
         };
 

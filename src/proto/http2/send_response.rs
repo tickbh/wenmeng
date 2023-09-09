@@ -13,13 +13,13 @@ use webparse::{
     Binary, Method, Response, Serialize,
 };
 
-use crate::ProtoResult;
+use crate::{ProtoResult, RecvStream};
 use crate::SendStream;
 
 #[derive(Debug)]
-pub struct SendResponse<R: Serialize> {
+pub struct SendResponse {
     pub stream_id: StreamIdentifier,
-    pub response: Response<R>,
+    pub response: Response<Binary>,
     pub encode_header: bool,
     pub encode_body: bool,
     pub is_end_stream: bool,
@@ -29,10 +29,10 @@ pub struct SendResponse<R: Serialize> {
     pub write_sender: Sender<()>,
 }
 
-impl<R: Serialize> SendResponse<R> {
+impl SendResponse {
     pub fn new(
         stream_id: StreamIdentifier,
-        response: Response<R>,
+        response: Response<Binary>,
         method: Method,
         is_end_stream: bool,
         write_sender: Sender<()>,
@@ -98,17 +98,17 @@ impl<R: Serialize> SendResponse<R> {
 }
 
 #[derive(Debug, Clone)]
-pub struct SendControl<R: Serialize> {
+pub struct SendControl {
     pub stream_id: StreamIdentifier,
-    pub queue: Arc<Mutex<Vec<SendResponse<R>>>>,
+    pub queue: Arc<Mutex<Vec<SendResponse>>>,
     pub method: Method,
     pub write_sender: Sender<()>,
 }
 
-impl<R:Serialize> SendControl<R> {
+impl SendControl {
     pub fn new(
         stream_id: StreamIdentifier,
-        queue: Arc<Mutex<Vec<SendResponse<R>>>>,
+        queue: Arc<Mutex<Vec<SendResponse>>>,
         method: Method,
         write_sender: Sender<()>,
     ) -> Self {
@@ -139,6 +139,6 @@ impl<R:Serialize> SendControl<R> {
     }
 }
 
-unsafe impl<R:Serialize> Sync for SendControl<R> {}
+unsafe impl Sync for SendControl {}
 
-unsafe impl<R:Serialize> Send for SendControl<R> {}
+unsafe impl Send for SendControl {}

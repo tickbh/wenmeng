@@ -44,7 +44,7 @@ impl ControlConfig {
     pub fn apply_remote_settings(&mut self, settings: &Settings) {}
 }
 
-pub struct Control<R: Serialize> {
+pub struct Control {
     /// 所有收到的帧, 如果收到Header结束就开始返回request, 后续收到Data再继续返回直至结束,
     /// id为0的帧为控制帧, 需要立即做处理
     recv_frames: HashMap<StreamIdentifier, InnerStream>,
@@ -52,7 +52,7 @@ pub struct Control<R: Serialize> {
     ready_queue: LinkedList<StreamIdentifier>,
     last_stream_id: StreamIdentifier,
     send_frames: PriorityQueue,
-    response_queue: Arc<Mutex<Vec<SendResponse<R>>>>,
+    response_queue: Arc<Mutex<Vec<SendResponse>>>,
 
     handshake: StateHandshake,
     setting: StateSettings,
@@ -262,9 +262,9 @@ impl Control {
         self.handshake.set_handshake_ok()
     }
 
-    pub async fn send_response<R: Serialize>(&mut self, res: Response<R>, stream_id: StreamIdentifier) -> ProtoResult<()> {
+    pub async fn send_response(&mut self, res: Response<Binary>, stream_id: StreamIdentifier) -> ProtoResult<()> {
         let mut data = self.response_queue.lock().unwrap();
-        let mut response = SendResponse::new(
+        let response = SendResponse::new(
             stream_id,
             res,
             webparse::Method::Get,
