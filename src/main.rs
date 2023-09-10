@@ -19,11 +19,15 @@ use webparse::{Request, Response, http::{StatusCode, http2::frame::Frame}, Binar
 #[macro_use]
 extern crate serde_derive;
 use std::{env, error::Error, fmt::{self,}, io::{self, Read}, borrow::BorrowMut, time::Duration};
-use tokio::{net::{TcpListener, TcpStream}, sync::mpsc::channel};
+use tokio::{net::{TcpListener, TcpStream}, sync::mpsc::{channel, Sender}};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
 use dmeng::{self, H2Connection, StateHandshake, SendControl, Server, RecvStream, ProtoResult, SendStream};
+
+trait Xx {
+    // async fn xx();
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -113,6 +117,7 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
         .body( recv )
         .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
 
+    let write_sender = req.extensions_mut().get_mut::<Sender<()>>().unwrap().clone();
     let control = req.extensions_mut().get_mut::<SendControl>();
     if control.is_some() {
         let mut send = control.unwrap().send_response(response, false).unwrap();
@@ -127,11 +132,14 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
     } else {
         tokio::spawn(async move {
             println!("send!!!!!");
-            for i in 1..99 {
+            for i in 1..2 {
                 sender.send((false, Binary::from(format!("hello{} ", i).into_bytes()))).await;
             }
-            println!("send!!!!!");
+            println!("send!!!!! end!!!!!!");
             sender.send((true, Binary::from_static("world\r\n".as_bytes()))).await;
+
+            let sss = write_sender.send(()).await;
+            println!("ssssss = {:?}", sss);
         });
         Ok(Some(response))
     }
@@ -143,9 +151,11 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     // let mut connect = StateHandshake::handshake(stream).await.unwrap();
     // let mut connect = dmeng::Builder::new().connection(stream);
     let mut server = Server::new(stream);
-    while let Ok(Some(_)) = server.incoming(operate).await {
+    let ret = server.incoming(operate).await;
+    while let Ok(Some(_)) = ret {
 
     }
+    println!("end!!!!!!?????????????????? {:?}", ret);
     // while let Some(request) = server.incoming(operate).await {
     //     match request {
     //         Ok(request) => {

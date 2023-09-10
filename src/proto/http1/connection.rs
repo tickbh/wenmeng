@@ -1,19 +1,24 @@
-use std::{task::{Context, Poll}, future::poll_fn, pin::Pin};
+use std::{
+    future::poll_fn,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use futures_core::Stream;
-use tokio::{io::{AsyncRead, AsyncWrite}, sync::mpsc::Receiver};
-use webparse::{Request, Serialize, Response};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    sync::mpsc::Receiver,
+};
+use webparse::{Request, Response, Serialize, BinaryMut};
 
-use crate::{ProtoResult, RecvStream, H2Connection};
+use crate::{H2Connection, ProtoResult, RecvStream};
 
 use super::IoBuffer;
 
 pub struct H1Connection<T> {
     io: IoBuffer<T>,
     // codec: Codec<T>,
-    // inner: InnerConnection,
 
-    
     /// 通知有新内容要求要写入
     receiver: Option<Receiver<()>>,
 }
@@ -31,15 +36,9 @@ where
     }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtoResult<()>> {
-        println!("poll write!!!!!!!");
-        Poll::Pending
-        // self.inner.control.poll_write(cx, &mut self.codec)
-        // loop {
-        //     ready!(Pin::new(&mut self.codec).poll_next(cx)?);
-        // }
+        self.io.poll_write(cx)
     }
 
-    
     pub fn poll_request(
         &mut self,
         cx: &mut Context<'_>,
@@ -54,7 +53,7 @@ where
         connect.set_handshake_ok();
         connect
     }
-    
+
     pub async fn incoming(&mut self) -> Option<ProtoResult<Request<RecvStream>>> {
         use futures_util::stream::StreamExt;
         let mut receiver = self.receiver.take().unwrap();
@@ -71,11 +70,11 @@ where
         }
     }
 
-    pub async fn send_response<R: Serialize>(&mut self, res: Response<R>) -> ProtoResult<()> {
+    pub async fn send_response(&mut self, res: Response<RecvStream>) -> ProtoResult<()>
+    {
         self.io.send_response(res).await
     }
 }
-
 
 impl<T> Stream for H1Connection<T>
 where
@@ -121,12 +120,10 @@ where
         //             return Poll::Ready(None);
         //         },
         //     }
-            
+
         // }
         // let xxx = self.poll_request(cx);
         // println!("connect === {:?} ", xxx.is_pending());
         // xxx
     }
-
-    
 }

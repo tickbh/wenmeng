@@ -37,7 +37,7 @@ where
         R: Serialize,
     {
         let result = if let Some(h1) = &mut self.http1 {
-            h1.send_response(res).await?;
+            h1.send_response(res.into_type::<RecvStream>()).await?;
         } else if let Some(h2) = &mut self.http2 {
             if let Some(stream_id) = stream_id {
                 let recv = RecvStream::only(Binary::new());
@@ -72,6 +72,7 @@ where
             } else {
                 None
             };
+            println!("test: result = {:?}", result);
             match result {
                 None => return Ok(None),
                 Some(Err(ProtoError::UpgradeHttp2)) => {

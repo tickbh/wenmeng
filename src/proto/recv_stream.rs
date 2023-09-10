@@ -142,23 +142,25 @@ impl Serialize for RecvStream {
         if let Some(bin) = self.binary_mut.take() {
             size += buffer.put_slice(bin.chunk());
         }
-        // if self.receiver.is_some() && !self.is_end {
-        //     loop {
-        //         match self.receiver.as_mut().unwrap().try_recv() {
-        //             Ok((is_end, mut bin)) => {
-        //                 size += bin.serialize(buffer)?;
-        //                 self.is_end = is_end;
-        //             }
-        //             Err(TryRecvError::Disconnected) => {
-        //                 self.is_end = true;
-        //                 return Ok(size);
-        //             }
-        //             Err(TryRecvError::Empty) => {
-        //                 std::thread::sleep(time::Duration::from_millis(10));
-        //             }
-        //         }
-        //     }
-        // }
+        if self.receiver.is_some() && !self.is_end {
+            loop {
+                println!("aaaaaaa");
+                match self.receiver.as_mut().unwrap().try_recv() {
+                    Ok((is_end, mut bin)) => {
+                        println!("receiver === {:?}, {:?}", is_end, bin);
+                        size += bin.serialize(buffer)?;
+                        self.is_end = is_end;
+                    }
+                    Err(TryRecvError::Disconnected) => {
+                        self.is_end = true;
+                        return Ok(size);
+                    }
+                    Err(TryRecvError::Empty) => {
+                        return Ok(size);
+                    }
+                }
+            }
+        }
         Ok(size)
     }
 }

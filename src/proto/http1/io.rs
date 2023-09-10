@@ -5,11 +5,16 @@ use std::{
 
 use futures_util::future::poll_fn;
 use http::request;
-use tokio::{io::{AsyncRead, AsyncWrite, ReadBuf}, sync::mpsc::Sender};
+use tokio::{
+    io::{AsyncRead, AsyncWrite, ReadBuf},
+    sync::mpsc::Sender,
+};
 use tokio_util::io::poll_read_buf;
-use webparse::{BinaryMut, BufMut, Request, Buf, WebError, http::http2, Binary, Serialize, Response};
+use webparse::{
+    http::http2, Binary, BinaryMut, Buf, BufMut, Request, Response, Serialize, WebError,
+};
 
-use crate::{ProtoResult, RecvStream, ProtoError};
+use crate::{ProtoError, ProtoResult, RecvStream};
 
 pub struct IoBuffer<T> {
     io: T,
@@ -17,7 +22,10 @@ pub struct IoBuffer<T> {
     write_buf: BinaryMut,
     write_sender: Sender<()>,
     read_sender: Option<Sender<(bool, Binary)>>,
+    res: Option<Response<RecvStream>>,
+
     is_builder: bool,
+    is_end: bool,
 }
 
 impl<T> IoBuffer<T>
@@ -31,29 +39,31 @@ where
             write_buf: BinaryMut::new(),
             write_sender,
             read_sender: None,
+            res: None,
             is_builder: false,
+            is_end: false,
         }
     }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtoResult<()>> {
         println!("!!!!!!!!!!!!!!!!!!!!!!!");
-
-
-
-
-
-
-
-
-        
+        self.is_end = if let Some(res) = &mut self.res {
+            res.body_mut().serialize(&mut self.write_buf)?;
+            res.body().is_end()
+        } else {
+            true
+        };
+        if self.is_end {
+            self.res = None;
+        }
         if self.write_buf.is_empty() {
-            return Poll::Ready(Ok(()))
+            return Poll::Ready(Ok(()));
         }
         match ready!(Pin::new(&mut self.io).poll_write(cx, &self.write_buf.chunk()))? {
             n => {
                 self.write_buf.advance(n);
                 if self.write_buf.is_empty() {
-                    return Poll::Ready(Ok(()))
+                    return Poll::Ready(Ok(()));
                 }
             }
         };
@@ -83,7 +93,11 @@ where
             match self.poll_read(cx)? {
                 Poll::Ready(0) => return Poll::Ready(Ok(0)),
                 Poll::Ready(n) => size += n,
-                Poll::Pending => break,
+                Poll::Pending => if size == 0 {
+                    return Poll::Pending;
+                } else {
+                    break;
+                },
             }
         }
         Poll::Ready(Ok(size))
@@ -93,10 +107,17 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Option<ProtoResult<Request<RecvStream>>>> {
-        let _ = self.poll_write(cx);
+        self.poll_write(cx)?;
+        if self.is_builder && self.is_end {
+            println!("test:::: write client end!!!");
+            return Poll::Ready(None);
+        }
         match ready!(self.poll_read_all(cx)?) {
             // socket被断开, 提前结束
-            0 => return Poll::Ready(None),
+            0 => {
+                println!("test:::: recv client end!!!");
+                return Poll::Ready(None)
+            },
             // 收到新的消息头, 解析包体消息
             _ => {
                 if self.is_builder {
@@ -115,10 +136,12 @@ where
                         if e.is_partial() {
                             return Poll::Pending;
                         } else {
-                            if self.read_buf.remaining() >= http2::MAIGC_LEN && &self.read_buf[..http2::MAIGC_LEN] == http2::HTTP2_MAGIC {
+                            if self.read_buf.remaining() >= http2::MAIGC_LEN
+                                && &self.read_buf[..http2::MAIGC_LEN] == http2::HTTP2_MAGIC
+                            {
                                 self.read_buf.advance(http2::MAIGC_LEN);
                                 let err = ProtoError::UpgradeHttp2;
-                                return Poll::Ready(Some(Err(err)))
+                                return Poll::Ready(Some(Err(err)));
                             }
                             return Poll::Ready(Some(Err(e.into())));
                         }
@@ -129,9 +152,10 @@ where
                 if request.is_partial() {
                     return Poll::Pending;
                 }
-                
+
                 self.is_builder = true;
                 self.read_buf.advance(size);
+                request.extensions_mut().insert(self.write_sender.clone());
                 let body_len = request.get_body_len();
                 let new_request = if request.method().is_nobody() {
                     request.into(RecvStream::empty()).0
@@ -152,14 +176,16 @@ where
     pub fn into(self) -> (T, BinaryMut, BinaryMut) {
         (self.io, self.read_buf, self.write_buf)
     }
-    
-    pub async fn send_response<R: Serialize>(&mut self, mut res: Response<R>) -> ProtoResult<()> {
+
+    pub async fn send_response(&mut self, mut res: Response<RecvStream>) -> ProtoResult<()> {
         // self.io.
         let mut buffer = BinaryMut::new();
         res.serialize(&mut buffer);
         self.write_buf.put_slice(buffer.chunk());
         let _ = poll_fn(|cx| self.poll_write(cx));
-        
+        if !res.body().is_end() {
+            self.res = Some(res);
+        }
         Ok(())
     }
 }
