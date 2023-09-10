@@ -19,7 +19,7 @@ use webparse::{Request, Response, http::{StatusCode, http2::frame::Frame}, Binar
 #[macro_use]
 extern crate serde_derive;
 use std::{env, error::Error, fmt::{self,}, io::{self, Read}, borrow::BorrowMut, time::Duration};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::{net::{TcpListener, TcpStream}, sync::mpsc::channel};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
@@ -107,8 +107,10 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
             String::new()
         }
     };
+    let (sender, receiver) = channel(10);
+    let recv = RecvStream::new(receiver, BinaryMut::from(body.into_bytes().to_vec()), false);
     let response = response
-        .body( RecvStream::only(Binary::from(body.into_bytes())))
+        .body( recv )
         .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
 
     let control = req.extensions_mut().get_mut::<SendControl>();
@@ -123,6 +125,14 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
         });
         Ok(None)
     } else {
+        tokio::spawn(async move {
+            println!("send!!!!!");
+            for i in 1..99 {
+                sender.send((false, Binary::from(format!("hello{} ", i).into_bytes()))).await;
+            }
+            println!("send!!!!!");
+            sender.send((true, Binary::from_static("world\r\n".as_bytes()))).await;
+        });
         Ok(Some(response))
     }
     

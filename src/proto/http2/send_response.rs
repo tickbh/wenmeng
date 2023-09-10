@@ -120,15 +120,17 @@ impl SendControl {
         }
     }
 
-    pub fn send_response(
+    pub fn send_response<R>(
         &mut self,
-        res: Response<RecvStream>,
+        res: Response<R>,
         is_end_stream: bool,
-    ) -> ProtoResult<SendStream> {
+    ) -> ProtoResult<SendStream> where
+    RecvStream: From<R>,
+    R: Serialize, {
         let mut data = self.queue.lock().unwrap();
         let mut response = SendResponse::new(
             self.stream_id,
-            res,
+            res.into_type(),
             self.method.clone(),
             is_end_stream,
             self.write_sender.clone(),

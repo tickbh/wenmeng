@@ -56,10 +56,12 @@ where
         Ok(())
     }
 
-    pub async fn incoming<F, Fut>(&mut self, mut f: F) -> ProtoResult<Option<()>>
+    pub async fn incoming<F, Fut, R>(&mut self, mut f: F) -> ProtoResult<Option<()>>
     where
         F: FnMut(Request<RecvStream>) -> Fut,
-        Fut: Future<Output = ProtoResult<Option<Response<RecvStream>>>>,
+        Fut: Future<Output = ProtoResult<Option<Response<R>>>>,
+        RecvStream: From<R>,
+        R: Serialize
     {
         use futures_util::stream::StreamExt;
         loop {
@@ -85,7 +87,6 @@ where
                     // let mut send_control = r.extensions_mut().get::<SendControl>().map(|c| c.clone());
                     match f(r).await? {
                         Some(res) => {
-                            println!("recv res = {:?}", res);
                             self.send_response(res, stream_id).await?;
                         }
                         None => (),
