@@ -166,3 +166,21 @@ impl Serialize for RecvStream {
 unsafe impl Sync for RecvStream {}
 
 unsafe impl Send for RecvStream {}
+
+impl From<Binary> for RecvStream {
+    fn from(value: Binary) -> Self {
+        RecvStream::only(value)
+    }
+}
+
+// impl<T> From<T> for RecvStream where T : Serialize {
+//     fn from(value: T) -> Self {
+//         todo!()
+//     }
+// }
+
+// impl From<Option<dyn Serialize + ?Sized>> for RecvStream {
+//     fn from(value: Option<dyn Serialize + Sized>) -> Self {
+//         todo!()
+//     }
+// }

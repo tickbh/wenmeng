@@ -1,8 +1,10 @@
-use futures_core::{Future, stream};
-use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::{Binary, Request, Response, Serialize, http::http2::frame::StreamIdentifier};
+use std::any::{Any, TypeId};
 
-use crate::{H2Connection, ProtoError, ProtoResult, RecvStream, SendStream, SendControl};
+use futures_core::{stream, Future};
+use tokio::io::{AsyncRead, AsyncWrite};
+use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize};
+
+use crate::{H2Connection, ProtoError, ProtoResult, RecvStream, SendControl, SendStream};
 
 use super::http1::H1Connection;
 
@@ -25,13 +27,28 @@ where
         }
     }
 
-    pub async fn send_response<R: Serialize>(&mut self, res: Response<R>, stream_id: Option<StreamIdentifier>) -> ProtoResult<()> {
+    pub async fn send_response<R>(
+        &mut self,
+        res: Response<R>,
+        stream_id: Option<StreamIdentifier>,
+    ) -> ProtoResult<()>
+    where
+        RecvStream: From<R>,
+        R: Serialize,
+    {
         let result = if let Some(h1) = &mut self.http1 {
             h1.send_response(res).await?;
         } else if let Some(h2) = &mut self.http2 {
             if let Some(stream_id) = stream_id {
                 let recv = RecvStream::only(Binary::new());
-                let (mut res, mut r) = res.into(recv);
+                // let v = res as Response<RecvStream>;
+                let mut res = res.into_type::<RecvStream>();
+                // let (mut res, mut r) = res.into(recv);
+
+                // let r = unsafe {
+                // (&mut **res.body_mut() as &mut (dyn Any + 'static)).downcast_mut()
+                // Box::new(res).as_mut()
+                // }
                 h2.send_response(res, stream_id).await?;
             }
         };
