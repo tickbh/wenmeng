@@ -20,58 +20,72 @@ pub struct IoBuffer<T> {
     io: T,
     read_buf: BinaryMut,
     write_buf: BinaryMut,
-    write_sender: Sender<()>,
+
+    inner: ConnectionInfo,
+}
+
+struct ConnectionInfo {
+    deal_req: usize,
     read_sender: Option<Sender<(bool, Binary)>>,
     res: Option<Response<RecvStream>>,
+    is_keep_alive: bool,
+    is_send_header: bool,
+    is_build_req: bool,
+    is_send_end: bool,
+}
 
-    is_header: bool,
-    is_builder: bool,
-    is_end: bool,
+impl ConnectionInfo {
+
+    pub fn is_active_close(&self) -> bool {
+        self.is_send_end && !self.is_keep_alive
+    }
 }
 
 impl<T> IoBuffer<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(io: T, write_sender: Sender<()>) -> Self {
+    pub fn new(io: T) -> Self {
         Self {
             io: io,
             read_buf: BinaryMut::new(),
             write_buf: BinaryMut::new(),
-            write_sender,
-            read_sender: None,
-            res: None,
-            is_header: false,
-            is_builder: false,
-            is_end: false,
+
+            inner: ConnectionInfo {
+                deal_req: 0,
+                read_sender: None,
+                res: None,
+                is_keep_alive: false,
+                is_send_header: false,
+                is_build_req: false,
+                is_send_end: false,
+            },
         }
     }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtoResult<()>> {
         println!("!!!!!!!!!!!!!!!!!!!!!!!");
-        if let Some(res) = &mut self.res {
-            if !self.is_header {
+        if let Some(res) = &mut self.inner.res {
+            if !self.inner.is_send_header {
                 res.encode_header(&mut self.write_buf)?;
-                self.is_header;
+                self.inner.is_send_header = true;
             }
 
             if !res.body().is_end() {
                 let _ = res.body_mut().poll_encode(cx, &mut self.write_buf);
                 if res.body().is_end() {
-                    self.is_end = true;
+                    self.inner.is_send_end = true;
+                    self.inner.deal_req += 1;
                 }
             }
         }
 
-        // self.is_end = if let Some(res) = &mut self.res {
-        //     res.body_mut().serialize(&mut self.write_buf)?;
-        //     res.body().is_end()
-        // } else {
-        //     true
-        // };
-        // if self.is_end {
-        //     self.res = None;
-        // }
+        if self.inner.is_send_end {
+            self.inner.res = None;
+            self.inner.is_build_req = false;
+            self.inner.is_send_header = false;
+        }
+
         if self.write_buf.is_empty() {
             return Poll::Ready(Ok(()));
         }
@@ -125,8 +139,8 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Option<ProtoResult<Request<RecvStream>>>> {
-        self.poll_write(cx)?;
-        if self.is_builder && self.is_end {
+        let _ = self.poll_write(cx)?;
+        if self.inner.is_active_close() && self.write_buf.is_empty() {
             println!("test:::: write client end!!!");
             return Poll::Ready(None);
         }
@@ -138,8 +152,8 @@ where
             }
             // 收到新的消息头, 解析包体消息
             _ => {
-                if self.is_builder {
-                    if let Some(sender) = &self.read_sender {
+                if self.inner.is_build_req {
+                    if let Some(sender) = &self.inner.read_sender {
                         let binary = Binary::from(self.read_buf.chunk().to_vec());
                         if let Ok(_) = sender.try_send((false, binary)) {
                             self.read_buf.advance_all();
@@ -171,15 +185,16 @@ where
                     return Poll::Pending;
                 }
 
-                self.is_builder = true;
                 self.read_buf.advance(size);
-                request.extensions_mut().insert(self.write_sender.clone());
+                self.inner.is_send_end = false;
+                self.inner.is_build_req = true;
+                self.inner.is_keep_alive = request.is_keep_alive();
                 let body_len = request.get_body_len();
                 let new_request = if request.method().is_nobody() {
                     request.into(RecvStream::empty()).0
                 } else {
                     let (sender, receiver) = tokio::sync::mpsc::channel::<(bool, Binary)>(30);
-                    self.read_sender = Some(sender);
+                    self.inner.read_sender = Some(sender);
                     let mut binary = BinaryMut::new();
                     binary.put_slice(self.read_buf.chunk());
                     self.read_buf.advance(self.read_buf.remaining());
@@ -196,7 +211,7 @@ where
     }
 
     pub async fn send_response(&mut self, mut res: Response<RecvStream>) -> ProtoResult<()> {
-        self.res = Some(res);
+        self.inner.res = Some(res);
         // self.io.
         // let mut buffer = BinaryMut::new();
         // let _ = res.encode_header(&mut buffer)?;

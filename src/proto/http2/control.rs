@@ -84,14 +84,12 @@ impl Control {
         }
     }
 
-    pub fn encode_response<T>(&mut self, codec: &mut Codec<T>) -> ProtoResult<()>
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
+    pub fn encode_response(&mut self, cx: &mut Context) -> ProtoResult<()>
     {
         let mut list = self.response_queue.lock().unwrap();
         let vals = (*list).drain(..).collect::<Vec<SendResponse>>();
         for mut l in vals {
-            let (isend, vec) = l.encode_frames();
+            let (isend, vec) = l.encode_frames(cx);
             self.send_frames.send_frames(l.stream_id, vec)?;
             if !isend {
                 (*list).push(l);
@@ -115,7 +113,7 @@ impl Control {
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-        self.encode_response(codec)?;
+        self.encode_response(cx)?;
         ready!(self.goaway.poll_handle(cx, codec));
         ready!(self.ping_pong.poll_handle(cx, codec))?;
         match ready!(self.send_frames.poll_handle(cx, codec)) {

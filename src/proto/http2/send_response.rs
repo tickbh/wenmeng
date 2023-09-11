@@ -1,5 +1,6 @@
 use rbtree::RBTree;
 use std::sync::{Arc, Mutex};
+use std::task::Context;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use webparse::BinaryMut;
 use webparse::{
@@ -49,7 +50,7 @@ impl SendResponse {
         }
     }
 
-    pub fn encode_frames(&mut self) -> (bool, Vec<Frame<Binary>>) {
+    pub fn encode_frames(&mut self, cx: &mut Context) -> (bool, Vec<Frame<Binary>>) {
         let mut result = vec![];
         if !self.encode_header {
             let header = FrameHeader::new(Kind::Headers, Flag::end_headers(), self.stream_id);
@@ -71,16 +72,22 @@ impl SendResponse {
             self.encode_body = true;
         }
         if let Some(recv) = &mut self.receiver {
-            while let Ok(val) = recv.try_recv() {
-                let flag = if val.0 {
-                    Flag::end_stream()
-                } else {
-                    Flag::zero()
-                };
-                self.is_end_stream = val.0;
-                let header = FrameHeader::new(Kind::Data, flag, self.stream_id);
-                let data = Data::new(header, val.1);
-                result.push(Frame::Data(data));
+            loop {
+                match recv.poll_recv(cx) {
+                    std::task::Poll::Ready(Some(val)) => {
+                        let flag = if val.0 {
+                            Flag::end_stream()
+                        } else {
+                            Flag::zero()
+                        };
+                        self.is_end_stream = val.0;
+                        let header = FrameHeader::new(Kind::Data, flag, self.stream_id);
+                        let data = Data::new(header, val.1);
+                        result.push(Frame::Data(data));
+                    },
+                    std::task::Poll::Ready(None) => break,
+                    std::task::Poll::Pending => break,
+                }
             }
         }
         (self.is_end_stream, result)

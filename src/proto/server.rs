@@ -61,7 +61,7 @@ where
         F: FnMut(Request<RecvStream>) -> Fut,
         Fut: Future<Output = ProtoResult<Option<Response<R>>>>,
         RecvStream: From<R>,
-        R: Serialize
+        R: Serialize,
     {
         loop {
             let result = if let Some(h1) = &mut self.http1 {
@@ -82,9 +82,7 @@ where
                     return Err(ProtoError::UpgradeHttp2);
                 }
                 Err(e) => return Err(e),
-                Ok(Some(true)) => {
-                    return Ok(Some(true))
-                }
+                Ok(Some(true)) => return Ok(Some(true)),
             };
         }
         // loop {

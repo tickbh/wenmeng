@@ -18,9 +18,6 @@ use super::IoBuffer;
 pub struct H1Connection<T> {
     io: IoBuffer<T>,
     // codec: Codec<T>,
-
-    /// 通知有新内容要求要写入
-    receiver: Option<Receiver<()>>,
 }
 
 impl<T> H1Connection<T>
@@ -28,10 +25,8 @@ where
     T: AsyncRead + AsyncWrite + Unpin,
 {
     pub fn new(io: T) -> Self {
-        let (sender, receiver) = tokio::sync::mpsc::channel::<()>(1);
         H1Connection {
-            io: IoBuffer::new(io, sender),
-            receiver: Some(receiver),
+            io: IoBuffer::new(io),
         }
     }
 

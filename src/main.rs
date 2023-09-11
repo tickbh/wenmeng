@@ -67,10 +67,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         let (stream, _) = server.accept().await?;
+        println!("recv = {:?}", stream);
         tokio::spawn(async move {
             if let Err(e) = process(stream).await {
                 println!("failed to process connection; error = {}", e);
             }
+            println!("aaaaaaaaaaaaaaaaaaaa");
         });
     }
 }
@@ -129,7 +131,6 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
         });
         Ok(None)
     } else {
-        let write_sender = req.extensions_mut().get_mut::<Sender<()>>().unwrap().clone();
         tokio::spawn(async move {
             println!("send!!!!!");
             for i in 1..2 {
@@ -138,8 +139,6 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
             println!("send!!!!! end!!!!!!");
             sender.send((true, Binary::from_static("world\r\n".as_bytes()))).await;
 
-            let sss = write_sender.send(()).await;
-            println!("ssssss = {:?}", sss);
         });
         Ok(Some(response))
     }
@@ -152,9 +151,9 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     // let mut connect = dmeng::Builder::new().connection(stream);
     let mut server = Server::new(stream);
     let ret = server.incoming(operate).await;
-    while let Ok(Some(_)) = ret {
+    // while let Ok(Some(_)) = ret {
 
-    }
+    // }
     println!("end!!!!!!?????????????????? {:?}", ret);
     // while let Some(request) = server.incoming(operate).await {
     //     match request {
