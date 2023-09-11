@@ -11,7 +11,7 @@ use tokio::{
 };
 use webparse::{Request, Response, Serialize, BinaryMut};
 
-use crate::{H2Connection, ProtoResult, RecvStream};
+use crate::{H2Connection, ProtoResult, RecvStream, proto::recv_stream};
 
 use super::IoBuffer;
 
@@ -62,6 +62,7 @@ where
             None => return Ok(Some(true)),
             Some(Err(e)) => return Err(e),
             Some(Ok(r)) => {
+                // r.try_into()
                 match f(r).await? {
                     Some(res) => {
                         self.send_response(res.into_type()).await?;

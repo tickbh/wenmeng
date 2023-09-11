@@ -8,7 +8,7 @@ use tokio::{
 };
 use webparse::{Binary, BinaryMut, Buf, Serialize};
 
-use crate::ProtoResult;
+use crate::{ProtoResult, ProtoError};
 
 #[derive(Debug)]
 pub struct RecvStream {
@@ -209,6 +209,35 @@ impl From<Binary> for RecvStream {
         RecvStream::only(value)
     }
 }
+
+impl From<String> for RecvStream {
+    fn from(value: String) -> Self {
+        let bin = Binary::from(value.into_bytes().to_vec());
+        RecvStream::only(bin)
+    }
+}
+
+impl From<Vec<u8>> for RecvStream {
+    fn from(value: Vec<u8>) -> Self {
+        let bin = Binary::from(value);
+        RecvStream::only(bin)
+    }
+}
+
+impl TryFrom<RecvStream> for Vec<u8> {
+    type Error=ProtoError;
+
+    fn try_from(value: RecvStream) -> Result<Self, Self::Error> {
+        if !value.is_end() {
+            return Err(ProtoError::IsNotFull)
+        }
+
+        return Err(ProtoError::Extension(""))
+        // value.binary
+    }
+}
+
+
 
 // impl<T> From<T> for RecvStream where T : Serialize {
 //     fn from(value: T) -> Self {

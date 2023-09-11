@@ -11,6 +11,7 @@ pub enum ProtoError {
     SenderError(),
     GoAway(Binary, Reason, Initiator),
     Extension(&'static str),
+    IsNotFull,
     UpgradeHttp2,
 }
 
