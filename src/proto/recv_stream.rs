@@ -1,4 +1,4 @@
-use std::{io::Read, time};
+use std::{io::Read, time, task::{Context, ready, Poll}};
 
 use bytes::buf;
 use futures_core::Stream;
@@ -97,6 +97,41 @@ impl RecvStream {
         }
         Some(size)
     }
+
+    pub fn poll_encode<B: webparse::Buf + webparse::BufMut + webparse::MarkBuf>(
+        &mut self,
+        cx: &mut Context<'_>,
+        buffer: &mut B,
+    ) -> Poll<webparse::WebResult<usize>> {
+        let mut size = 0;
+        if let Some(bin) = self.binary.take() {
+            size += buffer.put_slice(bin.chunk());
+        }
+        if let Some(bin) = self.binary_mut.take() {
+            size += buffer.put_slice(bin.chunk());
+        }
+        if self.receiver.is_some() && !self.is_end {
+            loop {
+                let xxx = self.receiver.as_mut().unwrap().poll_recv(cx);
+                println!("xxxxx = {:?}", xxx);
+                match xxx {
+                    Poll::Pending => {
+                        println!("recv !!!!!!!!!!!!!!!!!!!! Pending");
+                        break;
+                    }
+                    Poll::Ready(Some((is_end, mut bin))) => {
+                        size += bin.serialize(buffer)?;
+                        self.is_end = is_end;
+                    }
+                    Poll::Ready(None) => {
+                        break;
+                    }
+                }
+            }
+        }
+        Poll::Ready(Ok(size))
+    }
+
 }
 
 impl Stream for RecvStream {

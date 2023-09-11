@@ -56,45 +56,34 @@ where
         Ok(())
     }
 
-    pub async fn incoming<F, Fut, R>(&mut self, mut f: F) -> ProtoResult<Option<()>>
+    pub async fn incoming<F, Fut, R>(&mut self, mut f: F) -> ProtoResult<Option<bool>>
     where
         F: FnMut(Request<RecvStream>) -> Fut,
         Fut: Future<Output = ProtoResult<Option<Response<R>>>>,
         RecvStream: From<R>,
         R: Serialize
     {
-        use futures_util::stream::StreamExt;
         loop {
             let result = if let Some(h1) = &mut self.http1 {
-                h1.incoming().await
+                h1.incoming(&mut f).await
             } else if let Some(h2) = &mut self.http2 {
-                h2.incoming().await
+                h2.incoming(&mut f).await
             } else {
-                None
+                Ok(Some(true))
             };
-            println!("test: result = {:?}", result);
+            // println!("test: result = {:?}", result);
             match result {
-                None => return Ok(None),
-                Some(Err(ProtoError::UpgradeHttp2)) => {
+                Ok(None) | Ok(Some(false)) => continue,
+                Err(ProtoError::UpgradeHttp2) => {
                     if self.http1.is_some() {
                         self.http2 = Some(self.http1.take().unwrap().into_h2());
                         continue;
                     }
                     return Err(ProtoError::UpgradeHttp2);
                 }
-                Some(Err(e)) => return Err(e),
-                Some(Ok(mut r)) => {
-                    let stream_id = r.extensions_mut().remove::<StreamIdentifier>();
-                    // let mut send_control = r.extensions_mut().get::<SendControl>().map(|c| c.clone());
-                    match f(r).await? {
-                        Some(res) => {
-                            self.send_response(res, stream_id).await?;
-                        }
-                        None => (),
-                    }
-                    // async {
-                    //     f(r).await
-                    // }.await;
+                Err(e) => return Err(e),
+                Ok(Some(true)) => {
+                    return Ok(Some(true))
                 }
             };
         }

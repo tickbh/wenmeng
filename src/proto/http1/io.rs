@@ -24,6 +24,7 @@ pub struct IoBuffer<T> {
     read_sender: Option<Sender<(bool, Binary)>>,
     res: Option<Response<RecvStream>>,
 
+    is_header: bool,
     is_builder: bool,
     is_end: bool,
 }
@@ -40,6 +41,7 @@ where
             write_sender,
             read_sender: None,
             res: None,
+            is_header: false,
             is_builder: false,
             is_end: false,
         }
@@ -47,15 +49,29 @@ where
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtoResult<()>> {
         println!("!!!!!!!!!!!!!!!!!!!!!!!");
-        self.is_end = if let Some(res) = &mut self.res {
-            res.body_mut().serialize(&mut self.write_buf)?;
-            res.body().is_end()
-        } else {
-            true
-        };
-        if self.is_end {
-            self.res = None;
+        if let Some(res) = &mut self.res {
+            if !self.is_header {
+                res.encode_header(&mut self.write_buf)?;
+                self.is_header;
+            }
+
+            if !res.body().is_end() {
+                let _ = res.body_mut().poll_encode(cx, &mut self.write_buf);
+                if res.body().is_end() {
+                    self.is_end = true;
+                }
+            }
         }
+
+        // self.is_end = if let Some(res) = &mut self.res {
+        //     res.body_mut().serialize(&mut self.write_buf)?;
+        //     res.body().is_end()
+        // } else {
+        //     true
+        // };
+        // if self.is_end {
+        //     self.res = None;
+        // }
         if self.write_buf.is_empty() {
             return Poll::Ready(Ok(()));
         }
@@ -93,11 +109,13 @@ where
             match self.poll_read(cx)? {
                 Poll::Ready(0) => return Poll::Ready(Ok(0)),
                 Poll::Ready(n) => size += n,
-                Poll::Pending => if size == 0 {
-                    return Poll::Pending;
-                } else {
-                    break;
-                },
+                Poll::Pending => {
+                    if size == 0 {
+                        return Poll::Pending;
+                    } else {
+                        break;
+                    }
+                }
             }
         }
         Poll::Ready(Ok(size))
@@ -116,8 +134,8 @@ where
             // socket被断开, 提前结束
             0 => {
                 println!("test:::: recv client end!!!");
-                return Poll::Ready(None)
-            },
+                return Poll::Ready(None);
+            }
             // 收到新的消息头, 解析包体消息
             _ => {
                 if self.is_builder {
@@ -178,14 +196,16 @@ where
     }
 
     pub async fn send_response(&mut self, mut res: Response<RecvStream>) -> ProtoResult<()> {
+        self.res = Some(res);
         // self.io.
-        let mut buffer = BinaryMut::new();
-        res.serialize(&mut buffer);
-        self.write_buf.put_slice(buffer.chunk());
-        let _ = poll_fn(|cx| self.poll_write(cx));
-        if !res.body().is_end() {
-            self.res = Some(res);
-        }
+        // let mut buffer = BinaryMut::new();
+        // let _ = res.encode_header(&mut buffer)?;
+        // // let _ = res.body_mut().pol
+        // self.write_buf.put_slice(buffer.chunk());
+        // let _ = poll_fn(|cx| self.poll_write(cx));
+        // if !res.body().is_end() {
+        //     self.res = Some(res);
+        // }
         Ok(())
     }
 }

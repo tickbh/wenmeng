@@ -3,7 +3,7 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-use futures_core::Stream;
+use futures_core::{Future, Stream};
 use futures_util::future::poll_fn;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -12,7 +12,7 @@ use tokio::{
 };
 use webparse::{
     http::http2::frame::{Frame, Reason, Settings, StreamIdentifier},
-    Binary, Request, BinaryMut, Serialize, Response,
+    Binary, BinaryMut, Request, Response, Serialize,
 };
 
 use crate::{
@@ -106,23 +106,38 @@ where
         // }
     }
 
-    pub async fn incoming(&mut self) -> Option<ProtoResult<Request<RecvStream>>> {
+    pub async fn incoming<F, Fut, R>(
+        &mut self,
+        f: &mut F,
+    ) -> ProtoResult<Option<bool>>
+    where
+        F: FnMut(Request<RecvStream>) -> Fut,
+        Fut: Future<Output = ProtoResult<Option<Response<R>>>>,
+        RecvStream: From<R>,
+        R: Serialize,
+    {
         use futures_util::stream::StreamExt;
-        let mut receiver = self.inner.receiver.take().unwrap();
-        loop {
-            tokio::select! {
-                _ = receiver.recv() => {
-                    let _ = poll_fn(|cx| Poll::Ready(self.poll_write(cx))).await;
-                },
-                v = self.next() => {
-                    self.inner.receiver = Some(receiver);
-                    return v;
+        let req = self.next().await;
+        match req {
+            None => return Ok(Some(true)),
+            Some(Err(e)) => return Err(e),
+            Some(Ok(mut r)) => {
+                let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
+                match f(r).await? {
+                    Some(res) => {
+                        self.send_response(res.into_type(), stream_id.unwrap_or(StreamIdentifier::zero())).await?;
+                    }
+                    None => (),
                 }
             }
-        }
+        };
+        return Ok(None)
     }
 
-    fn handle_poll_result(&mut self, result: Option<ProtoResult<Request<RecvStream>>>) -> ProtoResult<()> {
+    fn handle_poll_result(
+        &mut self,
+        result: Option<ProtoResult<Request<RecvStream>>>,
+    ) -> ProtoResult<()> {
         match result {
             // 收到空包, 则关闭连接
             None => {
@@ -135,7 +150,7 @@ where
 
                 if self.inner.control.last_goaway_reason() == &reason {
                     self.inner.state = State::Closing(reason, initiator);
-                    return Ok(())
+                    return Ok(());
                 }
                 self.inner.control.go_away_now_data(reason, debug_data);
                 // Reset all active streams
@@ -148,33 +163,32 @@ where
             }
             _ => {
                 unreachable!();
-            }
-            // // Attempting to read a frame resulted in a stream level error.
-            // // This is handled by resetting the frame then trying to read
-            // // another frame.
-            // Err(Error::Reset(id, reason, initiator)) => {
-            //     debug_assert_eq!(initiator, Initiator::Library);
-            //     tracing::trace!(?id, ?reason, "stream error");
-            //     self.streams.send_reset(id, reason);
-            //     Ok(())
-            // }
-            // // Attempting to read a frame resulted in an I/O error. All
-            // // active streams must be reset.
-            // //
-            // // TODO: Are I/O errors recoverable?
-            // Err(Error::Io(e, inner)) => {
-            //     tracing::debug!(error = ?e, "Connection::poll; IO error");
-            //     let e = Error::Io(e, inner);
+            } // // Attempting to read a frame resulted in a stream level error.
+              // // This is handled by resetting the frame then trying to read
+              // // another frame.
+              // Err(Error::Reset(id, reason, initiator)) => {
+              //     debug_assert_eq!(initiator, Initiator::Library);
+              //     tracing::trace!(?id, ?reason, "stream error");
+              //     self.streams.send_reset(id, reason);
+              //     Ok(())
+              // }
+              // // Attempting to read a frame resulted in an I/O error. All
+              // // active streams must be reset.
+              // //
+              // // TODO: Are I/O errors recoverable?
+              // Err(Error::Io(e, inner)) => {
+              //     tracing::debug!(error = ?e, "Connection::poll; IO error");
+              //     let e = Error::Io(e, inner);
 
-            //     // Reset all active streams
-            //     self.streams.handle_error(e.clone());
+              //     // Reset all active streams
+              //     self.streams.handle_error(e.clone());
 
-            //     // Return the error
-            //     Err(e)
-            // }
+              //     // Return the error
+              //     Err(e)
+              // }
         }
     }
-    
+
     fn take_error(&mut self, ours: Reason, initiator: Initiator) -> ProtoResult<()> {
         let (debug_data, theirs) = self
             .inner
@@ -201,7 +215,11 @@ where
         self.inner.control.set_handshake_ok()
     }
 
-    pub async fn send_response(&mut self, res: Response<RecvStream>, stream_id: StreamIdentifier) -> ProtoResult<()> {
+    pub async fn send_response(
+        &mut self,
+        res: Response<RecvStream>,
+        stream_id: StreamIdentifier,
+    ) -> ProtoResult<()> {
         self.inner.control.send_response(res, stream_id).await
     }
 }
@@ -215,7 +233,6 @@ where
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-
         loop {
             match self.inner.state {
                 State::Open => {
@@ -236,26 +253,23 @@ where
                             continue;
                         }
                     };
-                },
+                }
                 State::Closing(reason, initiator) => {
                     ready!(self.codec.shutdown(cx))?;
 
                     // Transition the state to error
                     self.inner.state = State::Closed(reason, initiator);
-                },
-                State::Closed(reason, initiator) =>  {
+                }
+                State::Closed(reason, initiator) => {
                     if let Err(e) = self.take_error(reason, initiator) {
                         return Poll::Ready(Some(Err(e)));
                     }
                     return Poll::Ready(None);
-                },
+                }
             }
-            
         }
         // let xxx = self.poll_request(cx);
         // println!("connect === {:?} ", xxx.is_pending());
         // xxx
     }
-
-    
 }

@@ -4,7 +4,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use futures_core::Stream;
+use futures_core::{Stream, Future};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::mpsc::Receiver,
@@ -54,20 +54,28 @@ where
         connect
     }
 
-    pub async fn incoming(&mut self) -> Option<ProtoResult<Request<RecvStream>>> {
+    pub async fn incoming<F, Fut, R>(&mut self, f: &mut F) -> ProtoResult<Option<bool>>
+    where
+    F: FnMut(Request<RecvStream>) -> Fut,
+    Fut: Future<Output = ProtoResult<Option<Response<R>>>>,
+    RecvStream: From<R>,
+    R: Serialize {
         use futures_util::stream::StreamExt;
-        let mut receiver = self.receiver.take().unwrap();
-        loop {
-            tokio::select! {
-                _ = receiver.recv() => {
-                    let _ = poll_fn(|cx| Poll::Ready(self.poll_write(cx))).await;
-                },
-                v = self.next() => {
-                    self.receiver = Some(receiver);
-                    return v;
+        let req = self.next().await;
+
+        match req {
+            None => return Ok(Some(true)),
+            Some(Err(e)) => return Err(e),
+            Some(Ok(r)) => {
+                match f(r).await? {
+                    Some(res) => {
+                        self.send_response(res.into_type()).await?;
+                    }
+                    None => (),
                 }
             }
-        }
+        };
+        return Ok(None)
     }
 
     pub async fn send_response(&mut self, res: Response<RecvStream>) -> ProtoResult<()>

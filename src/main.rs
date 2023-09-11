@@ -117,12 +117,11 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
         .body( recv )
         .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
 
-    let write_sender = req.extensions_mut().get_mut::<Sender<()>>().unwrap().clone();
     let control = req.extensions_mut().get_mut::<SendControl>();
     if control.is_some() {
         let mut send = control.unwrap().send_response(response, false).unwrap();
         tokio::spawn(async move {
-            for i in 1..99 {
+            for i in 1..8 {
                 send.send_data(Binary::from(format!("hello{} ", i).into_bytes()), false);
                 tokio::time::sleep(Duration::new(0, 1000)).await;
             }
@@ -130,6 +129,7 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
         });
         Ok(None)
     } else {
+        let write_sender = req.extensions_mut().get_mut::<Sender<()>>().unwrap().clone();
         tokio::spawn(async move {
             println!("send!!!!!");
             for i in 1..2 {
