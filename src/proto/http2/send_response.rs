@@ -41,7 +41,7 @@ impl SendResponse {
     ) -> Self {
         SendResponse {
             stream_id,
-            push_id: None,
+            push_id,
             response,
             encode_header: false,
             encode_body: false,

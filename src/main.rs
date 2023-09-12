@@ -139,11 +139,11 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
     }
     tokio::spawn(async move {
         println!("send!!!!!");
-        // for i in 1..2 {
-        //     sender.send((false, Binary::from(format!("hello{} ", i).into_bytes()))).await;
-        // }
+        for i in 1..2 {
+            sender.send((false, Binary::from(format!("hello{} ", i).into_bytes()))).await;
+        }
         println!("send!!!!! end!!!!!!");
-        // sender.send((true, Binary::from_static("world\r\n".as_bytes()))).await;
+        sender.send((true, Binary::from_static("world\r\n".as_bytes()))).await;
 
     });
     Ok(Some(response))
