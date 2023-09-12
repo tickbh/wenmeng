@@ -1,17 +1,18 @@
 use std::{
+    any::{Any, TypeId},
     future::poll_fn,
     pin::Pin,
     task::{Context, Poll},
 };
 
-use futures_core::{Stream, Future};
+use futures_core::{Future, Stream};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::mpsc::Receiver,
 };
-use webparse::{Request, Response, Serialize, BinaryMut, http::response, Binary};
+use webparse::{http::response, Binary, BinaryMut, Request, Response, Serialize};
 
-use crate::{H2Connection, ProtoResult, RecvStream, proto::recv_stream};
+use crate::{proto::recv_stream, H2Connection, ProtoResult, RecvStream};
 
 use super::IoBuffer;
 
@@ -49,35 +50,53 @@ where
         connect
     }
 
-    pub async fn handle_request<F, Fut, R>(&mut self, r: Request<RecvStream>, f: &mut F) -> ProtoResult<Option<bool>>
+    pub async fn handle_request<F, Fut, Res, Req>(
+        &mut self,
+        mut r: Request<RecvStream>,
+        f: &mut F,
+    ) -> ProtoResult<Option<bool>>
     where
-    F: FnMut(Request<RecvStream>) -> Fut,
-    Fut: Future<Output = ProtoResult<Option<Response<R>>>>,
-    RecvStream: From<R>,
-    R: Serialize {
+        F: FnMut(Request<Req>) -> Fut,
+        Fut: Future<Output = ProtoResult<Option<Response<Res>>>>,
+        Req: From<RecvStream>,
+        Req: Serialize + Any,
+        RecvStream: From<Res>,
+        Res: Serialize + Any,
+    {
         if let Some(protocol) = r.headers().get_upgrade_protocol() {
             if protocol == "h2c" {
-                let mut response = Response::builder().status(101).header("Connection", "Upgrade").header("Upgrade", "h2c").body(()).unwrap();
+                let mut response = Response::builder()
+                    .status(101)
+                    .header("Connection", "Upgrade")
+                    .header("Upgrade", "h2c")
+                    .body(())
+                    .unwrap();
                 let mut binary = BinaryMut::new();
                 let _ = response.serialize(&mut binary);
                 return Err(crate::ProtoError::UpgradeHttp2(binary.freeze(), Some(r)));
             }
         }
-        match f(r).await? {
+        if TypeId::of::<Req>() != TypeId::of::<RecvStream>() {
+            let _ = r.body_mut().wait_all().await;
+        }
+        match f(r.into_type::<Req>()).await? {
             Some(res) => {
                 self.send_response(res.into_type()).await?;
             }
             None => (),
         }
-        return Ok(None)
+        return Ok(None);
     }
 
-    pub async fn incoming<F, Fut, R>(&mut self, f: &mut F) -> ProtoResult<Option<bool>>
+    pub async fn incoming<F, Fut, Res, Req>(&mut self, f: &mut F) -> ProtoResult<Option<bool>>
     where
-    F: FnMut(Request<RecvStream>) -> Fut,
-    Fut: Future<Output = ProtoResult<Option<Response<R>>>>,
-    RecvStream: From<R>,
-    R: Serialize {
+        F: FnMut(Request<Req>) -> Fut,
+        Fut: Future<Output = ProtoResult<Option<Response<Res>>>>,
+        Req: From<RecvStream>,
+        Req: Serialize + Any,
+        RecvStream: From<Res>,
+        Res: Serialize + Any,
+    {
         use futures_util::stream::StreamExt;
         let req = self.next().await;
 
@@ -88,11 +107,10 @@ where
                 self.handle_request(r, f).await?;
             }
         };
-        return Ok(None)
+        return Ok(None);
     }
 
-    pub async fn send_response(&mut self, res: Response<RecvStream>) -> ProtoResult<()>
-    {
+    pub async fn send_response(&mut self, res: Response<RecvStream>) -> ProtoResult<()> {
         self.io.send_response(res).await
     }
 }

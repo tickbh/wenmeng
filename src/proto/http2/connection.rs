@@ -1,6 +1,6 @@
 use std::{
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{ready, Context, Poll}, any::{Any, TypeId},
 };
 
 use futures_core::{Future, Stream};
@@ -17,7 +17,7 @@ use webparse::{
 
 use crate::{
     proto::{ProtoError, ProtoResult},
-    Builder, Initiator, RecvStream,
+    Builder, Initiator, RecvStream, Server,
 };
 
 use super::{
@@ -99,19 +99,26 @@ where
         // }
     }
 
-    pub async fn handle_request<F, Fut, R>(
+    pub async fn handle_request<F, Fut, Res, Req>(
         &mut self,
         mut r: Request<RecvStream>,
         f: &mut F,
     ) -> ProtoResult<Option<bool>>
     where
-        F: FnMut(Request<RecvStream>) -> Fut,
-        Fut: Future<Output = ProtoResult<Option<Response<R>>>>,
-        RecvStream: From<R>,
-        R: Serialize,
+        F: FnMut(Request<Req>) -> Fut,
+        Fut: Future<Output = ProtoResult<Option<Response<Res>>>>,
+        Req: From<RecvStream>,
+        Req: Serialize + Any,
+        RecvStream: From<Res>,
+        Res: Serialize + Any,
     {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
-        match f(r).await? {
+        // Server::try_wait_req::<Req>(mut r).await;
+        if TypeId::of::<Req>() != TypeId::of::<RecvStream>() {
+            let _ = r.body_mut().wait_all().await;
+        }
+        // let r = Server::req_into_type::<Req>(r).await;
+        match f(r.into_type::<Req>()).await? {
             Some(res) => {
                 self.send_response(
                     res.into_type(),
@@ -124,12 +131,14 @@ where
         return Ok(None);
     }
 
-    pub async fn incoming<F, Fut, R>(&mut self, f: &mut F) -> ProtoResult<Option<bool>>
+    pub async fn incoming<F, Fut, Res, Req>(&mut self, f: &mut F) -> ProtoResult<Option<bool>>
     where
-        F: FnMut(Request<RecvStream>) -> Fut,
-        Fut: Future<Output = ProtoResult<Option<Response<R>>>>,
-        RecvStream: From<R>,
-        R: Serialize,
+    F: FnMut(Request<Req>) -> Fut,
+    Fut: Future<Output = ProtoResult<Option<Response<Res>>>>,
+    Req: From<RecvStream>,
+    Req: Serialize + Any,
+    RecvStream: From<Res>,
+    Res: Serialize + Any,
     {
         use futures_util::stream::StreamExt;
         let req = self.next().await;

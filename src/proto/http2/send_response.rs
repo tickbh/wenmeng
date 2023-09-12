@@ -58,7 +58,8 @@ impl SendResponse {
             self.encode_header = true;
         }
 
-        if !self.response.body().is_end() {
+        if !self.response.body().is_end() || !self.encode_body {
+            self.encode_body = true;
             let mut binary = BinaryMut::new();
             let _ = self.response.body_mut().poll_encode(cx, &mut binary);
             if binary.remaining() > 0 {

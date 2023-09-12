@@ -145,12 +145,47 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
     
 }
 
+
+async fn operate1(mut req: Request<String>) -> ProtoResult<Option<Response<String>>> {
+    let mut response = Response::builder().version(req.version().clone());
+    let body = match &*req.url().path {
+        "/plaintext" => {
+            response = response.header("content-type", "text/plain");
+            "Hello, World!".to_string()
+        }
+        "/post" => {
+            let body = req.body_mut();
+
+            response = response.header("content-type", "text/plain");
+            format!("Hello, World! {:?}", 111).to_string()
+        }
+        "/json" => {
+            response = response.header("content-type", "application/json");
+            #[derive(Serialize)]
+            struct Message {
+                message: &'static str,
+            }
+            serde_json::to_string(&Message {
+                message: "Hello, World!",
+            }).unwrap()
+        }
+        _ => {
+            response = response.status(404);
+            String::new()
+        }
+    };
+    let response = response
+        .body( body )
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
+    Ok(Some(response))
+}
+
 async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
 
     // let mut connect = StateHandshake::handshake(stream).await.unwrap();
     // let mut connect = dmeng::Builder::new().connection(stream);
     let mut server = Server::new(stream);
-    let ret = server.incoming(operate).await;
+    let ret = server.incoming(operate1).await;
     // while let Ok(Some(_)) = ret {
 
     // }

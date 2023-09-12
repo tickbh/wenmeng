@@ -29,6 +29,7 @@ struct ConnectionInfo {
     read_sender: Option<Sender<(bool, Binary)>>,
     res: Option<Response<RecvStream>>,
     is_keep_alive: bool,
+    is_send_body: bool,
     is_send_header: bool,
     is_build_req: bool,
     is_send_end: bool,
@@ -56,6 +57,7 @@ where
                 read_sender: None,
                 res: None,
                 is_keep_alive: false,
+                is_send_body: false,
                 is_send_header: false,
                 is_build_req: false,
                 is_send_end: false,
@@ -71,7 +73,8 @@ where
                 self.inner.is_send_header = true;
             }
 
-            if !res.body().is_end() {
+            if !res.body().is_end() || !self.inner.is_send_body {
+                self.inner.is_send_body = true;
                 let _ = res.body_mut().poll_encode(cx, &mut self.write_buf);
                 if res.body().is_end() {
                     self.inner.is_send_end = true;
@@ -186,6 +189,7 @@ where
                 }
 
                 self.read_buf.advance(size);
+                self.inner.is_send_body = false;
                 self.inner.is_send_end = false;
                 self.inner.is_build_req = true;
                 self.inner.is_keep_alive = request.is_keep_alive();

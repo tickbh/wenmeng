@@ -56,13 +56,45 @@ where
         Ok(())
     }
 
-    pub async fn incoming<F, Fut, R>(&mut self, mut f: F) -> ProtoResult<Option<bool>>
+    pub async fn req_into_type<Req>(mut r: Request<RecvStream>) -> Request<Req>
     where
-        F: FnMut(Request<RecvStream>) -> Fut,
-        Fut: Future<Output = ProtoResult<Option<Response<R>>>>,
-        RecvStream: From<R>,
-        R: Serialize,
+        Req: From<RecvStream>,
+        Req: Serialize + Any,
     {
+        if TypeId::of::<Req>() == TypeId::of::<RecvStream>() {
+            r.into_type::<Req>()
+        } else {
+            if !r.body().is_end() {
+                let _ = r.body_mut().wait_all().await;
+            }
+            r.into_type::<Req>()
+        }
+    }
+
+    
+    pub async fn try_wait_req<Req>(r: &mut Request<RecvStream>) -> ProtoResult<()>
+    where
+        Req: From<RecvStream>,
+        Req: Serialize,
+    {
+        if !r.body().is_end() {
+            let _ = r.body_mut().wait_all().await;
+        }
+        Ok(())
+    }
+
+    pub async fn incoming<F, Fut, Res, Req>(&mut self, mut f: F) -> ProtoResult<Option<bool>>
+    where
+    F: FnMut(Request<Req>) -> Fut,
+    Fut: Future<Output = ProtoResult<Option<Response<Res>>>>,
+    Req: From<RecvStream>,
+    Req: Serialize + Any,
+    RecvStream: From<Res>,
+    Res: Serialize + Any
+    {
+        let xx = TypeId::of::<Req>();
+        let xx1 = TypeId::of::<RecvStream>();
+        println!("111 = {:?} 222 = {:?}", xx, xx1);
         loop {
             let result = if let Some(h1) = &mut self.http1 {
                 h1.incoming(&mut f).await
@@ -78,13 +110,16 @@ where
                     if self.http1.is_some() {
                         self.http2 = Some(self.http1.take().unwrap().into_h2(b));
                         if let Some(r) = r {
-                            self.http2.as_mut().unwrap().handle_request(r, &mut f).await?;
+                            self.http2
+                                .as_mut()
+                                .unwrap()
+                                .handle_request(r, &mut f)
+                                .await?;
                         }
                         continue;
                     } else {
                         return Err(ProtoError::UpgradeHttp2(b, r));
                     }
-                    
                 }
                 Err(e) => return Err(e),
                 Ok(Some(true)) => return Ok(Some(true)),

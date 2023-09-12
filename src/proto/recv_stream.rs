@@ -1,4 +1,4 @@
-use std::{io::Read, time, task::{Context, ready, Poll}};
+use std::{io::Read, time, task::{Context, ready, Poll}, any::TypeId};
 
 use bytes::buf;
 use futures_core::Stream;
@@ -80,6 +80,36 @@ impl RecvStream {
                 break;
             }
         }
+    }
+
+    pub fn read_now(&mut self) -> Binary {
+        let mut buffer = BinaryMut::new();
+        if let Some(bin) = self.binary.take() {
+            buffer.put_slice(bin.chunk());
+        }
+        if let Some(bin) = self.binary_mut.take() {
+            buffer.put_slice(bin.chunk());
+        }
+        return buffer.freeze()
+    }
+    
+    pub async fn wait_all(&mut self) -> Option<usize> {
+        let mut size = 0;
+        if self.receiver.is_none() || self.is_end {
+            return Some(size);
+        }
+        let receiver = self.receiver.as_mut().unwrap();
+        while let Some(v) = receiver.recv().await {
+            if self.binary_mut.is_none() {
+                self.binary_mut = Some(BinaryMut::new());
+            }
+            size += self.binary_mut.as_mut().unwrap().put_slice(v.1.chunk());
+            self.is_end = v.0;
+            if self.is_end == true {
+                break;
+            }
+        }
+        Some(size)
     }
 
     pub async fn read_all(&mut self, buffer: &mut BinaryMut) -> Option<usize> {
@@ -235,16 +265,18 @@ impl From<Vec<u8>> for RecvStream {
     }
 }
 
-impl TryFrom<RecvStream> for Vec<u8> {
-    type Error=ProtoError;
+impl From<RecvStream> for Vec<u8> {
+    fn from(mut value: RecvStream) -> Self {
+        let bin = value.read_now();
+        bin.into_slice_all()
+    }
+}
 
-    fn try_from(value: RecvStream) -> Result<Self, Self::Error> {
-        if !value.is_end() {
-            return Err(ProtoError::IsNotFull)
-        }
-
-        return Err(ProtoError::Extension(""))
-        // value.binary
+impl From<RecvStream> for String {
+    fn from(mut value: RecvStream) -> Self {
+        let bin = value.read_now();
+        let v = bin.into_slice_all();
+        String::from_utf8_lossy(&v).to_string()
     }
 }
 
