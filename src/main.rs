@@ -121,14 +121,14 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
 
     let control = req.extensions_mut().get_mut::<SendControl>();
     if control.is_some() {
-        let mut send = control.unwrap().send_response(response, false).unwrap();
-        tokio::spawn(async move {
-            for i in 1..8 {
-                send.send_data(Binary::from(format!("hello{} ", i).into_bytes()), false);
-                tokio::time::sleep(Duration::new(0, 1000)).await;
-            }
-            send.send_data(Binary::from_static("world\r\n".as_bytes()), true);
-        });
+        // let mut send = control.unwrap().send_response(response, false).unwrap();
+        // tokio::spawn(async move {
+        //     for i in 1..8 {
+        //         send.send_data(Binary::from(format!("hello{} ", i).into_bytes()), false);
+        //         tokio::time::sleep(Duration::new(0, 1000)).await;
+        //     }
+        //     send.send_data(Binary::from_static("world\r\n".as_bytes()), true);
+        // });
         Ok(None)
     } else {
         tokio::spawn(async move {

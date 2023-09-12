@@ -8,7 +8,7 @@ use futures_util::future::poll_fn;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
-    sync::mpsc::{Receiver, Sender},
+    sync::mpsc::{Receiver, Sender, channel},
 };
 use webparse::{
     http::http2::frame::{Frame, Reason, Settings, StreamIdentifier},
@@ -36,6 +36,8 @@ struct InnerConnection {
     state: State,
 
     control: Control,
+
+    receiver_push: Option<Receiver<Response<RecvStream>>>,
 }
 
 #[derive(Debug)]
@@ -59,6 +61,7 @@ where
     T: AsyncRead + AsyncWrite + Unpin,
 {
     pub fn new(io: T, builder: Builder) -> H2Connection<T> {
+        let (sender, receiver) = channel(10);
         H2Connection {
             codec: Codec::new(io),
             inner: InnerConnection {
@@ -72,7 +75,8 @@ where
                     reset_stream_max: builder.reset_stream_max,
                     remote_reset_stream_max: builder.pending_accept_reset_stream_max,
                     settings: builder.settings.clone(),
-                }),
+                }, sender),
+                receiver_push: Some(receiver),
             },
         }
     }
@@ -141,14 +145,34 @@ where
     Res: Serialize + Any,
     {
         use futures_util::stream::StreamExt;
-        let req = self.next().await;
-        match req {
-            None => return Ok(Some(true)),
-            Some(Err(e)) => return Err(e),
-            Some(Ok(r)) => {
-                self.handle_request(r, f).await?;
+        let mut receiver = self.inner.receiver_push.take().unwrap();
+        tokio::select! {
+            res = receiver.recv() => {
+                if res.is_some() {
+                    let res = res.unwrap();
+                    let id = self.inner.control.next_server_id();
+                    self.inner.control.send_response(res, id).await?;
+                }
+            },
+            req = self.next() => {
+                self.inner.receiver_push = Some(receiver);
+                match req {
+                    None => return Ok(Some(true)),
+                    Some(Err(e)) => return Err(e),
+                    Some(Ok(r)) => {
+                        self.handle_request(r, f).await?;
+                    }
+                };
             }
-        };
+        }
+        // let req = self.next().await;
+        // match req {
+        //     None => return Ok(Some(true)),
+        //     Some(Err(e)) => return Err(e),
+        //     Some(Ok(r)) => {
+        //         self.handle_request(r, f).await?;
+        //     }
+        // };
         return Ok(None);
     }
 
@@ -181,29 +205,7 @@ where
             }
             _ => {
                 unreachable!();
-            } // // Attempting to read a frame resulted in a stream level error.
-              // // This is handled by resetting the frame then trying to read
-              // // another frame.
-              // Err(Error::Reset(id, reason, initiator)) => {
-              //     debug_assert_eq!(initiator, Initiator::Library);
-              //     tracing::trace!(?id, ?reason, "stream error");
-              //     self.streams.send_reset(id, reason);
-              //     Ok(())
-              // }
-              // // Attempting to read a frame resulted in an I/O error. All
-              // // active streams must be reset.
-              // //
-              // // TODO: Are I/O errors recoverable?
-              // Err(Error::Io(e, inner)) => {
-              //     tracing::debug!(error = ?e, "Connection::poll; IO error");
-              //     let e = Error::Io(e, inner);
-
-              //     // Reset all active streams
-              //     self.streams.handle_error(e.clone());
-
-              //     // Return the error
-              //     Err(e)
-              // }
+            }
         }
     }
 

@@ -26,7 +26,6 @@ pub struct SendResponse {
     pub is_end_stream: bool,
 
     pub method: Method,
-    pub receiver: Option<Receiver<(bool, Binary)>>,
 }
 
 impl SendResponse {
@@ -43,7 +42,6 @@ impl SendResponse {
             encode_body: false,
             is_end_stream,
             method,
-            receiver: None,
         }
     }
 
@@ -78,15 +76,6 @@ impl SendResponse {
         (self.is_end_stream, result)
     }
 
-    pub fn create_sendstream(&mut self) -> SendStream {
-        if self.method.res_nobody() || self.is_end_stream {
-            SendStream::empty()
-        } else {
-            let (sender, receiver) = channel::<(bool, Binary)>(100);
-            self.receiver = Some(receiver);
-            SendStream::new(sender)
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -109,24 +98,6 @@ impl SendControl {
         }
     }
 
-    pub fn send_response<R>(
-        &mut self,
-        res: Response<R>,
-        is_end_stream: bool,
-    ) -> ProtoResult<SendStream> where
-    RecvStream: From<R>,
-    R: Serialize, {
-        let mut data = self.queue.lock().unwrap();
-        let mut response = SendResponse::new(
-            self.stream_id,
-            res.into_type(),
-            self.method.clone(),
-            is_end_stream,
-        );
-        let steam = response.create_sendstream();
-        data.push(response);
-        Ok(steam)
-    }
 }
 
 unsafe impl Sync for SendControl {}

@@ -41,7 +41,9 @@ pub struct ControlConfig {
 }
 
 impl ControlConfig {
-    pub fn apply_remote_settings(&mut self, settings: &Settings) {}
+    pub fn apply_remote_settings(&mut self, settings: &Settings) {
+        self.settings = settings.clone();
+    }
 }
 
 pub struct Control {
@@ -62,11 +64,13 @@ pub struct Control {
     pub error: Option<GoAway>,
 
     config: ControlConfig,
+    
+    sender_push: Sender<Response<RecvStream>>,
 
 }
 
 impl Control {
-    pub fn new(config: ControlConfig) -> Self {
+    pub fn new(config: ControlConfig, sender_push: Sender<Response<RecvStream>>) -> Self {
         Control {
             recv_frames: HashMap::new(),
             send_frames: PriorityQueue::new(),
@@ -79,6 +83,7 @@ impl Control {
             last_stream_id: StreamIdentifier::zero(),
             error: None,
             config,
+            sender_push,
         }
     }
 
@@ -94,6 +99,10 @@ impl Control {
             }
         }
         Ok(())
+    }
+
+    pub fn next_server_id(&mut self) -> StreamIdentifier {
+        self.config.next_stream_id.next_id()
     }
 
     fn poll_go_away<T>(
@@ -257,12 +266,9 @@ impl Control {
         self.handshake.set_handshake_status(binary)
     }
 
-    pub async fn send_response<R>(&mut self, res: Response<R>, stream_id: StreamIdentifier) -> ProtoResult<()>
-    where
-        RecvStream: From<R>,
-        R: Serialize, {
+    pub async fn send_response(&mut self, res: Response<RecvStream>, stream_id: StreamIdentifier) -> ProtoResult<()>
+    {
         let mut data = self.response_queue.lock().unwrap();
-        let res = res.into_type::<RecvStream>();
         let is_end = res.body().is_end();
         let response = SendResponse::new(
             stream_id,
