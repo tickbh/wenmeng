@@ -1,4 +1,6 @@
+use futures_core::Stream;
 use rbtree::RBTree;
+use webparse::http::http2::frame::PushPromise;
 use std::sync::{Arc, Mutex};
 use std::task::Context;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -20,6 +22,7 @@ use crate::SendStream;
 #[derive(Debug)]
 pub struct SendResponse {
     pub stream_id: StreamIdentifier,
+    pub push_id: Option<StreamIdentifier>,
     pub response: Response<RecvStream>,
     pub encode_header: bool,
     pub encode_body: bool,
@@ -31,12 +34,14 @@ pub struct SendResponse {
 impl SendResponse {
     pub fn new(
         stream_id: StreamIdentifier,
+        push_id: Option<StreamIdentifier>,
         response: Response<RecvStream>,
         method: Method,
         is_end_stream: bool,
     ) -> Self {
         SendResponse {
             stream_id,
+            push_id: None,
             response,
             encode_header: false,
             encode_body: false,
@@ -48,12 +53,22 @@ impl SendResponse {
     pub fn encode_frames(&mut self, cx: &mut Context) -> (bool, Vec<Frame<Binary>>) {
         let mut result = vec![];
         if !self.encode_header {
-            let header = FrameHeader::new(Kind::Headers, Flag::end_headers(), self.stream_id);
-            let fields = self.response.headers().clone();
-            let mut header = Headers::new(header, fields);
-            header.set_status(self.response.status());
-            result.push(Frame::Headers(header));
-            self.encode_header = true;
+            if let Some(push_id) = &self.push_id {
+                let header = FrameHeader::new(Kind::PushPromise, Flag::end_headers(), self.stream_id);
+                let fields = self.response.headers().clone();
+                let mut push = PushPromise::new(header, push_id.clone(), fields);
+                push.set_status(self.response.status());
+                result.push(Frame::PushPromise(push));
+                self.stream_id = push_id.clone();
+                self.encode_header = true;
+            } else {
+                let header = FrameHeader::new(Kind::Headers, Flag::end_headers(), self.stream_id);
+                let fields = self.response.headers().clone();
+                let mut header = Headers::new(header, fields);
+                header.set_status(self.response.status());
+                result.push(Frame::Headers(header));
+                self.encode_header = true;
+            }
         }
 
         if !self.response.body().is_end() || !self.encode_body {
@@ -81,21 +96,29 @@ impl SendResponse {
 #[derive(Debug, Clone)]
 pub struct SendControl {
     pub stream_id: StreamIdentifier,
-    pub queue: Arc<Mutex<Vec<SendResponse>>>,
+    pub sender: Sender<(StreamIdentifier, Response<RecvStream>)>,
     pub method: Method,
 }
 
 impl SendControl {
     pub fn new(
         stream_id: StreamIdentifier,
-        queue: Arc<Mutex<Vec<SendResponse>>>,
+        sender: Sender<(StreamIdentifier, Response<RecvStream>)>,
         method: Method,
     ) -> Self {
         SendControl {
             stream_id,
-            queue,
+            sender,
             method,
         }
+    }
+
+    pub async fn send_response(
+        &mut self,
+        res: Response<RecvStream>
+    ) -> ProtoResult<()> {
+        let _ = self.sender.send((self.stream_id, res)).await;
+        Ok(())
     }
 
 }

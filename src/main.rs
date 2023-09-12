@@ -23,7 +23,7 @@ use tokio::{net::{TcpListener, TcpStream}, sync::mpsc::{channel, Sender}};
 use tokio_stream::StreamExt;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
-use dmeng::{self, H2Connection, StateHandshake, SendControl, Server, RecvStream, ProtoResult, SendStream};
+use dianmeng::{self, H2Connection, StateHandshake, SendControl, Server, RecvStream, ProtoResult, SendStream};
 
 trait Xx {
     // async fn xx();
@@ -78,10 +78,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<RecvStream>>> {
-    let mut response = Response::builder().version(req.version().clone());
+    let mut builder = Response::builder().version(req.version().clone());
     let body = match &*req.url().path {
         "/plaintext" => {
-            response = response.header("content-type", "text/plain");
+            builder = builder.header("content-type", "text/plain");
             "Hello, World!".to_string()
         }
         "/post" => {
@@ -95,11 +95,11 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
             body.read_all(&mut binary).await.unwrap();
             println!("binary = {:?}", binary);
 
-            response = response.header("content-type", "text/plain");
+            builder = builder.header("content-type", "text/plain");
             format!("Hello, World! {:?}", TryInto::<String>::try_into(binary)).to_string()
         }
         "/json" => {
-            response = response.header("content-type", "application/json");
+            builder = builder.header("content-type", "application/json");
             #[derive(Serialize)]
             struct Message {
                 message: &'static str,
@@ -109,19 +109,25 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
             }).unwrap()
         }
         _ => {
-            response = response.status(404);
+            builder = builder.status(404);
             String::new()
         }
     };
     let (sender, receiver) = channel(10);
     let recv = RecvStream::new(receiver, BinaryMut::from(body.into_bytes().to_vec()), false);
-    let response = response
+    let response = builder
         .body( recv )
         .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
 
-    let control = req.extensions_mut().get_mut::<SendControl>();
+    let control = req.extensions_mut().remove::<SendControl>();
     if control.is_some() {
-        // let mut send = control.unwrap().send_response(response, false).unwrap();
+        let (sender, receiver) = channel(10);
+        let recv = RecvStream::new(receiver, BinaryMut::from("push info".as_bytes().to_vec()), false);
+        let res = Response::builder().version(req.version().clone())
+            .body( recv )
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
+    
+        let mut send = control.unwrap().send_response(res).await?;
         // tokio::spawn(async move {
         //     for i in 1..8 {
         //         send.send_data(Binary::from(format!("hello{} ", i).into_bytes()), false);
@@ -129,19 +135,18 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
         //     }
         //     send.send_data(Binary::from_static("world\r\n".as_bytes()), true);
         // });
-        Ok(None)
-    } else {
-        tokio::spawn(async move {
-            println!("send!!!!!");
-            for i in 1..2 {
-                sender.send((false, Binary::from(format!("hello{} ", i).into_bytes()))).await;
-            }
-            println!("send!!!!! end!!!!!!");
-            sender.send((true, Binary::from_static("world\r\n".as_bytes()))).await;
-
-        });
-        Ok(Some(response))
+        // Ok(Some(response))
     }
+    tokio::spawn(async move {
+        println!("send!!!!!");
+        // for i in 1..2 {
+        //     sender.send((false, Binary::from(format!("hello{} ", i).into_bytes()))).await;
+        // }
+        println!("send!!!!! end!!!!!!");
+        // sender.send((true, Binary::from_static("world\r\n".as_bytes()))).await;
+
+    });
+    Ok(Some(response))
     
 }
 
@@ -185,7 +190,7 @@ async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     // let mut connect = StateHandshake::handshake(stream).await.unwrap();
     // let mut connect = dmeng::Builder::new().connection(stream);
     let mut server = Server::new(stream);
-    let ret = server.incoming(operate1).await;
+    let ret = server.incoming(operate).await;
     // while let Ok(Some(_)) = ret {
 
     // }

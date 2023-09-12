@@ -37,7 +37,7 @@ struct InnerConnection {
 
     control: Control,
 
-    receiver_push: Option<Receiver<Response<RecvStream>>>,
+    receiver_push: Option<Receiver<(StreamIdentifier, Response<RecvStream>)>>,
 }
 
 #[derive(Debug)]
@@ -67,7 +67,7 @@ where
             inner: InnerConnection {
                 state: State::Open,
                 control: Control::new(ControlConfig {
-                    next_stream_id: 2.into(),
+                    next_stream_id: 0.into(),
                     // Server does not need to locally initiate any streams
                     initial_max_send_streams: 0,
                     max_send_buffer_size: builder.max_send_buffer_size,
@@ -117,11 +117,9 @@ where
         Res: Serialize + Any,
     {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
-        // Server::try_wait_req::<Req>(mut r).await;
         if TypeId::of::<Req>() != TypeId::of::<RecvStream>() {
             let _ = r.body_mut().wait_all().await;
         }
-        // let r = Server::req_into_type::<Req>(r).await;
         match f(r.into_type::<Req>()).await? {
             Some(res) => {
                 self.send_response(
@@ -148,10 +146,11 @@ where
         let mut receiver = self.inner.receiver_push.take().unwrap();
         tokio::select! {
             res = receiver.recv() => {
+                self.inner.receiver_push = Some(receiver);
                 if res.is_some() {
                     let res = res.unwrap();
                     let id = self.inner.control.next_server_id();
-                    self.inner.control.send_response(res, id).await?;
+                    self.inner.control.send_response_may_push(res.1, res.0, Some(id)).await?;
                 }
             },
             req = self.next() => {

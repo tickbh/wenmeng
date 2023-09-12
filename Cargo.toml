@@ -1,10 +1,10 @@
 [package]
-name = "dmeng"
+name = "dianmeng"
 version = "0.1.0"
 edition = "2021"
 authors = [ "tickbh <tickdream125@hotmail.com>" ]
 description = "a web parse"
-repository = "https://github.com/tickbh/dmeng"
+repository = "https://github.com/tickbh/dianmeng"
 license = "Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -37,5 +37,14 @@ rbtree = "0.1.5"
 
 # http-body-util = { version = "1", optional = true }
 
+
+[dev-dependencies]
+reqwest={version="0.11"}
+
 [dependencies.webparse]
 path="../webparse"
+
+# [[example]]
+# name="client"
+# path = "examples/client.rs"
+# # [dependencies]

@@ -65,12 +65,12 @@ pub struct Control {
 
     config: ControlConfig,
     
-    sender_push: Sender<Response<RecvStream>>,
+    sender_push: Sender<(StreamIdentifier, Response<RecvStream>)>,
 
 }
 
 impl Control {
-    pub fn new(config: ControlConfig, sender_push: Sender<Response<RecvStream>>) -> Self {
+    pub fn new(config: ControlConfig, sender_push: Sender<(StreamIdentifier, Response<RecvStream>)>) -> Self {
         Control {
             recv_frames: HashMap::new(),
             send_frames: PriorityQueue::new(),
@@ -150,7 +150,6 @@ impl Control {
             }
             match Pin::new(&mut *codec).poll_next(cx) {
                 Poll::Ready(Some(Ok(frame))) => {
-                    let mut bytes = BinaryMut::new();
                     match &frame {
                         Frame::Settings(settings) => {
                             self.setting
@@ -215,7 +214,7 @@ impl Control {
                 r.extensions_mut().insert(stream_id);
                 r.extensions_mut().insert(SendControl::new(
                     stream_id,
-                    self.response_queue.clone(),
+                    self.sender_push.clone(),
                     method,
                 ));
                 Poll::Ready(Some(Ok(r)))
@@ -268,10 +267,16 @@ impl Control {
 
     pub async fn send_response(&mut self, res: Response<RecvStream>, stream_id: StreamIdentifier) -> ProtoResult<()>
     {
+        self.send_response_may_push(res, stream_id, None).await
+    }
+
+    pub async fn send_response_may_push(&mut self, res: Response<RecvStream>, stream_id: StreamIdentifier, push: Option<StreamIdentifier>) -> ProtoResult<()>
+    {
         let mut data = self.response_queue.lock().unwrap();
         let is_end = res.body().is_end();
         let response = SendResponse::new(
             stream_id,
+            push,
             res,
             webparse::Method::Get,
             is_end,
