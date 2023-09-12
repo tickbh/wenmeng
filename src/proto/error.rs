@@ -1,6 +1,8 @@
 use std::{fmt::{Display}, io};
 
-use webparse::{WebError, Binary, http::http2::frame::Reason, BinaryMut};
+use webparse::{WebError, Binary, http::http2::frame::Reason, BinaryMut, Request};
+
+use crate::RecvStream;
 
 pub type ProtoResult<T> = Result<T, ProtoError>;
 
@@ -12,7 +14,7 @@ pub enum ProtoError {
     GoAway(Binary, Reason, Initiator),
     Extension(&'static str),
     IsNotFull,
-    UpgradeHttp2,
+    UpgradeHttp2(Binary, Option<Request<RecvStream>>),
 }
 
 

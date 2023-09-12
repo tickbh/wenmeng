@@ -36,8 +36,6 @@ struct InnerConnection {
     state: State,
 
     control: Control,
-
-    receiver: Option<Receiver<()>>,
 }
 
 #[derive(Debug)]
@@ -61,25 +59,20 @@ where
     T: AsyncRead + AsyncWrite + Unpin,
 {
     pub fn new(io: T, builder: Builder) -> H2Connection<T> {
-        let (sender, receiver) = tokio::sync::mpsc::channel::<()>(1);
         H2Connection {
             codec: Codec::new(io),
             inner: InnerConnection {
                 state: State::Open,
-                control: Control::new(
-                    ControlConfig {
-                        next_stream_id: 2.into(),
-                        // Server does not need to locally initiate any streams
-                        initial_max_send_streams: 0,
-                        max_send_buffer_size: builder.max_send_buffer_size,
-                        reset_stream_duration: builder.reset_stream_duration,
-                        reset_stream_max: builder.reset_stream_max,
-                        remote_reset_stream_max: builder.pending_accept_reset_stream_max,
-                        settings: builder.settings.clone(),
-                    },
-                    sender,
-                ),
-                receiver: Some(receiver),
+                control: Control::new(ControlConfig {
+                    next_stream_id: 2.into(),
+                    // Server does not need to locally initiate any streams
+                    initial_max_send_streams: 0,
+                    max_send_buffer_size: builder.max_send_buffer_size,
+                    reset_stream_duration: builder.reset_stream_duration,
+                    reset_stream_max: builder.reset_stream_max,
+                    remote_reset_stream_max: builder.pending_accept_reset_stream_max,
+                    settings: builder.settings.clone(),
+                }),
             },
         }
     }
@@ -106,10 +99,32 @@ where
         // }
     }
 
-    pub async fn incoming<F, Fut, R>(
+    pub async fn handle_request<F, Fut, R>(
         &mut self,
+        mut r: Request<RecvStream>,
         f: &mut F,
     ) -> ProtoResult<Option<bool>>
+    where
+        F: FnMut(Request<RecvStream>) -> Fut,
+        Fut: Future<Output = ProtoResult<Option<Response<R>>>>,
+        RecvStream: From<R>,
+        R: Serialize,
+    {
+        let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
+        match f(r).await? {
+            Some(res) => {
+                self.send_response(
+                    res.into_type(),
+                    stream_id.unwrap_or(StreamIdentifier::client_first()),
+                )
+                .await?;
+            }
+            None => (),
+        }
+        return Ok(None);
+    }
+
+    pub async fn incoming<F, Fut, R>(&mut self, f: &mut F) -> ProtoResult<Option<bool>>
     where
         F: FnMut(Request<RecvStream>) -> Fut,
         Fut: Future<Output = ProtoResult<Option<Response<R>>>>,
@@ -121,17 +136,11 @@ where
         match req {
             None => return Ok(Some(true)),
             Some(Err(e)) => return Err(e),
-            Some(Ok(mut r)) => {
-                let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
-                match f(r).await? {
-                    Some(res) => {
-                        self.send_response(res.into_type(), stream_id.unwrap_or(StreamIdentifier::zero())).await?;
-                    }
-                    None => (),
-                }
+            Some(Ok(r)) => {
+                self.handle_request(r, f).await?;
             }
         };
-        return Ok(None)
+        return Ok(None);
     }
 
     fn handle_poll_result(
@@ -211,8 +220,8 @@ where
         self.codec.set_cache_buf(read_buf, write_buf)
     }
 
-    pub fn set_handshake_ok(&mut self) {
-        self.inner.control.set_handshake_ok()
+    pub fn set_handshake_status(&mut self, binary: Binary) {
+        self.inner.control.set_handshake_status(binary)
     }
 
     pub async fn send_response(

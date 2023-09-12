@@ -47,11 +47,22 @@ impl RecvStream {
     }
 
     pub fn binary(&mut self) -> Binary {
-        self.binary.take().unwrap_or(Binary::new())
+        let mut buffer = BinaryMut::new();
+        if let Some(bin) = self.binary.take() {
+            buffer.put_slice(bin.chunk());
+        }
+        if let Some(bin) = self.binary_mut.take() {
+            buffer.put_slice(bin.chunk());
+        }
+        buffer.freeze()
     }
 
     pub fn is_end(&self) -> bool {
         self.is_end
+    }
+    
+    pub fn set_end(&mut self, end: bool) {
+        self.is_end = end
     }
 
     pub fn try_recv(&mut self) {

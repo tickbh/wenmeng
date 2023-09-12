@@ -63,11 +63,10 @@ pub struct Control {
 
     config: ControlConfig,
 
-    write_sender: Sender<()>,
 }
 
 impl Control {
-    pub fn new(config: ControlConfig, write_sender: Sender<()>) -> Self {
+    pub fn new(config: ControlConfig) -> Self {
         Control {
             recv_frames: HashMap::new(),
             send_frames: PriorityQueue::new(),
@@ -80,7 +79,6 @@ impl Control {
             last_stream_id: StreamIdentifier::zero(),
             error: None,
             config,
-            write_sender,
         }
     }
 
@@ -210,7 +208,6 @@ impl Control {
                     stream_id,
                     self.response_queue.clone(),
                     method,
-                    self.write_sender.clone(),
                 ));
                 Poll::Ready(Some(Ok(r)))
             }
@@ -256,8 +253,8 @@ impl Control {
         self.goaway.reason()
     }
 
-    pub fn set_handshake_ok(&mut self) {
-        self.handshake.set_handshake_ok()
+    pub fn set_handshake_status(&mut self, binary: Binary) {
+        self.handshake.set_handshake_status(binary)
     }
 
     pub async fn send_response<R>(&mut self, res: Response<R>, stream_id: StreamIdentifier) -> ProtoResult<()>
@@ -265,12 +262,13 @@ impl Control {
         RecvStream: From<R>,
         R: Serialize, {
         let mut data = self.response_queue.lock().unwrap();
+        let res = res.into_type::<RecvStream>();
+        let is_end = res.body().is_end();
         let response = SendResponse::new(
             stream_id,
-            res.into_type::<RecvStream>(),
+            res,
             webparse::Method::Get,
-            true,
-            self.write_sender.clone(),
+            is_end,
         );
         data.push(response);
         Ok(())

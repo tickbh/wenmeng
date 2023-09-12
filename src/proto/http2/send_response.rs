@@ -2,7 +2,7 @@ use rbtree::RBTree;
 use std::sync::{Arc, Mutex};
 use std::task::Context;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use webparse::BinaryMut;
+use webparse::{BinaryMut, Buf};
 use webparse::{
     http::http2::{
         frame::{
@@ -27,7 +27,6 @@ pub struct SendResponse {
 
     pub method: Method,
     pub receiver: Option<Receiver<(bool, Binary)>>,
-    pub write_sender: Sender<()>,
 }
 
 impl SendResponse {
@@ -36,7 +35,6 @@ impl SendResponse {
         response: Response<RecvStream>,
         method: Method,
         is_end_stream: bool,
-        write_sender: Sender<()>,
     ) -> Self {
         SendResponse {
             stream_id,
@@ -46,7 +44,6 @@ impl SendResponse {
             is_end_stream,
             method,
             receiver: None,
-            write_sender,
         }
     }
 
@@ -60,36 +57,23 @@ impl SendResponse {
             result.push(Frame::Headers(header));
             self.encode_header = true;
         }
-        if !self.method.res_nobody() && !self.encode_body {
-            let flag = if self.is_end_stream {
-                Flag::end_stream()
-            } else {
-                Flag::zero()
-            };
-            let header = FrameHeader::new(Kind::Data, flag, self.stream_id);
-            let data = Data::new(header, self.response.body_mut().binary());
-            result.push(Frame::Data(data));
-            self.encode_body = true;
-        }
-        if let Some(recv) = &mut self.receiver {
-            loop {
-                match recv.poll_recv(cx) {
-                    std::task::Poll::Ready(Some(val)) => {
-                        let flag = if val.0 {
-                            Flag::end_stream()
-                        } else {
-                            Flag::zero()
-                        };
-                        self.is_end_stream = val.0;
-                        let header = FrameHeader::new(Kind::Data, flag, self.stream_id);
-                        let data = Data::new(header, val.1);
-                        result.push(Frame::Data(data));
-                    },
-                    std::task::Poll::Ready(None) => break,
-                    std::task::Poll::Pending => break,
-                }
+
+        if !self.response.body().is_end() {
+            let mut binary = BinaryMut::new();
+            let _ = self.response.body_mut().poll_encode(cx, &mut binary);
+            if binary.remaining() > 0 {
+                self.is_end_stream = self.response.body().is_end();
+                let flag = if self.is_end_stream {
+                    Flag::end_stream()
+                } else {
+                    Flag::zero()
+                };
+                let header = FrameHeader::new(Kind::Data, flag, self.stream_id);
+                let data = Data::new(header, binary.freeze());
+                result.push(Frame::Data(data));
             }
         }
+
         (self.is_end_stream, result)
     }
 
@@ -99,7 +83,7 @@ impl SendResponse {
         } else {
             let (sender, receiver) = channel::<(bool, Binary)>(100);
             self.receiver = Some(receiver);
-            SendStream::new(sender, self.write_sender.clone())
+            SendStream::new(sender)
         }
     }
 }
@@ -109,7 +93,6 @@ pub struct SendControl {
     pub stream_id: StreamIdentifier,
     pub queue: Arc<Mutex<Vec<SendResponse>>>,
     pub method: Method,
-    pub write_sender: Sender<()>,
 }
 
 impl SendControl {
@@ -117,13 +100,11 @@ impl SendControl {
         stream_id: StreamIdentifier,
         queue: Arc<Mutex<Vec<SendResponse>>>,
         method: Method,
-        write_sender: Sender<()>,
     ) -> Self {
         SendControl {
             stream_id,
             queue,
             method,
-            write_sender,
         }
     }
 
@@ -140,7 +121,6 @@ impl SendControl {
             res.into_type(),
             self.method.clone(),
             is_end_stream,
-            self.write_sender.clone(),
         );
         let steam = response.create_sendstream();
         data.push(response);

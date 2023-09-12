@@ -129,8 +129,13 @@ impl StateHandshake {
     }
 
     
-    pub fn set_handshake_ok(&mut self) {
-        self.state = Handshaking::Done
+    pub fn set_handshake_status(&mut self, binary: Binary) {
+        if binary.remaining() == 0 {
+            self.state = Handshaking::Done
+        } else {
+            self.state = Handshaking::Flushing(Flush(binary))
+        }
+        
     }
 }
 
@@ -146,8 +151,6 @@ impl Flush {
         if !self.0.has_remaining() {
             return Poll::Ready(Ok(()));
         }
-
-        // codec.get_mut().pull_write()
 
         loop {
             match ready!(Pin::new(codec.get_mut()).poll_write(cx, self.0.chunk())) {

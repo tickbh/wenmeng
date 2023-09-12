@@ -47,8 +47,6 @@ impl PriorityQueue {
             let first = self.send_queue.pop_first().unwrap();
             codec.send_frame(first.0.frame)?;
         }
-
-        return Poll::Ready(None);
     }
 
 }

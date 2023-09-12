@@ -9,7 +9,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::mpsc::Receiver,
 };
-use webparse::{Request, Response, Serialize, BinaryMut};
+use webparse::{Request, Response, Serialize, BinaryMut, http::response, Binary};
 
 use crate::{H2Connection, ProtoResult, RecvStream, proto::recv_stream};
 
@@ -41,12 +41,35 @@ where
         self.io.poll_request(cx)
     }
 
-    pub fn into_h2(self) -> H2Connection<T> {
+    pub fn into_h2(self, binary: Binary) -> H2Connection<T> {
         let (io, read_buf, write_buf) = self.io.into();
         let mut connect = crate::http2::Builder::new().connection(io);
         connect.set_cache_buf(read_buf, write_buf);
-        connect.set_handshake_ok();
+        connect.set_handshake_status(binary);
         connect
+    }
+
+    pub async fn handle_request<F, Fut, R>(&mut self, r: Request<RecvStream>, f: &mut F) -> ProtoResult<Option<bool>>
+    where
+    F: FnMut(Request<RecvStream>) -> Fut,
+    Fut: Future<Output = ProtoResult<Option<Response<R>>>>,
+    RecvStream: From<R>,
+    R: Serialize {
+        if let Some(protocol) = r.headers().get_upgrade_protocol() {
+            if protocol == "h2c" {
+                let mut response = Response::builder().status(101).header("Connection", "Upgrade").header("Upgrade", "h2c").body(()).unwrap();
+                let mut binary = BinaryMut::new();
+                let _ = response.serialize(&mut binary);
+                return Err(crate::ProtoError::UpgradeHttp2(binary.freeze(), Some(r)));
+            }
+        }
+        match f(r).await? {
+            Some(res) => {
+                self.send_response(res.into_type()).await?;
+            }
+            None => (),
+        }
+        return Ok(None)
     }
 
     pub async fn incoming<F, Fut, R>(&mut self, f: &mut F) -> ProtoResult<Option<bool>>
@@ -62,13 +85,7 @@ where
             None => return Ok(Some(true)),
             Some(Err(e)) => return Err(e),
             Some(Ok(r)) => {
-                // r.try_into()
-                match f(r).await? {
-                    Some(res) => {
-                        self.send_response(res.into_type()).await?;
-                    }
-                    None => (),
-                }
+                self.handle_request(r, f).await?;
             }
         };
         return Ok(None)

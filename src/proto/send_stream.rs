@@ -9,7 +9,6 @@ use crate::ProtoResult;
 #[derive(Debug)]
 pub struct SendStream {
     sender: Option<Sender<(bool, Binary)>>,
-    write_sender: Option<Sender<()>>,
     is_end: bool,
 }
 
@@ -17,15 +16,13 @@ impl SendStream {
     pub fn empty() -> SendStream {
         SendStream {
             sender: None,
-            write_sender: None,
             is_end: true,
         }
     }
 
-    pub fn new(sender: Sender<(bool, Binary)>, write_sender: Sender<()>) -> SendStream {
+    pub fn new(sender: Sender<(bool, Binary)>) -> SendStream {
         SendStream {
             sender: Some(sender),
-            write_sender: Some(write_sender),
             is_end: false,
         }
     }
@@ -45,9 +42,6 @@ impl SendStream {
                 TrySendError::Full(v) => v,
             });
         }
-        self.write_sender.as_ref().map(|s| {
-            s.try_send(()) 
-        });
         None
     }
 

@@ -172,7 +172,7 @@ where
                                 && &self.read_buf[..http2::MAIGC_LEN] == http2::HTTP2_MAGIC
                             {
                                 self.read_buf.advance(http2::MAIGC_LEN);
-                                let err = ProtoError::UpgradeHttp2;
+                                let err = ProtoError::UpgradeHttp2(Binary::new(), None);
                                 return Poll::Ready(Some(Err(err)));
                             }
                             return Poll::Ready(Some(Err(e.into())));

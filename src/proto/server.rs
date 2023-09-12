@@ -74,12 +74,17 @@ where
             // println!("test: result = {:?}", result);
             match result {
                 Ok(None) | Ok(Some(false)) => continue,
-                Err(ProtoError::UpgradeHttp2) => {
+                Err(ProtoError::UpgradeHttp2(b, r)) => {
                     if self.http1.is_some() {
-                        self.http2 = Some(self.http1.take().unwrap().into_h2());
+                        self.http2 = Some(self.http1.take().unwrap().into_h2(b));
+                        if let Some(r) = r {
+                            self.http2.as_mut().unwrap().handle_request(r, &mut f).await?;
+                        }
                         continue;
+                    } else {
+                        return Err(ProtoError::UpgradeHttp2(b, r));
                     }
-                    return Err(ProtoError::UpgradeHttp2);
+                    
                 }
                 Err(e) => return Err(e),
                 Ok(Some(true)) => return Ok(Some(true)),
