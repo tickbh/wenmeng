@@ -26,8 +26,11 @@ use crate::{ProtResult, RecvStream, ProtError};
 
 use super::{
     codec::Codec, inner_stream::InnerStream, send_response::SendControl, state::StateHandshake,
-    PriorityQueue, SendResponse, StateGoAway, StatePingPong, StateSettings, WindowSize, DEFAULT_INITIAL_WINDOW_SIZE,
+    PriorityQueue, SendResponse, StateGoAway, StatePingPong, StateSettings, 
 };
+
+use webparse::http2::DEFAULT_INITIAL_WINDOW_SIZE;
+use webparse::http2::WindowSize;
 
 #[derive(Debug, Clone)]
 pub struct ControlConfig {

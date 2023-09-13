@@ -33,13 +33,14 @@ pub struct Builder {
 
 impl Builder {
     pub fn new() -> Builder {
+        use webparse::http::http2::*;
         Builder {
-            reset_stream_duration: Duration::from_secs(super::DEFAULT_RESET_STREAM_SECS),
-            reset_stream_max: super::DEFAULT_RESET_STREAM_MAX,
-            pending_accept_reset_stream_max: super::DEFAULT_REMOTE_RESET_STREAM_MAX,
+            reset_stream_duration: Duration::from_secs(DEFAULT_RESET_STREAM_SECS),
+            reset_stream_max: DEFAULT_RESET_STREAM_MAX,
+            pending_accept_reset_stream_max: DEFAULT_REMOTE_RESET_STREAM_MAX,
             settings: Settings::default(),
             initial_target_connection_window_size: None,
-            max_send_buffer_size: super::DEFAULT_MAX_SEND_BUFFER_SIZE,
+            max_send_buffer_size: DEFAULT_MAX_SEND_BUFFER_SIZE,
         }
     }
 

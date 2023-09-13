@@ -1,4 +1,4 @@
-use super::WindowSize;
+use webparse::http2::WindowSize;
 
 #[derive(Debug)]
 pub struct FlowControl {

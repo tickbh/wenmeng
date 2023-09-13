@@ -3,13 +3,13 @@ use std::{sync::Arc, task::{Context, Poll}, collections::HashMap};
 use rbtree::RBTree;
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{
-    http::http2::frame::{Frame, Priority, PriorityFrame, StreamIdentifier},
+    http::http2::{frame::{Frame, Priority, PriorityFrame, StreamIdentifier}, WindowSize},
     Binary, Serialize, Response,
 };
 
 use crate::ProtResult;
 
-use super::{codec::Codec, WindowSize, FlowControl};
+use super::{codec::Codec, FlowControl};
 
 #[derive(Debug)]
 pub struct PriorityQueue {

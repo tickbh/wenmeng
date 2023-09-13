@@ -13,14 +13,13 @@ use tokio_util::codec::length_delimited;
 use webparse::BinaryMut;
 use webparse::http::http2::encoder::Encoder;
 use webparse::http::http2::frame::Frame;
-use webparse::http::http2::HeaderIndex;
+use webparse::http::http2::{HeaderIndex, DEFAULT_MAX_FRAME_SIZE, DEFAULT_SETTINGS_HEADER_TABLE_SIZE, MAX_MAX_FRAME_SIZE};
 
 use crate::ProtResult;
 
 pub use self::framed_read::FramedRead;
 pub use self::framed_write::FramedWrite;
 
-use super::{DEFAULT_SETTINGS_HEADER_TABLE_SIZE, FrameSize};
 
 #[derive(Debug)]
 pub struct Codec<T> {
@@ -37,7 +36,7 @@ where
     /// Returns a new `Codec` with the default max frame size
     #[inline]
     pub fn new(io: T) -> Self {
-        Self::with_max_recv_frame_size(io, super::DEFAULT_MAX_FRAME_SIZE as usize)
+        Self::with_max_recv_frame_size(io, DEFAULT_MAX_FRAME_SIZE as usize)
     }
 
     /// Returns a new `Codec` with the given maximum frame size
@@ -61,8 +60,8 @@ where
         Codec {
             inner,
             header_index: Arc::new(RwLock::new(HeaderIndex::new())),
-            header_table_size: super::DEFAULT_SETTINGS_HEADER_TABLE_SIZE,
-            max_send_frame_size: super::MAX_MAX_FRAME_SIZE as usize,
+            header_table_size: DEFAULT_SETTINGS_HEADER_TABLE_SIZE,
+            max_send_frame_size: MAX_MAX_FRAME_SIZE as usize,
         }
     }
 
