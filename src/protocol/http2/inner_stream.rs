@@ -8,7 +8,7 @@ use webparse::{
     Binary, BinaryMut, Request, Buf,
 };
 
-use crate::{ProtoError, ProtoResult};
+use crate::{ProtError, ProtResult};
 
 use crate::RecvStream;
 
@@ -36,7 +36,7 @@ impl InnerStream {
         }
     }
 
-    pub fn push(&mut self, frame: Frame<Binary>) -> ProtoResult<()> {
+    pub fn push(&mut self, frame: Frame<Binary>) -> ProtResult<()> {
         if frame.is_end_headers() {
             self.end_headers = true;
         }
@@ -48,14 +48,14 @@ impl InnerStream {
                 Frame::Data(d) => {
                     self.recv_len += d.payload().remaining();
                     if let Err(_e) = sender.try_send((d.is_end_stream(), d.into_payload())) {
-                        return Err(ProtoError::Extension("must be data frame"));
+                        return Err(ProtError::Extension("must be data frame"));
                     }
                     if self.recv_len > self.content_len {
-                        return Err(ProtoError::Extension("content len must not more"));
+                        return Err(ProtError::Extension("content len must not more"));
                     }
                 }
                 _ => {
-                    return Err(ProtoError::Extension("must be data frame"));
+                    return Err(ProtError::Extension("must be data frame"));
                 }
             }
         } else {
@@ -68,7 +68,7 @@ impl InnerStream {
         self.frames.drain(..).collect()
     }
 
-    pub fn build_request(&mut self) -> ProtoResult<Request<RecvStream>> {
+    pub fn build_request(&mut self) -> ProtResult<Request<RecvStream>> {
         let mut now_frames = self.take();
         let mut builder = request::Request::builder();
         let mut is_nobody = false;
@@ -89,7 +89,7 @@ impl InnerStream {
                     binary.put_slice(d.payload().chunk());
                 },
                 _ => {
-                    return Err(ProtoError::library_go_away(Reason::PROTOCOL_ERROR));
+                    return Err(ProtError::library_go_away(Reason::PROTOCOL_ERROR));
                 }
             }
         }

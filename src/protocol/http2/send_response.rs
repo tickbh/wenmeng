@@ -16,7 +16,7 @@ use webparse::{
     Binary, Method, Response, Serialize,
 };
 
-use crate::{ProtoResult, RecvStream};
+use crate::{ProtResult, RecvStream};
 use crate::SendStream;
 
 #[derive(Debug)]
@@ -116,7 +116,7 @@ impl SendControl {
     pub async fn send_response(
         &mut self,
         res: Response<RecvStream>
-    ) -> ProtoResult<()> {
+    ) -> ProtResult<()> {
         let _ = self.sender.send((self.stream_id, res)).await;
         Ok(())
     }

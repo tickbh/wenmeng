@@ -37,7 +37,7 @@ use tokio_stream::StreamExt;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
 use dianmeng::{
-    self, H2Connection, ProtoResult, RecvStream, SendControl, SendStream, Server, StateHandshake,
+    self, H2Connection, ProtResult, RecvStream, SendControl, SendStream, Server, StateHandshake,
 };
 
 trait Xx {
@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<RecvStream>>> {
+async fn operate(mut req: Request<RecvStream>) -> ProtResult<Option<Response<RecvStream>>> {
     let mut builder = Response::builder().version(req.version().clone());
     let body = match &*req.url().path {
         "/plaintext" | "/" => {
@@ -177,7 +177,7 @@ async fn operate(mut req: Request<RecvStream>) -> ProtoResult<Option<Response<Re
     Ok(Some(response))
 }
 
-async fn operate1(mut req: Request<String>) -> ProtoResult<Option<Response<String>>> {
+async fn operate1(mut req: Request<String>) -> ProtResult<Option<Response<String>>> {
     let mut response = Response::builder().version(req.version().clone());
     let body = match &*req.url().path {
         "/plaintext" => {

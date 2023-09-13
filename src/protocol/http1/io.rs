@@ -14,7 +14,7 @@ use webparse::{
     http::http2, Binary, BinaryMut, Buf, BufMut, Request, Response, Serialize, WebError,
 };
 
-use crate::{ProtoError, ProtoResult, RecvStream};
+use crate::{ProtError, ProtResult, RecvStream};
 
 pub struct IoBuffer<T> {
     io: T,
@@ -65,7 +65,7 @@ where
         }
     }
 
-    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtoResult<()>> {
+    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<()>> {
         println!("!!!!!!!!!!!!!!!!!!!!!!!");
         if let Some(res) = &mut self.inner.res {
             if !self.inner.is_send_header {
@@ -104,7 +104,7 @@ where
         Poll::Pending
     }
 
-    pub fn poll_read(&mut self, cx: &mut Context<'_>) -> Poll<ProtoResult<usize>> {
+    pub fn poll_read(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
         self.read_buf.reserve(1);
         let n = {
             let mut buf = ReadBuf::uninit(self.read_buf.chunk_mut());
@@ -120,7 +120,7 @@ where
         Poll::Ready(Ok(n))
     }
 
-    pub fn poll_read_all(&mut self, cx: &mut Context<'_>) -> Poll<ProtoResult<usize>> {
+    pub fn poll_read_all(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
         let mut size = 0;
         loop {
             match self.poll_read(cx)? {
@@ -141,7 +141,7 @@ where
     pub fn poll_request(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtoResult<Request<RecvStream>>>> {
+    ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
         let _ = self.poll_write(cx)?;
         if self.inner.is_active_close() && self.write_buf.is_empty() {
             println!("test:::: write client end!!!");
@@ -175,7 +175,7 @@ where
                                 && &self.read_buf[..http2::MAIGC_LEN] == http2::HTTP2_MAGIC
                             {
                                 self.read_buf.advance(http2::MAIGC_LEN);
-                                let err = ProtoError::UpgradeHttp2(Binary::new(), None);
+                                let err = ProtError::UpgradeHttp2(Binary::new(), None);
                                 return Poll::Ready(Some(Err(err)));
                             }
                             return Poll::Ready(Some(Err(e.into())));
@@ -214,7 +214,7 @@ where
         (self.io, self.read_buf, self.write_buf)
     }
 
-    pub async fn send_response(&mut self, mut res: Response<RecvStream>) -> ProtoResult<()> {
+    pub async fn send_response(&mut self, mut res: Response<RecvStream>) -> ProtResult<()> {
         self.inner.res = Some(res);
         // self.io.
         // let mut buffer = BinaryMut::new();

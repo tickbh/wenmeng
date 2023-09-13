@@ -1,12 +1,12 @@
 
 use std::{error, fmt, io};
 
-use crate::proto::ProtoError;
+use crate::protocol::ProtError;
 
 /// Errors caused by sending a message
 #[derive(Debug)]
 pub enum SendError {
-    Connection(ProtoError),
+    Connection(ProtError),
     User(UserError),
 }
 

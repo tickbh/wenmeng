@@ -10,6 +10,5 @@ pub use self::recv_stream::RecvStream;
 pub use self::send_stream::SendStream;
 
 pub use self::server::Server;
-pub use self::error::{ProtoResult, ProtoError, Initiator};
-// pub use self::http::Http;
+pub use self::error::{ProtResult, ProtError, Initiator};
 pub use self::http2::{Builder, H2Connection, StateHandshake, SendControl};

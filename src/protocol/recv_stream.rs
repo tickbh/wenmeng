@@ -8,7 +8,7 @@ use tokio::{
 };
 use webparse::{Binary, BinaryMut, Buf, Serialize};
 
-use crate::{ProtoResult, ProtoError};
+use crate::{ProtResult, ProtError};
 
 #[derive(Debug)]
 pub struct RecvStream {
@@ -176,7 +176,7 @@ impl RecvStream {
 }
 
 impl Stream for RecvStream {
-    type Item = ProtoResult<Binary>;
+    type Item = ProtResult<Binary>;
 
     fn poll_next(
         self: std::pin::Pin<&mut Self>,

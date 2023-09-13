@@ -15,7 +15,7 @@ use webparse::http::http2::encoder::Encoder;
 use webparse::http::http2::frame::Frame;
 use webparse::http::http2::HeaderIndex;
 
-use crate::ProtoResult;
+use crate::ProtResult;
 
 pub use self::framed_read::FramedRead;
 pub use self::framed_write::FramedWrite;
@@ -88,7 +88,7 @@ where
         self.inner.get_mut()
     }
 
-    pub fn send_frame(&mut self, frame: Frame) -> ProtoResult<usize> {
+    pub fn send_frame(&mut self, frame: Frame) -> ProtResult<usize> {
         let mut encoder = Encoder::new_index(self.header_index.clone(), self.max_send_frame_size);
         let usize = frame.encode(self.framed_write().get_bytes(), &mut encoder)?;
         Ok(usize)
@@ -116,7 +116,7 @@ impl<T> Stream for Codec<T>
 where
     T: AsyncRead + Unpin,
 {
-    type Item = ProtoResult<Frame>;
+    type Item = ProtResult<Frame>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         Pin::new(&mut self.inner).poll_next(cx)

@@ -4,8 +4,8 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::http::http2::frame::{Frame, Reason, Settings};
 
 use crate::{
-    proto::http2::{codec::Codec, control::ControlConfig, Control},
-    ProtoError, ProtoResult,
+    protocol::http2::{codec::Codec, control::ControlConfig, Control},
+    ProtError, ProtResult,
 };
 
 pub struct StateSettings {
@@ -35,7 +35,7 @@ impl StateSettings {
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
         config: &mut ControlConfig,
-    ) -> Poll<ProtoResult<()>>
+    ) -> Poll<ProtResult<()>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -75,7 +75,7 @@ impl StateSettings {
         codec: &mut Codec<T>,
         setting: Settings,
         config: &mut ControlConfig,
-    ) -> ProtoResult<()>
+    ) -> ProtResult<()>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -92,7 +92,7 @@ impl StateSettings {
                     }
                 }
                 _ => {
-                    return Err(ProtoError::library_go_away(Reason::PROTOCOL_ERROR));
+                    return Err(ProtError::library_go_away(Reason::PROTOCOL_ERROR));
                 }
             }
             self.state = LocalState::Done;
@@ -103,10 +103,10 @@ impl StateSettings {
         }
     }
 
-    pub fn send_settings(&mut self, setting: Settings) -> ProtoResult<()> {
+    pub fn send_settings(&mut self, setting: Settings) -> ProtResult<()> {
         assert!(!setting.is_ack());
         match &self.state {
-            LocalState::Send(_) | LocalState::WaitAck(_) => Err(ProtoError::Extension("")),
+            LocalState::Send(_) | LocalState::WaitAck(_) => Err(ProtError::Extension("")),
             LocalState::Done => {
                 self.state = LocalState::Send(setting);
                 Ok(())

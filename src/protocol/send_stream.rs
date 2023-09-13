@@ -4,7 +4,7 @@ use futures_core::Stream;
 use tokio::sync::mpsc::{Sender, error::TrySendError};
 use webparse::{Binary, BinaryMut, Serialize};
 
-use crate::ProtoResult;
+use crate::ProtResult;
 
 #[derive(Debug)]
 pub struct SendStream {
@@ -51,7 +51,7 @@ impl SendStream {
 }
 
 impl Stream for SendStream {
-    type Item=ProtoResult<Binary>;
+    type Item=ProtResult<Binary>;
 
     fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
         todo!()

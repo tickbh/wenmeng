@@ -16,7 +16,7 @@ use webparse::{
 };
 
 use crate::{
-    proto::{ProtoError, ProtoResult},
+    protocol::{ProtError, ProtResult},
     Builder, Initiator, RecvStream, Server,
 };
 
@@ -81,21 +81,21 @@ where
         }
     }
 
-    pub fn pull_accept(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtoResult<()>>> {
+    pub fn pull_accept(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtResult<()>>> {
         Poll::Pending
     }
 
     pub fn poll_request(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtoResult<Request<RecvStream>>>> {
+    ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
         self.inner.control.poll_request(cx, &mut self.codec)
         // loop {
         //     ready!(Pin::new(&mut self.codec).poll_next(cx)?);
         // }
     }
 
-    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtoResult<()>> {
+    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<()>> {
         println!("poll write!!!!!!!");
         self.inner.control.poll_write(cx, &mut self.codec)
         // loop {
@@ -107,10 +107,10 @@ where
         &mut self,
         mut r: Request<RecvStream>,
         f: &mut F,
-    ) -> ProtoResult<Option<bool>>
+    ) -> ProtResult<Option<bool>>
     where
         F: FnMut(Request<Req>) -> Fut,
-        Fut: Future<Output = ProtoResult<Option<Response<Res>>>>,
+        Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
         Req: From<RecvStream>,
         Req: Serialize + Any,
         RecvStream: From<Res>,
@@ -133,10 +133,10 @@ where
         return Ok(None);
     }
 
-    pub async fn incoming<F, Fut, Res, Req>(&mut self, f: &mut F) -> ProtoResult<Option<bool>>
+    pub async fn incoming<F, Fut, Res, Req>(&mut self, f: &mut F) -> ProtResult<Option<bool>>
     where
     F: FnMut(Request<Req>) -> Fut,
-    Fut: Future<Output = ProtoResult<Option<Response<Res>>>>,
+    Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
     Req: From<RecvStream>,
     Req: Serialize + Any,
     RecvStream: From<Res>,
@@ -177,16 +177,16 @@ where
 
     fn handle_poll_result(
         &mut self,
-        result: Option<ProtoResult<Request<RecvStream>>>,
-    ) -> ProtoResult<()> {
+        result: Option<ProtResult<Request<RecvStream>>>,
+    ) -> ProtResult<()> {
         match result {
             // 收到空包, 则关闭连接
             None => {
                 self.inner.state = State::Closing(Reason::NO_ERROR, Initiator::Library);
                 Ok(())
             }
-            Some(Err(ProtoError::GoAway(debug_data, reason, initiator))) => {
-                let e = ProtoError::GoAway(debug_data.clone(), reason, initiator);
+            Some(Err(ProtError::GoAway(debug_data, reason, initiator))) => {
+                let e = ProtError::GoAway(debug_data.clone(), reason, initiator);
                 tracing::debug!(error = ?e, "Connection::poll; connection error");
 
                 if self.inner.control.last_goaway_reason() == &reason {
@@ -208,7 +208,7 @@ where
         }
     }
 
-    fn take_error(&mut self, ours: Reason, initiator: Initiator) -> ProtoResult<()> {
+    fn take_error(&mut self, ours: Reason, initiator: Initiator) -> ProtResult<()> {
         let (debug_data, theirs) = self
             .inner
             .control
@@ -221,8 +221,8 @@ where
 
         match (ours, theirs) {
             (Reason::NO_ERROR, Reason::NO_ERROR) => Ok(()),
-            (ours, Reason::NO_ERROR) => Err(ProtoError::GoAway(Binary::new(), ours, initiator)),
-            (_, theirs) => Err(ProtoError::GoAway(debug_data, theirs, Initiator::Remote)),
+            (ours, Reason::NO_ERROR) => Err(ProtError::GoAway(Binary::new(), ours, initiator)),
+            (_, theirs) => Err(ProtError::GoAway(debug_data, theirs, Initiator::Remote)),
         }
     }
 
@@ -238,7 +238,7 @@ where
         &mut self,
         res: Response<RecvStream>,
         stream_id: StreamIdentifier,
-    ) -> ProtoResult<()> {
+    ) -> ProtResult<()> {
         self.inner.control.send_response(res, stream_id).await
     }
 }
@@ -247,7 +247,7 @@ impl<T> Stream for H2Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = ProtoResult<Request<RecvStream>>;
+    type Item = ProtResult<Request<RecvStream>>;
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,

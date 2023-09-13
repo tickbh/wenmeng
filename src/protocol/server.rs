@@ -4,7 +4,7 @@ use futures_core::{stream, Future};
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize};
 
-use crate::{H2Connection, ProtoError, ProtoResult, RecvStream, SendControl, SendStream};
+use crate::{H2Connection, ProtError, ProtResult, RecvStream, SendControl, SendStream};
 
 use super::http1::H1Connection;
 
@@ -31,7 +31,7 @@ where
         &mut self,
         res: Response<R>,
         stream_id: Option<StreamIdentifier>,
-    ) -> ProtoResult<()>
+    ) -> ProtResult<()>
     where
         RecvStream: From<R>,
         R: Serialize,
@@ -72,7 +72,7 @@ where
     }
 
     
-    pub async fn try_wait_req<Req>(r: &mut Request<RecvStream>) -> ProtoResult<()>
+    pub async fn try_wait_req<Req>(r: &mut Request<RecvStream>) -> ProtResult<()>
     where
         Req: From<RecvStream>,
         Req: Serialize,
@@ -83,10 +83,10 @@ where
         Ok(())
     }
 
-    pub async fn incoming<F, Fut, Res, Req>(&mut self, mut f: F) -> ProtoResult<Option<bool>>
+    pub async fn incoming<F, Fut, Res, Req>(&mut self, mut f: F) -> ProtResult<Option<bool>>
     where
     F: FnMut(Request<Req>) -> Fut,
-    Fut: Future<Output = ProtoResult<Option<Response<Res>>>>,
+    Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
     Req: From<RecvStream>,
     Req: Serialize + Any,
     RecvStream: From<Res>,
@@ -106,7 +106,7 @@ where
             // println!("test: result = {:?}", result);
             match result {
                 Ok(None) | Ok(Some(false)) => continue,
-                Err(ProtoError::UpgradeHttp2(b, r)) => {
+                Err(ProtError::UpgradeHttp2(b, r)) => {
                     if self.http1.is_some() {
                         self.http2 = Some(self.http1.take().unwrap().into_h2(b));
                         if let Some(r) = r {
@@ -118,7 +118,7 @@ where
                         }
                         continue;
                     } else {
-                        return Err(ProtoError::UpgradeHttp2(b, r));
+                        return Err(ProtError::UpgradeHttp2(b, r));
                     }
                 }
                 Err(e) => return Err(e),

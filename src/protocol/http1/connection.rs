@@ -12,7 +12,7 @@ use tokio::{
 };
 use webparse::{http::response, Binary, BinaryMut, Request, Response, Serialize};
 
-use crate::{proto::recv_stream, H2Connection, ProtoResult, RecvStream};
+use crate::{protocol::recv_stream, H2Connection, ProtResult, RecvStream};
 
 use super::IoBuffer;
 
@@ -31,14 +31,14 @@ where
         }
     }
 
-    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtoResult<()>> {
+    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<()>> {
         self.io.poll_write(cx)
     }
 
     pub fn poll_request(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtoResult<Request<RecvStream>>>> {
+    ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
         self.io.poll_request(cx)
     }
 
@@ -54,10 +54,10 @@ where
         &mut self,
         mut r: Request<RecvStream>,
         f: &mut F,
-    ) -> ProtoResult<Option<bool>>
+    ) -> ProtResult<Option<bool>>
     where
         F: FnMut(Request<Req>) -> Fut,
-        Fut: Future<Output = ProtoResult<Option<Response<Res>>>>,
+        Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
         Req: From<RecvStream>,
         Req: Serialize + Any,
         RecvStream: From<Res>,
@@ -73,7 +73,7 @@ where
                     .unwrap();
                 let mut binary = BinaryMut::new();
                 let _ = response.serialize(&mut binary);
-                return Err(crate::ProtoError::UpgradeHttp2(binary.freeze(), Some(r)));
+                return Err(crate::ProtError::UpgradeHttp2(binary.freeze(), Some(r)));
             }
         }
         if TypeId::of::<Req>() != TypeId::of::<RecvStream>() {
@@ -88,10 +88,10 @@ where
         return Ok(None);
     }
 
-    pub async fn incoming<F, Fut, Res, Req>(&mut self, f: &mut F) -> ProtoResult<Option<bool>>
+    pub async fn incoming<F, Fut, Res, Req>(&mut self, f: &mut F) -> ProtResult<Option<bool>>
     where
         F: FnMut(Request<Req>) -> Fut,
-        Fut: Future<Output = ProtoResult<Option<Response<Res>>>>,
+        Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
         Req: From<RecvStream>,
         Req: Serialize + Any,
         RecvStream: From<Res>,
@@ -110,7 +110,7 @@ where
         return Ok(None);
     }
 
-    pub async fn send_response(&mut self, res: Response<RecvStream>) -> ProtoResult<()> {
+    pub async fn send_response(&mut self, res: Response<RecvStream>) -> ProtResult<()> {
         self.io.send_response(res).await
     }
 }
@@ -119,7 +119,7 @@ impl<T> Stream for H1Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = ProtoResult<Request<RecvStream>>;
+    type Item = ProtResult<Request<RecvStream>>;
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,

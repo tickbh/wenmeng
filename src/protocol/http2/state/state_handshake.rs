@@ -1,4 +1,4 @@
-use crate::{proto::http2::codec::Codec, Builder, H2Connection, ProtoError, ProtoResult};
+use crate::{protocol::http2::codec::Codec, Builder, H2Connection, ProtError, ProtResult};
 
 use std::{
     future::Future,
@@ -47,7 +47,7 @@ impl ReadPreface {
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
-    ) -> Poll<ProtoResult<()>>
+    ) -> Poll<ProtResult<()>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -56,10 +56,10 @@ impl ReadPreface {
 
         while rem > 0 {
             let mut buf = ReadBuf::new(&mut buf[..rem]);
-            ready!(Pin::new(codec.get_mut()).poll_read(cx, &mut buf)).map_err(ProtoError::from)?;
+            ready!(Pin::new(codec.get_mut()).poll_read(cx, &mut buf)).map_err(ProtError::from)?;
             let n = buf.filled().len();
             if n == 0 {
-                return Poll::Ready(Err(ProtoError::from(io::Error::new(
+                return Poll::Ready(Err(ProtError::from(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
                     "connection closed before reading preface",
                 ))));
@@ -68,7 +68,7 @@ impl ReadPreface {
             if &HTTP2_MAGIC[self.pos..self.pos + n] != buf.filled() {
                 // proto_err!(conn: "read_preface: invalid preface");
                 // TODO: Should this just write the GO_AWAY frame directly?
-                return Poll::Ready(Err(ProtoError::Extension("handshake not match")));
+                return Poll::Ready(Err(ProtError::Extension("handshake not match")));
             }
 
             self.pos += n;
@@ -92,7 +92,7 @@ impl StateHandshake {
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
-    ) -> Poll<ProtoResult<()>>
+    ) -> Poll<ProtResult<()>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -144,7 +144,7 @@ impl Flush {
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
-    ) -> Poll<ProtoResult<()>>
+    ) -> Poll<ProtResult<()>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {

@@ -22,7 +22,7 @@ use webparse::{
     Binary, BinaryMut, Request, Response,
 };
 
-use crate::{ProtoResult, RecvStream, ProtoError};
+use crate::{ProtResult, RecvStream, ProtError};
 
 use super::{
     codec::Codec, inner_stream::InnerStream, send_response::SendControl, state::StateHandshake,
@@ -91,7 +91,7 @@ impl Control {
         }
     }
 
-    pub fn encode_response(&mut self, cx: &mut Context) -> ProtoResult<()>
+    pub fn encode_response(&mut self, cx: &mut Context) -> ProtResult<()>
     {
         let mut list = self.response_queue.lock().unwrap();
         let vals = (*list).drain(..).collect::<Vec<SendResponse>>();
@@ -109,13 +109,13 @@ impl Control {
         self.config.next_stream_id.next_id()
     }
 
-    pub fn poll_write<T>(&mut self, cx: &mut Context, codec: &mut Codec<T>) -> Poll<ProtoResult<()>>
+    pub fn poll_write<T>(&mut self, cx: &mut Context, codec: &mut Codec<T>) -> Poll<ProtResult<()>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
         self.encode_response(cx)?;
         if let Some(reason) = ready!(self.goaway.poll_handle(cx, codec)?) {
-            return Poll::Ready(Err(ProtoError::library_go_away(reason)));
+            return Poll::Ready(Err(ProtError::library_go_away(reason)));
         };
         ready!(self.ping_pong.poll_handle(cx, codec))?;
         match ready!(self.send_frames.poll_handle(cx, codec)) {
@@ -130,7 +130,7 @@ impl Control {
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
-    ) -> Poll<Option<ProtoResult<Request<RecvStream>>>>
+    ) -> Poll<Option<ProtResult<Request<RecvStream>>>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -165,7 +165,7 @@ impl Control {
                         }
                         Frame::GoAway(e) => {
                             self.error = Some(e.clone());
-                            return Poll::Ready(Some(Err(ProtoError::library_go_away(e.reason()))));
+                            return Poll::Ready(Some(Err(ProtError::library_go_away(e.reason()))));
                         },
                         Frame::WindowUpdate(v) => {
                             // self.config.settings.set_initial_window_size(Some(v.size_increment()))
@@ -188,11 +188,11 @@ impl Control {
     pub fn build_request(
         &mut self,
         frames: &Vec<Frame<Binary>>,
-    ) -> Option<ProtoResult<Request<Binary>>> {
+    ) -> Option<ProtResult<Request<Binary>>> {
         None
     }
 
-    pub fn build_frame(&mut self) -> Poll<Option<ProtoResult<Request<RecvStream>>>> {
+    pub fn build_frame(&mut self) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
         if self.ready_queue.is_empty() {
             return Poll::Ready(None);
         }
@@ -217,7 +217,7 @@ impl Control {
         }
     }
 
-    pub fn recv_frame(&mut self, frame: Frame<Binary>) -> Poll<Option<ProtoResult<bool>>> {
+    pub fn recv_frame(&mut self, frame: Frame<Binary>) -> Poll<Option<ProtResult<bool>>> {
         let stream_id = frame.stream_id();
         if stream_id.is_zero() {
             return Poll::Ready(None);
@@ -260,12 +260,12 @@ impl Control {
         self.handshake.set_handshake_status(binary)
     }
 
-    pub async fn send_response(&mut self, res: Response<RecvStream>, stream_id: StreamIdentifier) -> ProtoResult<()>
+    pub async fn send_response(&mut self, res: Response<RecvStream>, stream_id: StreamIdentifier) -> ProtResult<()>
     {
         self.send_response_may_push(res, stream_id, None).await
     }
 
-    pub async fn send_response_may_push(&mut self, res: Response<RecvStream>, stream_id: StreamIdentifier, push: Option<StreamIdentifier>) -> ProtoResult<()>
+    pub async fn send_response_may_push(&mut self, res: Response<RecvStream>, stream_id: StreamIdentifier, push: Option<StreamIdentifier>) -> ProtResult<()>
     {
         let mut data = self.response_queue.lock().unwrap();
         let is_end = res.body().is_end();

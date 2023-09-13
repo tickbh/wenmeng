@@ -7,7 +7,7 @@ use webparse::{
     Binary, Serialize, Response,
 };
 
-use crate::ProtoResult;
+use crate::ProtResult;
 
 use super::{codec::Codec, WindowSize, FlowControl};
 
@@ -51,7 +51,7 @@ impl PriorityQueue {
         }
     }
 
-    pub fn send_frames(&mut self, stream_id: StreamIdentifier, vec: Vec<Frame<Binary>>) -> ProtoResult<()> {
+    pub fn send_frames(&mut self, stream_id: StreamIdentifier, vec: Vec<Frame<Binary>>) -> ProtResult<()> {
         for v in vec {
             self.send_queue.insert(PriorityFrame::new(v, self.weight(&stream_id)), ());
         }
@@ -62,7 +62,7 @@ impl PriorityQueue {
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
-    ) -> Poll<Option<ProtoResult<()>>>
+    ) -> Poll<Option<ProtResult<()>>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {

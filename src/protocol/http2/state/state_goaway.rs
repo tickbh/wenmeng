@@ -3,7 +3,7 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::http::http2::frame::{GoAway, Reason, Frame};
 
-use crate::{proto::http2::codec::Codec, ProtoResult};
+use crate::{protocol::http2::codec::Codec, ProtResult};
 
 pub struct StateGoAway {
     close_now: bool,
@@ -24,7 +24,7 @@ impl StateGoAway {
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>
-    ) -> Poll<Option<ProtoResult<Reason>>>
+    ) -> Poll<Option<ProtResult<Reason>>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {

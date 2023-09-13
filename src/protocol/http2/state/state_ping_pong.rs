@@ -3,7 +3,7 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::http::http2::frame::{Ping, Frame};
 
-use crate::{proto::http2::codec::Codec, ProtoResult};
+use crate::{protocol::http2::codec::Codec, ProtResult};
 
 pub struct StatePingPong {
     ping: Option<Ping>,
@@ -23,7 +23,7 @@ impl StatePingPong {
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>
-    ) -> Poll<ProtoResult<()>>
+    ) -> Poll<ProtResult<()>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {

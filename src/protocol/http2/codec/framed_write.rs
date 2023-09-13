@@ -7,7 +7,7 @@ use std::{
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use webparse::{BinaryMut, Buf};
 
-use crate::proto::http2::{FrameSize, DEFAULT_MAX_FRAME_SIZE};
+use crate::protocol::http2::{FrameSize, DEFAULT_MAX_FRAME_SIZE};
 
 #[derive(Debug)]
 pub struct FramedWrite<T> {

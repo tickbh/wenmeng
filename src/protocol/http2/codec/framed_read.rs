@@ -10,7 +10,7 @@ use webparse::http::http2::frame::{Frame, Kind};
 use webparse::http::http2::{frame, Decoder, HeaderIndex};
 use webparse::{Binary, BinaryMut, WebResult, Buf};
 
-use crate::proto::{ProtoError, ProtoResult};
+use crate::protocol::{ProtError, ProtResult};
 
 use super::FramedWrite;
 
@@ -72,7 +72,7 @@ impl<T> Stream for FramedRead<T>
 where
     T: AsyncRead + Unpin,
 {
-    type Item = ProtoResult<Frame<Binary>>;
+    type Item = ProtResult<Frame<Binary>>;
 
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
@@ -107,7 +107,7 @@ fn decode_frame(
     max_header_list_size: usize,
     partial_inout: &mut Option<Partial>,
     mut bytes: BytesMut,
-) -> ProtoResult<Option<Frame>> {
+) -> ProtResult<Option<Frame>> {
     use bytes::Buf;
     let span = tracing::trace_span!("FramedRead::decode_frame", offset = bytes.len());
     let _e = span.enter();
