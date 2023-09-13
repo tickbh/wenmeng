@@ -162,17 +162,10 @@ impl Control {
                         }
                         Frame::Headers(_) => {
                             let _ = self.recv_frame(frame)?;
-                            // None => {
-                            //     continue;
-                            // }
-                            // Some(Err(e)) => {
-                            //     return Poll::Ready(Some(Err(e)));
-                            // }
-                            // Some(Ok(r)) => {
-                            //     return Poll::Ready(Some(Ok(r)));
-                            // }
                         }
-                        Frame::Priority(_) => {}
+                        Frame::Priority(v) => {
+                            self.send_frames.priority_recv(v.clone());
+                        }
                         Frame::PushPromise(_) => {}
                         Frame::Ping(p) => {
                             self.ping_pong.receive(p.clone());
