@@ -22,7 +22,7 @@ use webparse::{
     Binary, BinaryMut, Request, Response,
 };
 
-use crate::{ProtoResult, RecvStream};
+use crate::{ProtoResult, RecvStream, ProtoError};
 
 use super::{
     codec::Codec, inner_stream::InnerStream, send_response::SendControl, state::StateHandshake,
@@ -121,7 +121,9 @@ impl Control {
         T: AsyncRead + AsyncWrite + Unpin,
     {
         self.encode_response(cx)?;
-        ready!(self.goaway.poll_handle(cx, codec));
+        if let Some(reason) = ready!(self.goaway.poll_handle(cx, codec)?) {
+            return Poll::Ready(Err(ProtoError::library_go_away(reason)));
+        };
         ready!(self.ping_pong.poll_handle(cx, codec))?;
         match ready!(self.send_frames.poll_handle(cx, codec)) {
             Some(Err(e)) => return Poll::Ready(Err(e)),
@@ -172,8 +174,13 @@ impl Control {
                         }
                         Frame::Priority(_) => {}
                         Frame::PushPromise(_) => {}
-                        Frame::Ping(_) => {}
-                        Frame::GoAway(_) => {}
+                        Frame::Ping(p) => {
+                            self.ping_pong.receive(p.clone());
+                        }
+                        Frame::GoAway(e) => {
+                            self.error = Some(e.clone());
+                            return Poll::Ready(Some(Err(ProtoError::library_go_away(e.reason()))));
+                        },
                         Frame::WindowUpdate(_) => {}
                         Frame::Reset(_) => {}
                     }

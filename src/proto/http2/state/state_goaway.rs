@@ -1,7 +1,7 @@
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::http::http2::frame::{GoAway, Reason};
+use webparse::http::http2::frame::{GoAway, Reason, Frame};
 
 use crate::{proto::http2::codec::Codec, ProtoResult};
 
@@ -28,11 +28,27 @@ impl StateGoAway {
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-        return Poll::Ready(None);
+        if let Some(frame) = self.goaway.take() {
+            if !codec.poll_ready(cx)?.is_ready() {
+                self.goaway = Some(frame);
+                return Poll::Pending;
+            }
+
+            let reason = frame.reason();
+            codec.send_frame(Frame::GoAway(frame))?;
+            return Poll::Ready(Some(Ok(reason)));
+        } else if self.is_close_now() {
+            return match self.goaway.as_ref().map(|going_away| going_away.reason()) {
+                Some(reason) => Poll::Ready(Some(Ok(reason))),
+                None => Poll::Ready(None),
+            };
+        }
+        Poll::Ready(None)
     }
 
     pub fn go_away_now(&mut self, frame: GoAway) {
         self.close_now = true;
+        self.reason = frame.reason();
         self.goaway = Some(frame);
     }
 
