@@ -9,23 +9,25 @@ use webparse::{
 
 use crate::ProtoResult;
 
-use super::codec::Codec;
+use super::{codec::Codec, WindowSize, FlowControl};
 
 #[derive(Debug)]
 pub struct PriorityQueue {
     pub send_queue: RBTree<PriorityFrame<Binary>, ()>,
     pub hash_weight: HashMap<StreamIdentifier, u8>,
     pub hash_depend: HashMap<StreamIdentifier, StreamIdentifier>,
+    pub flow_control: FlowControl,
 }
 
 impl PriorityQueue {
-    pub fn new() -> Self {
+    pub fn new(init_windows_size: WindowSize) -> Self {
         PriorityQueue {
             send_queue: RBTree::new(),
             hash_weight: HashMap::from([
                 (StreamIdentifier::zero(), 255),
             ]),
             hash_depend: HashMap::new(),
+            flow_control: FlowControl::new(init_windows_size),
         }
     }
 
@@ -68,8 +70,19 @@ impl PriorityQueue {
             if !codec.poll_ready(cx)?.is_ready() || self.send_queue.is_empty() {
                 return Poll::Ready(None);
             }
-            let first = self.send_queue.pop_first().unwrap();
-            codec.send_frame(first.0.frame)?;
+            if self.flow_control.is_available() {
+                let first = self.send_queue.pop_first().unwrap();
+                let is_data = first.0.frame.is_data();
+                let size = codec.send_frame(first.0.frame)?;
+            } else {
+                let first = self.send_queue.get_first().unwrap();
+                if first.0.frame.is_data() {
+                    return Poll::Ready(None)
+                }
+                let first = self.send_queue.pop_first().unwrap();
+                codec.send_frame(first.0.frame)?;
+            }
+
         }
     }
 

@@ -26,7 +26,7 @@ use crate::{ProtoResult, RecvStream, ProtoError};
 
 use super::{
     codec::Codec, inner_stream::InnerStream, send_response::SendControl, state::StateHandshake,
-    PriorityQueue, SendResponse, StateGoAway, StatePingPong, StateSettings, WindowSize,
+    PriorityQueue, SendResponse, StateGoAway, StatePingPong, StateSettings, WindowSize, DEFAULT_INITIAL_WINDOW_SIZE,
 };
 
 #[derive(Debug, Clone)]
@@ -43,6 +43,10 @@ pub struct ControlConfig {
 impl ControlConfig {
     pub fn apply_remote_settings(&mut self, settings: &Settings) {
         self.settings = settings.clone();
+    }
+
+    pub fn get_initial_window_size(&self) -> WindowSize {
+        self.settings.initial_window_size().unwrap_or(DEFAULT_INITIAL_WINDOW_SIZE)
     }
 }
 
@@ -73,7 +77,7 @@ impl Control {
     pub fn new(config: ControlConfig, sender_push: Sender<(StreamIdentifier, Response<RecvStream>)>) -> Self {
         Control {
             recv_frames: HashMap::new(),
-            send_frames: PriorityQueue::new(),
+            send_frames: PriorityQueue::new(config.get_initial_window_size()),
             ready_queue: LinkedList::new(),
             response_queue: Arc::new(Mutex::new(Vec::new())),
             setting: StateSettings::new(config.settings.clone()),
@@ -103,17 +107,6 @@ impl Control {
 
     pub fn next_server_id(&mut self) -> StreamIdentifier {
         self.config.next_stream_id.next_id()
-    }
-
-    fn poll_go_away<T>(
-        &mut self,
-        cx: &mut Context,
-        codec: &mut Codec<T>,
-    ) -> Poll<Option<ProtoResult<Reason>>>
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
-    {
-        self.goaway.poll_handle(cx, codec)
     }
 
     pub fn poll_write<T>(&mut self, cx: &mut Context, codec: &mut Codec<T>) -> Poll<ProtoResult<()>>
@@ -157,7 +150,7 @@ impl Control {
                             self.setting
                                 .recv_setting(codec, settings.clone(), &mut self.config)?;
                         }
-                        Frame::Data(d) => {
+                        Frame::Data(_) => {
                             let _ = self.recv_frame(frame)?;
                         }
                         Frame::Headers(_) => {
@@ -174,8 +167,10 @@ impl Control {
                             self.error = Some(e.clone());
                             return Poll::Ready(Some(Err(ProtoError::library_go_away(e.reason()))));
                         },
-                        Frame::WindowUpdate(_) => {}
-                        Frame::Reset(_) => {}
+                        Frame::WindowUpdate(v) => {
+                            // self.config.settings.set_initial_window_size(Some(v.size_increment()))
+                        }
+                        Frame::Reset(v) => {}
                     }
                 }
                 Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),

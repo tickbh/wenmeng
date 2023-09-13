@@ -88,12 +88,10 @@ where
         self.inner.get_mut()
     }
 
-    pub fn send_frame(&mut self, frame: Frame) -> ProtoResult<()> {
+    pub fn send_frame(&mut self, frame: Frame) -> ProtoResult<usize> {
         let mut encoder = Encoder::new_index(self.header_index.clone(), self.max_send_frame_size);
-        let _ = frame.encode(self.framed_write().get_bytes(), &mut encoder);
-
-        Ok(())
-
+        let usize = frame.encode(self.framed_write().get_bytes(), &mut encoder)?;
+        Ok(usize)
     }
 
     pub fn set_send_header_table_size(&mut self, size: usize) {
