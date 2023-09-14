@@ -10,7 +10,7 @@ use tokio::{
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
-    Binary, BinaryMut, Request, Response, Serialize,
+    Binary, BinaryMut, Request, Response, Serialize, HeaderName,
 };
 
 use crate::{
@@ -114,11 +114,16 @@ where
         Res: Serialize + Any,
     {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
+        let mut content_length = 0;
         if TypeId::of::<Req>() != TypeId::of::<RecvStream>() {
             let _ = r.body_mut().wait_all().await;
+            content_length = r.body().body_len();
         }
         match f(r.into_type::<Req>()).await? {
-            Some(res) => {
+            Some(mut res) => {
+                if content_length != 0 && res.get_body_len() == 0 {
+                    res.headers_mut().insert(HeaderName::CONTENT_LENGTH, content_length);
+                }
                 self.send_response(
                     res.into_type(),
                     stream_id.unwrap_or(StreamIdentifier::client_first()),

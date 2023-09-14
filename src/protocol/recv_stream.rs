@@ -92,6 +92,17 @@ impl RecvStream {
         return buffer.freeze();
     }
 
+    pub fn body_len(&self) -> usize {
+        let mut len = 0;
+        if let Some(bin) = &self.binary {
+            len += bin.remaining();
+        }
+        if let Some(bin) = &self.binary_mut {
+            len += bin.remaining();
+        }
+        return len;
+    }
+
     pub async fn wait_all(&mut self) -> Option<usize> {
         let mut size = 0;
         if self.receiver.is_none() || self.is_end {

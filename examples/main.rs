@@ -13,11 +13,7 @@
 
 #![warn(rust_2018_idioms)]
 
-
-use futures::SinkExt;
-use webparse::{
-    Binary, BinaryMut, Request, Response,
-};
+use webparse::{Binary, BinaryMut, Request, Response};
 #[macro_use]
 extern crate serde_derive;
 use std::{
@@ -27,14 +23,10 @@ use std::{
 };
 use tokio::{
     net::{TcpListener, TcpStream},
-    sync::mpsc::{channel},
+    sync::mpsc::channel,
 };
 
-
-
-use dianmeng::{
-    self, ProtResult, RecvStream, SendControl, Server,
-};
+use dianmeng::{self, ProtResult, RecvStream, SendControl, Server};
 
 trait Xx {
     // async fn xx();
@@ -42,32 +34,6 @@ trait Xx {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // use std::sync::mpsc::channel;
-
-    // let (tx, rx) = channel();
-
-    // // This send is always successful
-    // tx.send(1).unwrap();
-    // tx.send(2).unwrap();
-    // tx.send(3).unwrap();
-    // for i in 0..1000 {
-    //     tx.send(i).unwrap();
-    // }
-
-    // for i in 0..1000 {
-    //     rx.recv().unwrap();
-    // }
-    // // This send will fail because the receiver is gone
-    // // drop(rx);
-    // // assert_eq!(tx.send(1).unwrap_err().0, 1);
-
-    // println!("aaa {:?}", rx.recv());
-    // println!("aaa {:?}", rx.recv());
-    // println!("aaa {:?}", rx.recv());
-    // println!("aaa {:?}", rx.recv());
-
-    // Parse the arguments, bind the TCP socket we'll be listening to, spin up
-    // our worker threads, and start shipping sockets to those worker threads.
     let addr = env::args()
         .nth(1)
         .unwrap_or_else(|| "0.0.0.0:8080".to_string());
@@ -138,7 +104,7 @@ async fn operate(mut req: Request<RecvStream>) -> ProtResult<Option<Response<Rec
             BinaryMut::from("push info".as_bytes().to_vec()),
             false,
         );
-        
+
         let res = Response::builder()
             .version(req.version().clone())
             .header(":path", "/aaa")
@@ -156,7 +122,9 @@ async fn operate(mut req: Request<RecvStream>) -> ProtResult<Option<Response<Rec
                     .await;
             }
             println!("send!!!!! end!!!!!!");
-            sender.send((true, Binary::from_static("world\r\n".as_bytes()))).await;
+            sender
+                .send((true, Binary::from_static("world\r\n".as_bytes())))
+                .await;
         });
         // Ok(Some(response))
     }
@@ -173,75 +141,46 @@ async fn operate(mut req: Request<RecvStream>) -> ProtResult<Option<Response<Rec
     Ok(Some(response))
 }
 
-async fn operate1(mut req: Request<String>) -> ProtResult<Option<Response<String>>> {
-    let mut response = Response::builder().version(req.version().clone());
-    let body = match &*req.url().path {
-        "/plaintext" => {
-            response = response.header("content-type", "text/plain");
-            "Hello, World!".to_string()
-        }
-        "/post" => {
-            let _body = req.body_mut();
+// async fn operate1(mut req: Request<String>) -> ProtResult<Option<Response<String>>> {
+//     let mut response = Response::builder().version(req.version().clone());
+//     let body = match &*req.url().path {
+//         "/plaintext" => {
+//             response = response.header("content-type", "text/plain");
+//             "Hello, World!".to_string()
+//         }
+//         "/post" => {
+//             let _body = req.body_mut();
 
-            response = response.header("content-type", "text/plain");
-            format!("Hello, World! {:?}", 111).to_string()
-        }
-        "/json" => {
-            response = response.header("content-type", "application/json");
-            #[derive(Serialize)]
-            struct Message {
-                message: &'static str,
-            }
-            serde_json::to_string(&Message {
-                message: "Hello, World!",
-            })
-            .unwrap()
-        }
-        _ => {
-            response = response.status(404);
-            String::new()
-        }
-    };
-    let response = response
-        .body(body)
-        .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-    Ok(Some(response))
-}
+//             response = response.header("content-type", "text/plain");
+//             format!("Hello, World! {:?}", 111).to_string()
+//         }
+//         "/json" => {
+//             response = response.header("content-type", "application/json");
+//             #[derive(Serialize)]
+//             struct Message {
+//                 message: &'static str,
+//             }
+//             serde_json::to_string(&Message {
+//                 message: "Hello, World!",
+//             })
+//             .unwrap()
+//         }
+//         _ => {
+//             response = response.status(404);
+//             String::new()
+//         }
+//     };
+//     let response = response
+//         .body(body)
+//         .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
+//     Ok(Some(response))
+// }
 
 async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     // let mut connect = StateHandshake::handshake(stream).await.unwrap();
     // let mut connect = dmeng::Builder::new().connection(stream);
     let mut server = Server::new(stream);
     let ret = server.incoming(operate).await;
-    // while let Ok(Some(_)) = ret {
-
-    // }
     println!("end!!!!!!?????????????????? {:?}", ret);
-    // while let Some(request) = server.incoming(operate).await {
-    //     match request {
-    //         Ok(request) => {
-    //             println!("request === {:?}", request);
-    //             respond(request).await;
-
-    //             // println!("response === {:?}", response);
-    //         }
-    //         Err(e) => {
-    //             println!("error = {:?}", e);
-    //             // panic!("aaaaaa");
-    //         },
-    //     }
-    // }
-    // let mut transport = Framed::new(stream, Http(None));
-
-    // while let Some(request) = transport.next().await {
-    //     match request {
-    //         Ok(request) => {
-    //             let response = respond(request).await?;
-    //             transport.send(response).await?;
-    //         }
-    //         Err(e) => return Err(e.into()),
-    //     }
-    // }
-
     Ok(())
 }

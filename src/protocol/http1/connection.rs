@@ -5,10 +5,8 @@ use std::{
 };
 
 use futures_core::{Future, Stream};
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-};
-use webparse::{Binary, BinaryMut, Request, Response, Serialize};
+use tokio::io::{AsyncRead, AsyncWrite};
+use webparse::{Binary, BinaryMut, HeaderName, Request, Response, Serialize};
 
 use crate::{H2Connection, ProtResult, RecvStream};
 
@@ -74,11 +72,17 @@ where
                 return Err(crate::ProtError::UpgradeHttp2(binary.freeze(), Some(r)));
             }
         }
+        let mut content_length = 0;
         if TypeId::of::<Req>() != TypeId::of::<RecvStream>() {
             let _ = r.body_mut().wait_all().await;
+            content_length = r.body().body_len();
         }
         match f(r.into_type::<Req>()).await? {
-            Some(res) => {
+            Some(mut res) => {
+                if content_length != 0 && res.get_body_len() == 0 {
+                    res.headers_mut()
+                        .insert(HeaderName::CONTENT_LENGTH, content_length);
+                }
                 self.send_response(res.into_type()).await?;
             }
             None => (),
