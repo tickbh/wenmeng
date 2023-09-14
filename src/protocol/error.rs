@@ -1,6 +1,6 @@
 use std::{fmt::{Display, Pointer}, io};
 
-use webparse::{WebError, Binary, http::http2::frame::Reason, BinaryMut, Request};
+use webparse::{WebError, Binary, http::http2::frame::Reason, Request};
 
 use crate::RecvStream;
 

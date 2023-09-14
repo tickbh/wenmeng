@@ -1,10 +1,10 @@
 use std::any::{Any, TypeId};
 
-use futures_core::{stream, Future};
+use futures_core::{Future};
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize};
 
-use crate::{H2Connection, ProtError, ProtResult, RecvStream, SendControl, SendStream};
+use crate::{H2Connection, ProtError, ProtResult, RecvStream};
 
 use super::http1::H1Connection;
 
@@ -36,13 +36,13 @@ where
         RecvStream: From<R>,
         R: Serialize,
     {
-        let result = if let Some(h1) = &mut self.http1 {
+        let _result = if let Some(h1) = &mut self.http1 {
             h1.send_response(res.into_type::<RecvStream>()).await?;
         } else if let Some(h2) = &mut self.http2 {
             if let Some(stream_id) = stream_id {
-                let recv = RecvStream::only(Binary::new());
+                let _recv = RecvStream::only(Binary::new());
                 // let v = res as Response<RecvStream>;
-                let mut res = res.into_type::<RecvStream>();
+                let res = res.into_type::<RecvStream>();
                 // let (mut res, mut r) = res.into(recv);
 
                 // let r = unsafe {

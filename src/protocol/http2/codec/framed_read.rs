@@ -4,15 +4,15 @@ use std::task::{ready, Poll};
 use bytes::{BytesMut, BufMut};
 use futures_core::Stream;
 use tokio::io::AsyncRead;
-use tokio_util::codec::{FramedRead as InnerFramedRead, length_delimited};
-use tokio_util::codec::{LengthDelimitedCodec, LengthDelimitedCodecError};
+use tokio_util::codec::{FramedRead as InnerFramedRead};
+use tokio_util::codec::{LengthDelimitedCodec};
 use webparse::http::http2::frame::{Frame, Kind};
-use webparse::http::http2::{frame, Decoder, HeaderIndex};
-use webparse::{Binary, BinaryMut, WebResult, Buf};
+use webparse::http::http2::{frame, Decoder};
+use webparse::{Binary, BinaryMut, Buf};
 
-use crate::protocol::{ProtError, ProtResult};
+use crate::protocol::{ProtResult};
 
-use super::FramedWrite;
+
 
 #[derive(Debug)]
 pub struct FramedRead<T> {
@@ -106,7 +106,7 @@ fn decode_frame(
     decoder: &mut Decoder,
     max_header_list_size: usize,
     partial_inout: &mut Option<Partial>,
-    mut bytes: BytesMut,
+    bytes: BytesMut,
 ) -> ProtResult<Option<Frame>> {
     use bytes::Buf;
     let span = tracing::trace_span!("FramedRead::decode_frame", offset = bytes.len());
@@ -124,7 +124,7 @@ fn decode_frame(
         // return Err(Error::library_go_away(Reason::PROTOCOL_ERROR));
     }
 
-    let kind = head.kind();
+    let _kind = head.kind();
     let frame = Frame::parse(head, bytes, decoder, max_header_list_size)?;
 
     Ok(Some(frame))

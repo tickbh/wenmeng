@@ -5,7 +5,7 @@ mod framed_write;
 use std::io;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
-use std::task::{Context, Poll};use tokio::io::{Interest, Ready, AsyncReadExt};
+use std::task::{Context, Poll};
 
 use futures_core::Stream;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -40,7 +40,7 @@ where
     }
 
     /// Returns a new `Codec` with the given maximum frame size
-    pub fn with_max_recv_frame_size(io: T, max_frame_size: usize) -> Self {
+    pub fn with_max_recv_frame_size(io: T, _max_frame_size: usize) -> Self {
         // Wrap with writer
         let framed_write = FramedWrite::new(io);
 
@@ -52,7 +52,7 @@ where
             .num_skip(0) // Don't skip the header
             .new_read(framed_write);
 
-        let mut inner = FramedRead::new(delimited);
+        let inner = FramedRead::new(delimited);
 
         // Use FramedRead's method since it checks the value is within range.
         // inner.set_max_frame_size(max_frame_size);

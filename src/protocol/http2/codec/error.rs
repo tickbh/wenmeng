@@ -1,5 +1,5 @@
 
-use std::{error, fmt, io};
+use std::{error, fmt};
 
 use crate::protocol::ProtError;
 

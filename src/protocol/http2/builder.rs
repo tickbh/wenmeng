@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::{Buf, http::http2::frame::Settings};
+use webparse::{http::http2::frame::Settings};
 
 use crate::H2Connection;
 

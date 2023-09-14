@@ -4,7 +4,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::http::http2::frame::{Frame, Reason, Settings};
 
 use crate::{
-    protocol::http2::{codec::Codec, control::ControlConfig, Control},
+    protocol::http2::{codec::Codec, control::ControlConfig},
     ProtError, ProtResult,
 };
 

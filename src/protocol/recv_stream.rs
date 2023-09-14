@@ -1,14 +1,13 @@
-use std::{io::Read, time, task::{Context, ready, Poll}, any::TypeId};
-
-use bytes::buf;
-use futures_core::Stream;
-use tokio::{
-    join,
-    sync::mpsc::{error::TryRecvError, Receiver},
+use std::{
+    io::Read,
+    task::{Context, Poll},
 };
+
+use futures_core::Stream;
+use tokio::sync::mpsc::{error::TryRecvError, Receiver};
 use webparse::{Binary, BinaryMut, Buf, Serialize};
 
-use crate::{ProtResult, ProtError};
+use crate::ProtResult;
 
 #[derive(Debug)]
 pub struct RecvStream {
@@ -60,7 +59,7 @@ impl RecvStream {
     pub fn is_end(&self) -> bool {
         self.is_end
     }
-    
+
     pub fn set_end(&mut self, end: bool) {
         self.is_end = end
     }
@@ -90,9 +89,9 @@ impl RecvStream {
         if let Some(bin) = self.binary_mut.take() {
             buffer.put_slice(bin.chunk());
         }
-        return buffer.freeze()
+        return buffer.freeze();
     }
-    
+
     pub async fn wait_all(&mut self) -> Option<usize> {
         let mut size = 0;
         if self.receiver.is_none() || self.is_end {
@@ -139,7 +138,7 @@ impl RecvStream {
         Some(size)
     }
 
-    pub fn poll_encode<B: webparse::Buf + webparse::BufMut + webparse::MarkBuf>(
+    pub fn poll_encode<B: webparse::Buf + webparse::BufMut>(
         &mut self,
         cx: &mut Context<'_>,
         buffer: &mut B,
@@ -172,7 +171,6 @@ impl RecvStream {
         }
         Poll::Ready(Ok(size))
     }
-
 }
 
 impl Stream for RecvStream {
@@ -180,7 +178,7 @@ impl Stream for RecvStream {
 
     fn poll_next(
         self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
         todo!()
     }
@@ -191,13 +189,13 @@ impl Read for RecvStream {
         self.try_recv();
         let mut read_bytes = 0;
         if let Some(bin) = &mut self.binary {
-            if  bin.remaining() > 0 {
+            if bin.remaining() > 0 {
                 let len = std::cmp::min(buf.len() - read_bytes, bin.remaining());
                 read_bytes += bin.copy_to_slice(&mut buf[read_bytes..len]);
             }
         }
         if let Some(bin) = &mut self.binary {
-            if  bin.remaining() > 0 {
+            if bin.remaining() > 0 {
                 let len = std::cmp::min(buf.len() - read_bytes, bin.remaining());
                 read_bytes += bin.copy_to_slice(&mut buf[read_bytes..len]);
             }
@@ -207,7 +205,7 @@ impl Read for RecvStream {
 }
 
 impl Serialize for RecvStream {
-    fn serialize<B: webparse::Buf + webparse::BufMut + webparse::MarkBuf>(
+    fn serialize<B: webparse::Buf + webparse::BufMut>(
         &mut self,
         buffer: &mut B,
     ) -> webparse::WebResult<usize> {
@@ -279,8 +277,6 @@ impl From<RecvStream> for String {
         String::from_utf8_lossy(&v).to_string()
     }
 }
-
-
 
 // impl<T> From<T> for RecvStream where T : Serialize {
 //     fn from(value: T) -> Self {

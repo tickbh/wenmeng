@@ -69,7 +69,7 @@ impl InnerStream {
     }
 
     pub fn build_request(&mut self) -> ProtResult<Request<RecvStream>> {
-        let mut now_frames = self.take();
+        let now_frames = self.take();
         let mut builder = request::Request::builder();
         let mut is_nobody = false;
         let mut is_end_stream = false;

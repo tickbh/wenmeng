@@ -1,6 +1,5 @@
 use std::{
     any::{Any, TypeId},
-    future::poll_fn,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -8,11 +7,10 @@ use std::{
 use futures_core::{Future, Stream};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::mpsc::Receiver,
 };
-use webparse::{http::response, Binary, BinaryMut, Request, Response, Serialize};
+use webparse::{Binary, BinaryMut, Request, Response, Serialize};
 
-use crate::{protocol::recv_stream, H2Connection, ProtResult, RecvStream};
+use crate::{H2Connection, ProtResult, RecvStream};
 
 use super::IoBuffer;
 

@@ -1,30 +1,27 @@
 use std::{
-    pin::Pin,
     task::{ready, Context, Poll}, any::{Any, TypeId},
 };
 
 use futures_core::{Future, Stream};
-use futures_util::future::poll_fn;
+
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::TcpStream,
-    sync::mpsc::{Receiver, Sender, channel},
+    sync::mpsc::{Receiver, channel},
 };
 use webparse::{
-    http::http2::frame::{Frame, Reason, Settings, StreamIdentifier},
+    http::http2::frame::{Reason, StreamIdentifier},
     Binary, BinaryMut, Request, Response, Serialize,
 };
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, Initiator, RecvStream, Server,
+    Builder, Initiator, RecvStream,
 };
 
 use super::{
-    codec::{Codec, FramedRead, FramedWrite},
+    codec::{Codec},
     control::ControlConfig,
-    send_response::SendControl,
-    Control, SendResponse,
+    Control,
 };
 
 pub struct H2Connection<T> {
@@ -81,7 +78,7 @@ where
         }
     }
 
-    pub fn pull_accept(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtResult<()>>> {
+    pub fn pull_accept(&mut self, _cx: &mut Context<'_>) -> Poll<Option<ProtResult<()>>> {
         Poll::Pending
     }
 

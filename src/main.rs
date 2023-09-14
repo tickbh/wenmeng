@@ -13,31 +13,27 @@
 
 #![warn(rust_2018_idioms)]
 
-use bytes::BytesMut;
+
 use futures::SinkExt;
 use webparse::{
-    http::{http2::frame::Frame, StatusCode},
     Binary, BinaryMut, Request, Response,
 };
 #[macro_use]
 extern crate serde_derive;
 use std::{
-    borrow::BorrowMut,
     env,
     error::Error,
-    fmt::{self},
     io::{self, Read},
-    time::Duration,
 };
 use tokio::{
     net::{TcpListener, TcpStream},
-    sync::mpsc::{channel, Sender},
+    sync::mpsc::{channel},
 };
-use tokio_stream::StreamExt;
-use tokio_util::codec::{Decoder, Encoder, Framed};
+
+
 
 use dianmeng::{
-    self, H2Connection, ProtResult, RecvStream, SendControl, SendStream, Server, StateHandshake,
+    self, ProtResult, RecvStream, SendControl, Server,
 };
 
 trait Xx {
@@ -132,7 +128,7 @@ async fn operate(mut req: Request<RecvStream>) -> ProtResult<Option<Response<Rec
     let recv = RecvStream::new(receiver, BinaryMut::from(body.into_bytes().to_vec()), false);
     let response = builder
         .body(recv)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
+        .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
 
     let control = req.extensions_mut().remove::<SendControl>();
     if control.is_some() {
@@ -150,9 +146,9 @@ async fn operate(mut req: Request<RecvStream>) -> ProtResult<Option<Response<Rec
             .header(":method", "GET")
             .header(":authority", req.get_authority())
             .body(recv)
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
+            .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
 
-        let mut send = control.unwrap().send_response(res).await?;
+        let _send = control.unwrap().send_response(res).await?;
         tokio::spawn(async move {
             for i in 1..20 {
                 sender
@@ -185,7 +181,7 @@ async fn operate1(mut req: Request<String>) -> ProtResult<Option<Response<String
             "Hello, World!".to_string()
         }
         "/post" => {
-            let body = req.body_mut();
+            let _body = req.body_mut();
 
             response = response.header("content-type", "text/plain");
             format!("Hello, World! {:?}", 111).to_string()
@@ -208,7 +204,7 @@ async fn operate1(mut req: Request<String>) -> ProtResult<Option<Response<String
     };
     let response = response
         .body(body)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, ""))?;
+        .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
     Ok(Some(response))
 }
 

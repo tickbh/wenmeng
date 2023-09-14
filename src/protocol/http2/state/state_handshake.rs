@@ -1,12 +1,11 @@
-use crate::{protocol::http2::codec::Codec, Builder, H2Connection, ProtError, ProtResult};
+use crate::{protocol::http2::codec::Codec, Builder, ProtError, ProtResult};
 
 use std::{
-    future::Future,
     io,
     pin::Pin,
     task::{ready, Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use webparse::{http::http2::HTTP2_MAGIC, Binary, Buf};
 
 pub struct StateHandshake {

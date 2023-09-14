@@ -2,7 +2,7 @@ use std::{io::Read};
 
 use futures_core::Stream;
 use tokio::sync::mpsc::{Sender, error::TrySendError};
-use webparse::{Binary, BinaryMut, Serialize};
+use webparse::{Binary, Serialize};
 
 use crate::ProtResult;
 
@@ -53,19 +53,19 @@ impl SendStream {
 impl Stream for SendStream {
     type Item=ProtResult<Binary>;
 
-    fn poll_next(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
+    fn poll_next(self: std::pin::Pin<&mut Self>, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
         todo!()
     }
 }
 
 impl Read for SendStream {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+    fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
         todo!()
     }
 }
 
 impl Serialize for SendStream {
-    fn serialize<B: webparse::Buf+webparse::BufMut+webparse::MarkBuf>(&mut self, buffer: &mut B) -> webparse::WebResult<usize> {
+    fn serialize<B: webparse::Buf+webparse::BufMut>(&mut self, _buffer: &mut B) -> webparse::WebResult<usize> {
         Ok(0)
     }
 }

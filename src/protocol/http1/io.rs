@@ -3,15 +3,15 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-use futures_util::future::poll_fn;
-use http::request;
+
+
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     sync::mpsc::Sender,
 };
-use tokio_util::io::poll_read_buf;
+
 use webparse::{
-    http::http2, Binary, BinaryMut, Buf, BufMut, Request, Response, Serialize, WebError,
+    http::http2, Binary, BinaryMut, Buf, BufMut, Request, Response,
 };
 
 use crate::{ProtError, ProtResult, RecvStream};
@@ -214,7 +214,7 @@ where
         (self.io, self.read_buf, self.write_buf)
     }
 
-    pub async fn send_response(&mut self, mut res: Response<RecvStream>) -> ProtResult<()> {
+    pub async fn send_response(&mut self, res: Response<RecvStream>) -> ProtResult<()> {
         self.inner.res = Some(res);
         // self.io.
         // let mut buffer = BinaryMut::new();

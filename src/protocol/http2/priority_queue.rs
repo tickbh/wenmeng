@@ -1,10 +1,10 @@
-use std::{sync::Arc, task::{Context, Poll}, collections::HashMap};
+use std::{task::{Context, Poll}, collections::HashMap};
 
 use rbtree::RBTree;
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{
     http::http2::{frame::{Frame, Priority, PriorityFrame, StreamIdentifier}, WindowSize},
-    Binary, Serialize, Response,
+    Binary,
 };
 
 use crate::ProtResult;
@@ -72,8 +72,8 @@ impl PriorityQueue {
             }
             if self.flow_control.is_available() {
                 let first = self.send_queue.pop_first().unwrap();
-                let is_data = first.0.frame.is_data();
-                let size = codec.send_frame(first.0.frame)?;
+                let _is_data = first.0.frame.is_data();
+                let _size = codec.send_frame(first.0.frame)?;
             } else {
                 let first = self.send_queue.get_first().unwrap();
                 if first.0.frame.is_data() {

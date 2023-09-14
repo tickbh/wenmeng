@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, LinkedList},
-    io,
     pin::Pin,
     sync::{Arc, Mutex},
     task::{Context, Poll},
@@ -8,18 +7,16 @@ use std::{
 };
 use tokio_stream::StreamExt;
 
-use futures_core::{ready, stream, Stream};
+use futures_core::{ready, Stream};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::mpsc::Sender,
 };
 use webparse::{
-    Serialize,
     http::{
-        http2::frame::{Flag, Frame, GoAway, Kind, Reason, Settings, StreamIdentifier},
-        request,
+        http2::frame::{Frame, GoAway, Reason, Settings, StreamIdentifier},
     },
-    Binary, BinaryMut, Request, Response,
+    Binary, Request, Response,
 };
 
 use crate::{ProtResult, RecvStream, ProtError};
@@ -170,10 +167,10 @@ impl Control {
                             self.error = Some(e.clone());
                             return Poll::Ready(Some(Err(ProtError::library_go_away(e.reason()))));
                         },
-                        Frame::WindowUpdate(v) => {
+                        Frame::WindowUpdate(_v) => {
                             // self.config.settings.set_initial_window_size(Some(v.size_increment()))
                         }
-                        Frame::Reset(v) => {}
+                        Frame::Reset(_v) => {}
                     }
                 }
                 Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),
@@ -190,7 +187,7 @@ impl Control {
 
     pub fn build_request(
         &mut self,
-        frames: &Vec<Frame<Binary>>,
+        _frames: &Vec<Frame<Binary>>,
     ) -> Option<ProtResult<Request<Binary>>> {
         None
     }
@@ -227,7 +224,7 @@ impl Control {
         }
 
         let is_end_headers = frame.is_end_headers();
-        let is_end_stream = frame.is_end_stream();
+        let _is_end_stream = frame.is_end_stream();
 
         if !self.recv_frames.contains_key(&stream_id) {
             self.recv_frames.insert(stream_id, InnerStream::new(frame));
