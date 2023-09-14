@@ -14,7 +14,6 @@ use super::IoBuffer;
 
 pub struct H1Connection<T> {
     io: IoBuffer<T>,
-    // codec: Codec<T>,
 }
 
 impl<T> H1Connection<T>
@@ -127,44 +126,5 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         Pin::new(&mut self.io).poll_request(cx)
-        // loop {
-        //     match self.inner.state {
-        //         State::Open => {
-        //             match self.poll_request(cx) {
-        //                 Poll::Pending => {
-        //                     println!("pending");
-        //                     // if self.inner.control.error.is_some() {
-        //                     //     self.inner.control.go_away_now(Reason::NO_ERROR);
-        //                     //     continue;
-        //                     // }
-        //                     return Poll::Pending;
-        //                 }
-        //                 Poll::Ready(Some(Ok(v))) => {
-        //                     return Poll::Ready(Some(Ok(v)));
-        //                 }
-        //                 Poll::Ready(v) => {
-        //                     let _ = self.handle_poll_result(v)?;
-        //                     continue;
-        //                 }
-        //             };
-        //         },
-        //         State::Closing(reason, initiator) => {
-        //             ready!(self.codec.shutdown(cx))?;
-
-        //             // Transition the state to error
-        //             self.inner.state = State::Closed(reason, initiator);
-        //         },
-        //         State::Closed(reason, initiator) =>  {
-        //             if let Err(e) = self.take_error(reason, initiator) {
-        //                 return Poll::Ready(Some(Err(e)));
-        //             }
-        //             return Poll::Ready(None);
-        //         },
-        //     }
-
-        // }
-        // let xxx = self.poll_request(cx);
-        // println!("connect === {:?} ", xxx.is_pending());
-        // xxx
     }
 }

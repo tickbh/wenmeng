@@ -164,10 +164,8 @@ impl RecvStream {
         if self.receiver.is_some() && !self.is_end {
             loop {
                 let xxx = self.receiver.as_mut().unwrap().poll_recv(cx);
-                println!("xxxxx = {:?}", xxx);
                 match xxx {
                     Poll::Pending => {
-                        println!("recv !!!!!!!!!!!!!!!!!!!! Pending");
                         break;
                     }
                     Poll::Ready(Some((is_end, mut bin))) => {
@@ -229,10 +227,8 @@ impl Serialize for RecvStream {
         }
         if self.receiver.is_some() && !self.is_end {
             loop {
-                println!("aaaaaaa");
                 match self.receiver.as_mut().unwrap().try_recv() {
                     Ok((is_end, mut bin)) => {
-                        println!("receiver === {:?}, {:?}", is_end, bin);
                         size += bin.serialize(buffer)?;
                         self.is_end = is_end;
                     }

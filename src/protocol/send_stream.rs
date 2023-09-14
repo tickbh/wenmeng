@@ -34,7 +34,6 @@ impl SendStream {
     /// 返回Some则表示数据发送不成功，需要重新进行投递
     pub fn send_data(&mut self, binary: Binary, is_end_stream: bool) -> Option<(bool, Binary)> {
         if let Some(Err(e)) = self.sender.as_ref().map(|s| {
-            println!("capacity == {:?} ", s.capacity());
             s.try_send((is_end_stream, binary))
         }) {
             return Some(match e {

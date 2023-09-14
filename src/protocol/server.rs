@@ -92,9 +92,6 @@ where
     RecvStream: From<Res>,
     Res: Serialize + Any
     {
-        let xx = TypeId::of::<Req>();
-        let xx1 = TypeId::of::<RecvStream>();
-        println!("111 = {:?} 222 = {:?}", xx, xx1);
         loop {
             let result = if let Some(h1) = &mut self.http1 {
                 h1.incoming(&mut f).await
@@ -103,7 +100,6 @@ where
             } else {
                 Ok(Some(true))
             };
-            // println!("test: result = {:?}", result);
             match result {
                 Ok(None) | Ok(Some(false)) => continue,
                 Err(ProtError::UpgradeHttp2(b, r)) => {

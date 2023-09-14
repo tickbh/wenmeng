@@ -66,7 +66,6 @@ where
     }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<()>> {
-        println!("!!!!!!!!!!!!!!!!!!!!!!!");
         if let Some(res) = &mut self.inner.res {
             if !self.inner.is_send_header {
                 res.encode_header(&mut self.write_buf)?;
@@ -100,7 +99,6 @@ where
                 }
             }
         };
-        println!("poll write!!!!!!!");
         Poll::Pending
     }
 
@@ -144,13 +142,12 @@ where
     ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
         let _ = self.poll_write(cx)?;
         if self.inner.is_active_close() && self.write_buf.is_empty() {
-            println!("test:::: write client end!!!");
             return Poll::Ready(None);
         }
         match ready!(self.poll_read_all(cx)?) {
             // socket被断开, 提前结束
             0 => {
-                println!("test:::: recv client end!!!");
+                log::trace!("read socket zero, now close socket");
                 return Poll::Ready(None);
             }
             // 收到新的消息头, 解析包体消息
@@ -165,7 +162,6 @@ where
                     return Poll::Pending;
                 }
                 let mut request = Request::new();
-                println!("data = {:?}", self.read_buf.chunk());
                 let size = match request.parse_buffer(&mut self.read_buf.clone()) {
                     Err(e) => {
                         if e.is_partial() {

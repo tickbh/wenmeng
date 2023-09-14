@@ -5,7 +5,6 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tokio_stream::StreamExt;
 
 use futures_core::{ready, Stream};
 use tokio::{
@@ -136,7 +135,6 @@ impl Control {
     {
         ready!(self.handshake.poll_handle(cx, codec))?;
         loop {
-            println!("aaaaaaaaaaaaaaa");
             ready!(self.setting.poll_handle(cx, codec, &mut self.config))?;
             // 写入如果pending不直接pending, 等尝试读pending则返回
             match self.poll_write(cx, codec) {
@@ -229,7 +227,7 @@ impl Control {
         if !self.recv_frames.contains_key(&stream_id) {
             self.recv_frames.insert(stream_id, InnerStream::new(frame));
         } else {
-            self.recv_frames.get_mut(&stream_id).unwrap().push(frame);
+            self.recv_frames.get_mut(&stream_id).unwrap().push(frame)?;
         }
 
         self.last_stream_id = self.last_stream_id.max(stream_id);
