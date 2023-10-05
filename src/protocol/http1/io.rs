@@ -33,6 +33,7 @@ struct ConnectionInfo {
     is_send_header: bool,
     is_build_req: bool,
     is_send_end: bool,
+    left_body_len: usize,
 }
 
 impl ConnectionInfo {
@@ -62,6 +63,7 @@ where
                 is_send_header: false,
                 is_build_req: false,
                 is_send_end: false,
+                left_body_len: usize::MAX,
             },
         }
     }
@@ -154,6 +156,17 @@ where
         Poll::Ready(Ok(size))
     }
 
+    pub fn receive_body_len(&mut self, body_len: usize) -> bool {
+        println!("left len = {}, reciver = {}", self.inner.left_body_len, body_len);
+        if self.inner.left_body_len <= body_len {
+            self.inner.left_body_len = 0;
+            true
+        } else {
+            self.inner.left_body_len -= body_len;
+            false
+        }
+    }
+
     pub fn poll_request(
         &mut self,
         cx: &mut Context<'_>,
@@ -171,11 +184,14 @@ where
             // 收到新的消息头, 解析包体消息
             _ => {
                 if self.inner.is_build_req {
-                    if let Some(sender) = &self.inner.read_sender {
-                        let binary = Binary::from(self.read_buf.chunk().to_vec());
-                        if let Ok(_) = sender.try_send((false, binary)) {
+                    if let Some(sender) = self.inner.read_sender.take() {
+                        if let Ok(p) = sender.try_reserve() {
+                            let binary = Binary::from(self.read_buf.chunk().to_vec());
+                            let is_end = self.receive_body_len(binary.len());
+                            p.send((is_end, binary));
                             self.read_buf.advance_all();
                         }
+                        self.inner.read_sender = Some(sender);
                     }
                     return Poll::Pending;
                 }
@@ -208,6 +224,7 @@ where
                 self.inner.is_build_req = true;
                 self.inner.is_keep_alive = request.is_keep_alive();
                 let body_len = request.get_body_len();
+                self.inner.left_body_len = if body_len == 0 { usize::MAX } else { body_len };
                 let new_request = if request.method().is_nobody() {
                     request.into(RecvStream::empty()).0
                 } else {
@@ -216,7 +233,7 @@ where
                     let mut binary = BinaryMut::new();
                     binary.put_slice(self.read_buf.chunk());
                     self.read_buf.advance(self.read_buf.remaining());
-                    let is_end = body_len <= binary.remaining();
+                    let is_end = self.receive_body_len(binary.remaining());
                     request.into(RecvStream::new(receiver, binary, is_end)).0
                 };
                 return Poll::Ready(Some(Ok(new_request)));
@@ -244,11 +261,14 @@ where
             // 收到新的消息头, 解析包体消息
             _ => {
                 if self.inner.is_build_req {
-                    if let Some(sender) = &self.inner.read_sender {
-                        let binary = Binary::from(self.read_buf.chunk().to_vec());
-                        if let Ok(_) = sender.try_send((false, binary)) {
+                    if let Some(sender) = self.inner.read_sender.take() {
+                        if let Ok(p) = sender.try_reserve() {
+                            let binary = Binary::from(self.read_buf.chunk().to_vec());
+                            let is_end = self.receive_body_len(binary.len());
+                            p.send((is_end, binary));
                             self.read_buf.advance_all();
                         }
+                        self.inner.read_sender = Some(sender);
                     }
                     println!("aaa");
                     return Poll::Pending;
@@ -276,13 +296,15 @@ where
                 self.inner.is_build_req = true;
                 // self.inner.is_keep_alive = response.is_keep_alive();
                 let body_len = response.get_body_len();
+                self.inner.left_body_len = if body_len == 0 { usize::MAX } else { body_len };
+                println!("body len = {:?}", body_len);
                 let new_response = {
                     let (sender, receiver) = tokio::sync::mpsc::channel::<(bool, Binary)>(30);
                     self.inner.read_sender = Some(sender);
                     let mut binary = BinaryMut::new();
                     binary.put_slice(self.read_buf.chunk());
-                    self.read_buf.advance(self.read_buf.remaining());
-                    let is_end = body_len <= binary.remaining();
+                    self.read_buf.advance_all();
+                    let is_end = self.receive_body_len(binary.remaining());
                     response.into(RecvStream::new(receiver, binary, is_end)).0
                 };
                 return Poll::Ready(Some(Ok(new_response)));

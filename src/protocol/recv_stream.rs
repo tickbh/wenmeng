@@ -1,6 +1,6 @@
 use std::{
     io::Read,
-    task::{Context, Poll},
+    task::{Context, Poll}, fmt::Display,
 };
 
 use futures_core::Stream;
@@ -87,6 +87,17 @@ impl RecvStream {
             buffer.put_slice(bin.chunk());
         }
         if let Some(bin) = self.binary_mut.take() {
+            buffer.put_slice(bin.chunk());
+        }
+        return buffer.freeze();
+    }
+
+    pub fn copy_now(&self) -> Binary {
+        let mut buffer = BinaryMut::new();
+        if let Some(bin) = &self.binary {
+            buffer.put_slice(bin.chunk());
+        }
+        if let Some(bin) = &self.binary_mut {
             buffer.put_slice(bin.chunk());
         }
         return buffer.freeze();
@@ -303,6 +314,21 @@ impl From<RecvStream> for String {
     }
 }
 
+impl Display for RecvStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_end {
+            let bin = self.copy_now();
+            f.write_str(&String::from_utf8_lossy(bin.chunk()))
+        } else {
+            let mut f = f.debug_struct("RecvStream");
+            f.field("状态", &self.is_end);
+            if self.is_end {
+                f.field("接收字节数", &self.body_len());
+            }
+            f.finish()
+        }
+    }
+}
 // impl<T> From<T> for RecvStream where T : Serialize {
 //     fn from(value: T) -> Self {
 //         todo!()

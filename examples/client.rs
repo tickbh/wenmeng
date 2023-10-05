@@ -10,7 +10,7 @@ async fn main() {
     let mut res = client.send(req.into_type()).await.unwrap().recv().await;
     println!("res = {:?}", res);
     res.as_mut().unwrap().body_mut().wait_all().await;
-    println!("res = {:?}", res);
+    println!("res = {}", res.unwrap());
 
     // let client = reqwest::Client::builder().http2_prior_knowledge().build().unwrap();
     // // let x = client.request(reqwest::Method::GET, "http://192.168.179.133:8080/post").send().await.unwrap();
