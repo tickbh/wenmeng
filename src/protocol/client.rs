@@ -39,7 +39,7 @@ impl Builder {
 
     pub async fn request<Req: Serialize>(
         self,
-        req: Request<Req>,
+        req: &Request<Req>,
     ) -> ProtResult<Client<TcpStream>> {
         let connect = req.get_connect_url();
         if connect.is_none() {
@@ -122,7 +122,6 @@ where
             // }
              else {
                 return Ok(());
-                // Ok(Some(true))
             };
             match result {
                 Ok(None) =>  return Ok(()),
@@ -136,6 +135,7 @@ where
                 }
                 Err(e) => return Err(e),
                 Ok(Some(r)) => {
+                    self.sender.send(r).await?;
                 },
             };
         }

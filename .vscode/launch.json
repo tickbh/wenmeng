@@ -7,54 +7,17 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'dianmeng'",
+            "name": "Debug unit tests in library 'wenmeng'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=dianmeng"
+                    "--package=wenmeng"
                 ],
                 "filter": {
-                    "name": "dianmeng",
+                    "name": "wenmeng",
                     "kind": "lib"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug executable 'dianmeng'",
-            "cargo": {
-                "args": [
-                    "build",
-                    "--bin=dianmeng",
-                    "--package=dianmeng"
-                ],
-                "filter": {
-                    "name": "dianmeng",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug unit tests in executable 'dianmeng'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--bin=dianmeng",
-                    "--package=dianmeng"
-                ],
-                "filter": {
-                    "name": "dianmeng",
-                    "kind": "bin"
                 }
             },
             "args": [],
@@ -68,7 +31,7 @@
                 "args": [
                     "build",
                     "--example=client",
-                    "--package=dianmeng"
+                    "--package=wenmeng"
                 ],
                 "filter": {
                     "name": "client",
@@ -87,10 +50,84 @@
                     "test",
                     "--no-run",
                     "--example=client",
-                    "--package=dianmeng"
+                    "--package=wenmeng"
                 ],
                 "filter": {
                     "name": "client",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'echo'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=echo",
+                    "--package=wenmeng"
+                ],
+                "filter": {
+                    "name": "echo",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'echo'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=echo",
+                    "--package=wenmeng"
+                ],
+                "filter": {
+                    "name": "echo",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'main'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=main",
+                    "--package=wenmeng"
+                ],
+                "filter": {
+                    "name": "main",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'main'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=main",
+                    "--package=wenmeng"
+                ],
+                "filter": {
+                    "name": "main",
                     "kind": "example"
                 }
             },

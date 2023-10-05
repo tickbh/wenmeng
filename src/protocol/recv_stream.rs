@@ -261,6 +261,13 @@ unsafe impl Sync for RecvStream {}
 
 unsafe impl Send for RecvStream {}
 
+
+impl From<()> for RecvStream {
+    fn from(_: ()) -> Self {
+        RecvStream::empty()
+    }
+}
+
 impl From<Binary> for RecvStream {
     fn from(value: Binary) -> Self {
         RecvStream::only(value)

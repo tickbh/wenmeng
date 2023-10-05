@@ -26,7 +26,7 @@ where
         }
     }
 
-    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<()>> {
+    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
         self.io.poll_write(cx)
     }
 

@@ -66,7 +66,7 @@ where
         }
     }
 
-    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<()>> {
+    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
         if let Some(res) = &mut self.inner.res {
             if !self.inner.is_send_header {
                 res.encode_header(&mut self.write_buf)?;
@@ -107,13 +107,13 @@ where
         }
 
         if self.write_buf.is_empty() {
-            return Poll::Ready(Ok(()));
+            return Poll::Ready(Ok(0));
         }
         match ready!(Pin::new(&mut self.io).poll_write(cx, &self.write_buf.chunk()))? {
             n => {
                 self.write_buf.advance(n);
                 if self.write_buf.is_empty() {
-                    return Poll::Ready(Ok(()));
+                    return Poll::Ready(Ok(n));
                 }
             }
         };
@@ -158,8 +158,8 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
-        let _ = self.poll_write(cx)?;
-        if self.inner.is_active_close() && self.write_buf.is_empty() {
+        let n = self.poll_write(cx)?;
+        if n == Poll::Ready(0) && self.inner.is_active_close() && self.write_buf.is_empty() {
             return Poll::Ready(None);
         }
         match ready!(self.poll_read_all(cx)?) {
@@ -229,14 +229,16 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Option<ProtResult<Response<RecvStream>>>> {
-        let _ = self.poll_write(cx)?;
-        if self.inner.is_active_close() && self.write_buf.is_empty() {
-            return Poll::Ready(None);
-        }
+        let n = self.poll_write(cx)?;
+        // if n == Poll::Ready(0) && self.inner.is_active_close() && self.write_buf.is_empty() {
+        //     println!("ddddd");
+        //     return Poll::Ready(None);
+        // }
         match ready!(self.poll_read_all(cx)?) {
             // socket被断开, 提前结束
             0 => {
                 log::trace!("read socket zero, now close socket");
+                println!("bbbb");
                 return Poll::Ready(None);
             }
             // 收到新的消息头, 解析包体消息
@@ -248,6 +250,7 @@ where
                             self.read_buf.advance_all();
                         }
                     }
+                    println!("aaa");
                     return Poll::Pending;
                 }
                 let mut response = Response::new(());
@@ -263,6 +266,7 @@ where
                 };
 
                 if response.is_partial() {
+                    println!("ccc");
                     return Poll::Pending;
                 }
 
