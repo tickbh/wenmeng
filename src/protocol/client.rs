@@ -116,8 +116,7 @@ where
         loop {
             let result = if let Some(h1) = &mut self.http1 {
                 h1.incoming().await
-            }
-             else if let Some(h2) = &mut self.http2 {
+            } else if let Some(h2) = &mut self.http2 {
                 h2.incoming().await
             }
              else {
@@ -125,12 +124,12 @@ where
             };
             match result {
                 Ok(None) =>  return Ok(()),
-                Err(ProtError::ClientUpgradeHttp2) => {
+                Err(ProtError::ClientUpgradeHttp2(s)) => {
                     if self.http1.is_some() {
                         self.http2 = Some(self.http1.take().unwrap().into_h2());
                         continue;
                     } else {
-                        return Err(ProtError::ClientUpgradeHttp2);
+                        return Err(ProtError::ClientUpgradeHttp2(s));
                     }
                 }
                 Err(e) => return Err(e),
@@ -145,7 +144,8 @@ where
     pub async fn operate(self, req: Request<RecvStream>) -> ProtResult<()> {
         tokio::spawn(async move {
             // let _ = self.operate(req).await;
-            let _ = self.inner_operate(req).await;
+            let e = self.inner_operate(req).await;
+            println!("errr = {:?}", e);
         });
         Ok(())
     }

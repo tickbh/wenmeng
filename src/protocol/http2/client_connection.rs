@@ -10,7 +10,7 @@ use tokio::{
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
-    Binary, BinaryMut, Request, Response, Serialize, HeaderName,
+    Binary, BinaryMut, Request, Response, Serialize, HeaderName, http2::frame::Settings,
 };
 
 use crate::{
@@ -93,7 +93,7 @@ where
     pub fn poll_response(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
+    ) -> Poll<Option<ProtResult<Response<RecvStream>>>> {
         self.inner.control.poll_response(cx, &mut self.codec)
     }
 
@@ -137,7 +137,6 @@ where
     }
 
     pub async fn incoming(&mut self) -> ProtResult<Option<Response<RecvStream>>>
-
     {
         use futures_util::stream::StreamExt;
         let mut receiver = self.inner.receiver_push.take().unwrap();
@@ -166,7 +165,7 @@ where
 
     fn handle_poll_result(
         &mut self,
-        result: Option<ProtResult<Request<RecvStream>>>,
+        result: Option<ProtResult<Response<RecvStream>>>,
     ) -> ProtResult<()> {
         match result {
             // 收到空包, 则关闭连接
@@ -220,7 +219,11 @@ where
     }
 
     pub fn set_handshake_status(&mut self, binary: Binary) {
-        self.inner.control.set_handshake_status(binary)
+        self.inner.control.set_handshake_status(binary, true)
+    }
+
+    pub fn set_setting_status(&mut self, setting: Settings) {
+        self.inner.control.set_setting_status(setting)
     }
 
     pub async fn send_response(
@@ -244,7 +247,7 @@ where
         loop {
             match self.inner.state {
                 State::Open => {
-                    match self.poll_request(cx) {
+                    match self.poll_response(cx) {
                         Poll::Pending => {
                             return Poll::Pending;
                         }

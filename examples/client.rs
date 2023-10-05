@@ -7,13 +7,12 @@ async fn test_http2() {
     settings.set_enable_push(false);
     let req = Request::builder().method("GET").url("http://nghttp2.org/").upgrade_http2(settings).body("").unwrap();
     // let req = Request::builder().method("GET").url("http://www.baidu.com/").upgrade_http2().body("").unwrap();
-
     println!("req = {}", req);
     let client = Client::builder().request(&req).await.unwrap();
     let mut res = client.send(req.into_type()).await.unwrap().recv().await;
     // println!("res = {:?}", res);
     res.as_mut().unwrap().body_mut().wait_all().await;
-    // println!("res = {}", res.unwrap());
+    println!("res = {}", res.unwrap());
 }
 
 #[tokio::main]

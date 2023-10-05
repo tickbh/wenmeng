@@ -141,6 +141,7 @@ impl Control {
                 Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e))),
                 _ => (),
             }
+
             match Pin::new(&mut *codec).poll_next(cx) {
                 Poll::Ready(Some(Ok(frame))) => {
                     match &frame {
@@ -163,7 +164,6 @@ impl Control {
                         }
                         Frame::GoAway(e) => {
                             self.error = Some(e.clone());
-                            return Poll::Ready(Some(Err(ProtError::library_go_away(e.reason()))));
                         },
                         Frame::WindowUpdate(_v) => {
                             // self.config.settings.set_initial_window_size(Some(v.size_increment()))
@@ -177,7 +177,13 @@ impl Control {
                     Some(r) => {
                         return Poll::Ready(Some(Ok(r)));
                     }
-                    None => return Poll::Pending,
+                    None => {
+                        if let Some(e) = &self.error {
+                            return Poll::Ready(Some(Err(ProtError::library_go_away(e.reason()))));
+                        } else {
+                            return Poll::Pending
+                        }
+                    },
                 },
             }
         }
@@ -222,7 +228,6 @@ impl Control {
                         }
                         Frame::GoAway(e) => {
                             self.error = Some(e.clone());
-                            return Poll::Ready(Some(Err(ProtError::library_go_away(e.reason()))));
                         },
                         Frame::WindowUpdate(_v) => {
                             // self.config.settings.set_initial_window_size(Some(v.size_increment()))
@@ -236,7 +241,13 @@ impl Control {
                     Some(r) => {
                         return Poll::Ready(Some(Ok(r)));
                     }
-                    None => return Poll::Pending,
+                    None => {
+                        if let Some(e) = &self.error {
+                            return Poll::Ready(Some(Err(ProtError::library_go_away(e.reason()))));
+                        } else {
+                            return Poll::Pending
+                        }
+                    },
                 },
             }
         }
@@ -283,16 +294,16 @@ impl Control {
             .recv_frames
             .get_mut(&stream_id)
             .unwrap()
-            .build_request()
+            .build_response()
         {
             Err(e) => return Poll::Ready(Some(Err(e))),
             Ok(mut r) => {
-                let method = r.method().clone();
+                // let method = r.method().clone();
                 r.extensions_mut().insert(stream_id);
                 r.extensions_mut().insert(SendControl::new(
                     stream_id,
                     self.sender_push.clone(),
-                    method,
+                    webparse::Method::Get,
                 ));
                 Poll::Ready(Some(Ok(r)))
             }
@@ -338,8 +349,12 @@ impl Control {
         self.goaway.reason()
     }
 
-    pub fn set_handshake_status(&mut self, binary: Binary) {
-        self.handshake.set_handshake_status(binary)
+    pub fn set_handshake_status(&mut self, binary: Binary, is_client: bool) {
+        self.handshake.set_handshake_status(binary, is_client)
+    }
+
+    pub fn set_setting_status(&mut self, setting: Settings) {
+        self.setting.set_settings(setting);
     }
 
     pub async fn send_response(&mut self, res: Response<RecvStream>, stream_id: StreamIdentifier) -> ProtResult<()>

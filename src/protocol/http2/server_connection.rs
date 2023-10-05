@@ -221,7 +221,7 @@ where
     }
 
     pub fn set_handshake_status(&mut self, binary: Binary) {
-        self.inner.control.set_handshake_status(binary)
+        self.inner.control.set_handshake_status(binary, false)
     }
 
     pub async fn send_response(

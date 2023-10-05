@@ -30,6 +30,10 @@ impl StateSettings {
         }
     }
 
+    pub fn set_settings(&mut self, setting: Settings) {
+        self.state = LocalState::Done;
+    }
+
     pub fn poll_handle<T>(
         &mut self,
         cx: &mut Context<'_>,

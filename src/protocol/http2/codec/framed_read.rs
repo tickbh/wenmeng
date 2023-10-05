@@ -8,6 +8,7 @@ use tokio_util::codec::{FramedRead as InnerFramedRead};
 use tokio_util::codec::{LengthDelimitedCodec};
 use webparse::http::http2::frame::{Frame, Kind};
 use webparse::http::http2::{frame, Decoder};
+use webparse::http2::DEFAULT_SETTINGS_HEADER_TABLE_SIZE;
 use webparse::{Binary, BinaryMut, Buf};
 
 use crate::protocol::{ProtResult};
@@ -57,7 +58,7 @@ where
         FramedRead {
             inner: delimited,
             decoder: Decoder::new(),
-            max_header_list_size: 0,
+            max_header_list_size: DEFAULT_SETTINGS_HEADER_TABLE_SIZE,
             partial: None,
         }
     }
@@ -91,7 +92,9 @@ where
                 ref mut partial,
                 ..
             } = *self;
+            
             if let Some(frame) = decode_frame(decoder, max_header_list_size, partial, bytes)? {
+                println!("read frame = {:?}", frame);
                 return Poll::Ready(Some(Ok(frame)));
             }
         }

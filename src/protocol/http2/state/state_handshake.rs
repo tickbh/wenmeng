@@ -13,6 +13,8 @@ pub struct StateHandshake {
     builder: Builder,
     /// 当前握手状态
     state: Handshaking,
+    /// 是否为客户端
+    is_client: bool,
     /// 握手日志信息
     span: tracing::Span,
 }
@@ -83,6 +85,16 @@ impl StateHandshake {
         StateHandshake {
             builder: Builder::new(),
             state: Handshaking::None,
+            is_client: false,
+            span: tracing::trace_span!("server_handshake"),
+        }
+    }
+
+    pub fn new_client() -> StateHandshake {
+        StateHandshake {
+            builder: Builder::new(),
+            state: Handshaking::None,
+            is_client: true,
             span: tracing::trace_span!("server_handshake"),
         }
     }
@@ -104,7 +116,11 @@ impl StateHandshake {
                     match ready!(flush.poll_handle(cx, codec)) {
                         Ok(_) => {
                             tracing::trace!(flush.poll = %"Ready");
-                            self.state = Handshaking::ReadingPreface(ReadPreface::new());
+                            if self.is_client {
+                                self.state = Handshaking::Done;
+                            } else {
+                                self.state = Handshaking::ReadingPreface(ReadPreface::new());
+                            }
                             continue;
                         }
                         Err(e) => return Poll::Ready(Err(e)),
@@ -126,15 +142,10 @@ impl StateHandshake {
             }
         }
     }
-
     
-    pub fn set_handshake_status(&mut self, binary: Binary) {
-        if binary.remaining() == 0 {
-            self.state = Handshaking::Done
-        } else {
-            self.state = Handshaking::Flushing(Flush(binary))
-        }
-        
+    pub fn set_handshake_status(&mut self, binary: Binary, is_client: bool) {
+        self.is_client = is_client;
+        self.state = Handshaking::Flushing(Flush(binary))
     }
 }
 

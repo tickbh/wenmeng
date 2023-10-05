@@ -6,7 +6,7 @@ use std::{
 
 use futures_core::{Future, Stream};
 use tokio::{io::{AsyncRead, AsyncWrite}, sync::mpsc::Sender};
-use webparse::{Binary, BinaryMut, HeaderName, Request, Response, Serialize};
+use webparse::{Binary, BinaryMut, HeaderName, Request, Response, Serialize, http2::{HTTP2_MAGIC, frame::Settings}};
 
 use crate::{ServerH2Connection, ProtResult, RecvStream, http2::ClientH2Connection};
 
@@ -14,6 +14,7 @@ use super::IoBuffer;
 
 pub struct ClientH1Connection<T> {
     io: IoBuffer<T>,
+    settings: Option<Settings>,
 }
 
 impl<T> ClientH1Connection<T>
@@ -23,6 +24,7 @@ where
     pub fn new(io: T) -> Self {
         ClientH1Connection {
             io: IoBuffer::new(io),
+            settings: None
         }
     }
 
@@ -41,19 +43,20 @@ where
         let (io, read_buf, write_buf) = self.io.into();
         let mut connect = crate::http2::Builder::new().client_connection(io);
         connect.set_cache_buf(read_buf, write_buf);
-        connect.set_handshake_status(Binary::new());
+        connect.set_handshake_status(Binary::from_static(HTTP2_MAGIC));
+        connect.set_setting_status(self.settings.unwrap_or(Settings::default()));
         connect
     }
 
-    pub async fn handle_request(
+    pub async fn handle_response(
         &mut self,
         r: Response<RecvStream>,
-    ) -> ProtResult<Option<bool>>
+    ) -> ProtResult<Option<Response<RecvStream>>>
     {
         if r.status() == 101 {
-            return Err(crate::ProtError::ClientUpgradeHttp2)
+            return Err(crate::ProtError::ClientUpgradeHttp2(self.settings.clone().unwrap_or(Settings::default())))
         }
-        return Ok(None);
+        return Ok(Some(r));
     }
 
     pub async fn incoming(&mut self) -> ProtResult<Option<Response<RecvStream>>>
@@ -65,17 +68,19 @@ where
             None => return Ok(None),
             Some(Err(e)) => return Err(e),
             Some(Ok(r)) => {
-                return Ok(Some(r))
+                return self.handle_response(r).await;
             }
         };
-        return Ok(None);
     }
 
     pub async fn send_response(&mut self, res: Response<RecvStream>) -> ProtResult<()> {
         self.io.send_response(res).await
     }
 
-    pub async fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
+    pub async fn send_request(&mut self, mut req: Request<RecvStream>) -> ProtResult<()> {
+        if let Some(s) = req.extensions_mut().remove::<Settings>() {
+            self.settings = Some(s);
+        }
         self.io.send_request(req).await
     }
 }
