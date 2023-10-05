@@ -34,6 +34,7 @@ struct ConnectionInfo {
     is_build_req: bool,
     is_send_end: bool,
     left_body_len: usize,
+    is_delay_close: bool,
 }
 
 impl ConnectionInfo {
@@ -63,6 +64,7 @@ where
                 is_send_header: false,
                 is_build_req: false,
                 is_send_end: false,
+                is_delay_close: false,
                 left_body_len: usize::MAX,
             },
         }
@@ -251,33 +253,57 @@ where
         //     println!("ddddd");
         //     return Poll::Ready(None);
         // }
+        if self.inner.is_delay_close {
+            return Poll::Ready(None);
+        }
         match ready!(self.poll_read_all(cx)?) {
             // socket被断开, 提前结束
-            0 => {
-                log::trace!("read socket zero, now close socket");
-                println!("bbbb");
-                return Poll::Ready(None);
-            }
+            // 0 => {
+            //     log::trace!("read socket zero, now close socket");
+            //     println!("bbbb");
+            //     self.inner.is_delay_close = true;
+            //     return Poll::Ready(None);
+            // }
             // 收到新的消息头, 解析包体消息
-            _ => {
+            n @ _ => {
+                if n == 0 {
+                    self.inner.is_delay_close = true;
+                }
                 if self.inner.is_build_req {
                     if let Some(sender) = self.inner.read_sender.take() {
-                        if let Ok(p) = sender.try_reserve() {
+                        let is_end = if let Ok(p) = sender.try_reserve() {
                             let binary = Binary::from(self.read_buf.chunk().to_vec());
                             let is_end = self.receive_body_len(binary.len());
                             p.send((is_end, binary));
                             self.read_buf.advance_all();
-                        }
+                            is_end
+                        } else {
+                            false
+                        };
+
                         self.inner.read_sender = Some(sender);
+
+                        if is_end && self.inner.is_active_close() && self.write_buf.is_empty() {
+                            println!("ddddd");
+                            return Poll::Ready(None);
+                        }
                     }
                     println!("aaa");
-                    return Poll::Pending;
+                    if self.inner.is_delay_close {
+                        return Poll::Ready(None);
+                    } else {
+                        return Poll::Pending;
+                    }
                 }
                 let mut response = Response::new(());
                 let size = match response.parse_buffer(&mut self.read_buf.clone()) {
                     Err(e) => {
                         if e.is_partial() {
-                            return Poll::Pending;
+                            if self.inner.is_delay_close {
+                                return Poll::Ready(None);
+                            } else {
+                                return Poll::Pending;
+                            }
                         } else {
                             return Poll::Ready(Some(Err(e.into())));
                         }
@@ -287,7 +313,11 @@ where
 
                 if response.is_partial() {
                     println!("ccc");
-                    return Poll::Pending;
+                    if self.inner.is_delay_close {
+                        return Poll::Ready(None);
+                    } else {
+                        return Poll::Pending;
+                    }
                 }
 
                 self.read_buf.advance(size);

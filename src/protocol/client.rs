@@ -117,9 +117,9 @@ where
             let result = if let Some(h1) = &mut self.http1 {
                 h1.incoming().await
             }
-            //  else if let Some(h2) = &mut self.http2 {
-            //     h2.incoming(&mut f).await
-            // }
+             else if let Some(h2) = &mut self.http2 {
+                h2.incoming().await
+            }
              else {
                 return Ok(());
             };

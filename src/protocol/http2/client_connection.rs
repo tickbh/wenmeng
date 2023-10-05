@@ -87,9 +87,14 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
         self.inner.control.poll_request(cx, &mut self.codec)
-        // loop {
-        //     ready!(Pin::new(&mut self.codec).poll_next(cx)?);
-        // }
+    }
+
+
+    pub fn poll_response(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
+        self.inner.control.poll_response(cx, &mut self.codec)
     }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<()>> {
@@ -131,14 +136,8 @@ where
         return Ok(None);
     }
 
-    pub async fn incoming<F, Fut, Res, Req>(&mut self, f: &mut F) -> ProtResult<Option<bool>>
-    where
-    F: FnMut(Request<Req>) -> Fut,
-    Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
-    Req: From<RecvStream>,
-    Req: Serialize + Any,
-    RecvStream: From<Res>,
-    Res: Serialize + Any,
+    pub async fn incoming(&mut self) -> ProtResult<Option<Response<RecvStream>>>
+
     {
         use futures_util::stream::StreamExt;
         let mut receiver = self.inner.receiver_push.take().unwrap();
@@ -154,10 +153,10 @@ where
             req = self.next() => {
                 self.inner.receiver_push = Some(receiver);
                 match req {
-                    None => return Ok(Some(true)),
+                    None => return Ok(None),
                     Some(Err(e)) => return Err(e),
                     Some(Ok(r)) => {
-                        self.handle_request(r, f).await?;
+                        return Ok(Some(r))
                     }
                 };
             }
@@ -237,7 +236,7 @@ impl<T> Stream for ClientH2Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = ProtResult<Request<RecvStream>>;
+    type Item = ProtResult<Response<RecvStream>>;
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,

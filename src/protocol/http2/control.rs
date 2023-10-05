@@ -173,7 +173,66 @@ impl Control {
                 }
                 Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),
                 Poll::Ready(None) => return Poll::Ready(None),
-                Poll::Pending => match ready!(self.build_frame()?) {
+                Poll::Pending => match ready!(self.build_request_frame()?) {
+                    Some(r) => {
+                        return Poll::Ready(Some(Ok(r)));
+                    }
+                    None => return Poll::Pending,
+                },
+            }
+        }
+    }
+
+
+    pub fn poll_response<T>(
+        &mut self,
+        cx: &mut Context<'_>,
+        codec: &mut Codec<T>,
+    ) -> Poll<Option<ProtResult<Response<RecvStream>>>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
+        ready!(self.handshake.poll_handle(cx, codec))?;
+        loop {
+            ready!(self.setting.poll_handle(cx, codec, &mut self.config))?;
+            // 写入如果pending不直接pending, 等尝试读pending则返回
+            match self.poll_write(cx, codec) {
+                Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e))),
+                _ => (),
+            }
+            match Pin::new(&mut *codec).poll_next(cx) {
+                Poll::Ready(Some(Ok(frame))) => {
+                    match &frame {
+                        Frame::Settings(settings) => {
+                            self.setting
+                                .recv_setting(codec, settings.clone(), &mut self.config)?;
+                        }
+                        Frame::Data(_) => {
+                            let _ = self.recv_frame(frame)?;
+                        }
+                        Frame::Headers(_) => {
+                            let _ = self.recv_frame(frame)?;
+                        }
+                        Frame::Priority(v) => {
+                            self.send_frames.priority_recv(v.clone());
+                        }
+                        Frame::PushPromise(_) => {}
+                        Frame::Ping(p) => {
+                            self.ping_pong.receive(p.clone());
+                        }
+                        Frame::GoAway(e) => {
+                            self.error = Some(e.clone());
+                            return Poll::Ready(Some(Err(ProtError::library_go_away(e.reason()))));
+                        },
+                        Frame::WindowUpdate(_v) => {
+                            // self.config.settings.set_initial_window_size(Some(v.size_increment()))
+                        }
+                        Frame::Reset(_v) => {}
+                    }
+                }
+                Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Pending => match ready!(self.build_response_frame()?) {
                     Some(r) => {
                         return Poll::Ready(Some(Ok(r)));
                     }
@@ -190,7 +249,32 @@ impl Control {
         None
     }
 
-    pub fn build_frame(&mut self) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
+    pub fn build_request_frame(&mut self) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
+        if self.ready_queue.is_empty() {
+            return Poll::Ready(None);
+        }
+        let stream_id = self.ready_queue.pop_front().unwrap();
+        match self
+            .recv_frames
+            .get_mut(&stream_id)
+            .unwrap()
+            .build_request()
+        {
+            Err(e) => return Poll::Ready(Some(Err(e))),
+            Ok(mut r) => {
+                let method = r.method().clone();
+                r.extensions_mut().insert(stream_id);
+                r.extensions_mut().insert(SendControl::new(
+                    stream_id,
+                    self.sender_push.clone(),
+                    method,
+                ));
+                Poll::Ready(Some(Ok(r)))
+            }
+        }
+    }
+
+    pub fn build_response_frame(&mut self) -> Poll<Option<ProtResult<Response<RecvStream>>>> {
         if self.ready_queue.is_empty() {
             return Poll::Ready(None);
         }

@@ -3,9 +3,9 @@ use tokio::sync::mpsc::{channel, Sender};
 use webparse::{
     http::{
         http2::frame::{Frame, Reason, StreamIdentifier},
-        request,
+        request, response,
     },
-    Binary, BinaryMut, Request, Buf,
+    Binary, BinaryMut, Request, Buf, Response,
 };
 
 use crate::{ProtError, ProtResult};
@@ -80,6 +80,46 @@ impl InnerStream {
                     is_nobody = header.is_end_stream();
                     is_end_stream = header.is_end_stream();
                     match header.into_request(builder) {
+                        Ok(b) => builder = b,
+                        Err(e) => return Err(e.into()),
+                    }
+                },
+                Frame::Data(d) => {
+                    is_end_stream = d.is_end_stream();
+                    binary.put_slice(d.payload().chunk());
+                },
+                _ => {
+                    return Err(ProtError::library_go_away(Reason::PROTOCOL_ERROR));
+                }
+            }
+        }
+        let recv = if is_nobody {
+            RecvStream::empty()
+        } else {
+            let (sender, receiver) = channel::<(bool, Binary)>(20);
+            self.sender = Some(sender);
+            RecvStream::new(receiver, binary, is_end_stream)
+        };
+        self.content_len = builder.get_body_len();
+        match builder.body(recv) {
+            Err(e) => return Err(e.into()),
+            Ok(r) => return Ok(r),
+        }
+    }
+
+
+    pub fn build_response(&mut self) -> ProtResult<Response<RecvStream>> {
+        let now_frames = self.take();
+        let mut builder = response::Response::builder();
+        let mut is_nobody = false;
+        let mut is_end_stream = false;
+        let mut binary = BinaryMut::new();
+        for v in now_frames {
+            match v {
+                Frame::Headers(header) => {
+                    is_nobody = header.is_end_stream();
+                    is_end_stream = header.is_end_stream();
+                    match header.into_response(builder) {
                         Ok(b) => builder = b,
                         Err(e) => return Err(e.into()),
                     }

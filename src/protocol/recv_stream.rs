@@ -279,6 +279,13 @@ impl From<()> for RecvStream {
     }
 }
 
+impl From<&str> for RecvStream {
+    fn from(value: &str) -> Self {
+        let bin = Binary::from(value.as_bytes().to_vec());
+        RecvStream::only(bin)
+    }
+}
+
 impl From<Binary> for RecvStream {
     fn from(value: Binary) -> Self {
         RecvStream::only(value)
