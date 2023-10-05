@@ -13,7 +13,6 @@ use tokio::{
 use webparse::{
     http::http2, Binary, BinaryMut, Buf, BufMut, Request, Response,
 };
-
 use crate::{ProtError, ProtResult, RecvStream};
 
 pub struct IoBuffer<T> {
@@ -28,6 +27,7 @@ struct ConnectionInfo {
     deal_req: usize,
     read_sender: Option<Sender<(bool, Binary)>>,
     res: Option<Response<RecvStream>>,
+    req: Option<Request<RecvStream>>,
     is_keep_alive: bool,
     is_send_body: bool,
     is_send_header: bool,
@@ -56,6 +56,7 @@ where
                 deal_req: 0,
                 read_sender: None,
                 res: None,
+                req: None,
                 is_keep_alive: false,
                 is_send_body: false,
                 is_send_header: false,
@@ -82,8 +83,25 @@ where
             }
         }
 
+        if let Some(req) = &mut self.inner.req {
+            if !self.inner.is_send_header {
+                req.encode_header(&mut self.write_buf)?;
+                self.inner.is_send_header = true;
+            }
+
+            if !req.body().is_end() || !self.inner.is_send_body {
+                self.inner.is_send_body = true;
+                let _ = req.body_mut().poll_encode(cx, &mut self.write_buf);
+                if req.body().is_end() {
+                    self.inner.is_send_end = true;
+                    self.inner.deal_req += 1;
+                }
+            }
+        }
+
         if self.inner.is_send_end {
             self.inner.res = None;
+            self.inner.req = None;
             self.inner.is_build_req = false;
             self.inner.is_send_header = false;
         }
@@ -171,7 +189,7 @@ where
                                 && &self.read_buf[..http2::MAIGC_LEN] == http2::HTTP2_MAGIC
                             {
                                 self.read_buf.advance(http2::MAIGC_LEN);
-                                let err = ProtError::UpgradeHttp2(Binary::new(), None);
+                                let err = ProtError::ServerUpgradeHttp2(Binary::new(), None);
                                 return Poll::Ready(Some(Err(err)));
                             }
                             return Poll::Ready(Some(Err(e.into())));
@@ -206,21 +224,79 @@ where
         }
     }
 
+
+    pub fn poll_response(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<ProtResult<Response<RecvStream>>>> {
+        let _ = self.poll_write(cx)?;
+        if self.inner.is_active_close() && self.write_buf.is_empty() {
+            return Poll::Ready(None);
+        }
+        match ready!(self.poll_read_all(cx)?) {
+            // socket被断开, 提前结束
+            0 => {
+                log::trace!("read socket zero, now close socket");
+                return Poll::Ready(None);
+            }
+            // 收到新的消息头, 解析包体消息
+            _ => {
+                if self.inner.is_build_req {
+                    if let Some(sender) = &self.inner.read_sender {
+                        let binary = Binary::from(self.read_buf.chunk().to_vec());
+                        if let Ok(_) = sender.try_send((false, binary)) {
+                            self.read_buf.advance_all();
+                        }
+                    }
+                    return Poll::Pending;
+                }
+                let mut response = Response::new(());
+                let size = match response.parse_buffer(&mut self.read_buf.clone()) {
+                    Err(e) => {
+                        if e.is_partial() {
+                            return Poll::Pending;
+                        } else {
+                            return Poll::Ready(Some(Err(e.into())));
+                        }
+                    }
+                    Ok(n) => n,
+                };
+
+                if response.is_partial() {
+                    return Poll::Pending;
+                }
+
+                self.read_buf.advance(size);
+                self.inner.is_send_body = false;
+                self.inner.is_send_end = false;
+                self.inner.is_build_req = true;
+                // self.inner.is_keep_alive = response.is_keep_alive();
+                let body_len = response.get_body_len();
+                let new_response = {
+                    let (sender, receiver) = tokio::sync::mpsc::channel::<(bool, Binary)>(30);
+                    self.inner.read_sender = Some(sender);
+                    let mut binary = BinaryMut::new();
+                    binary.put_slice(self.read_buf.chunk());
+                    self.read_buf.advance(self.read_buf.remaining());
+                    let is_end = body_len <= binary.remaining();
+                    response.into(RecvStream::new(receiver, binary, is_end)).0
+                };
+                return Poll::Ready(Some(Ok(new_response)));
+            }
+        }
+    }
+
     pub fn into(self) -> (T, BinaryMut, BinaryMut) {
         (self.io, self.read_buf, self.write_buf)
     }
 
     pub async fn send_response(&mut self, res: Response<RecvStream>) -> ProtResult<()> {
         self.inner.res = Some(res);
-        // self.io.
-        // let mut buffer = BinaryMut::new();
-        // let _ = res.encode_header(&mut buffer)?;
-        // // let _ = res.body_mut().pol
-        // self.write_buf.put_slice(buffer.chunk());
-        // let _ = poll_fn(|cx| self.poll_write(cx));
-        // if !res.body().is_end() {
-        //     self.res = Some(res);
-        // }
+        Ok(())
+    }
+
+    pub async fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
+        self.inner.req = Some(req);
         Ok(())
     }
 }

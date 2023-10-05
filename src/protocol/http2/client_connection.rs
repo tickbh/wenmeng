@@ -24,7 +24,7 @@ use super::{
     Control,
 };
 
-pub struct H2Connection<T> {
+pub struct ClientH2Connection<T> {
     codec: Codec<T>,
     inner: InnerConnection,
 }
@@ -49,17 +49,17 @@ enum State {
     Closed(Reason, Initiator),
 }
 
-unsafe impl<T> Sync for H2Connection<T> {}
+unsafe impl<T> Sync for ClientH2Connection<T> {}
 
-unsafe impl<T> Send for H2Connection<T> {}
+unsafe impl<T> Send for ClientH2Connection<T> {}
 
-impl<T> H2Connection<T>
+impl<T> ClientH2Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(io: T, builder: Builder) -> H2Connection<T> {
+    pub fn new(io: T, builder: Builder) -> ClientH2Connection<T> {
         let (sender, receiver) = channel(10);
-        H2Connection {
+        ClientH2Connection {
             codec: Codec::new(io),
             inner: InnerConnection {
                 state: State::Open,
@@ -162,14 +162,6 @@ where
                 };
             }
         }
-        // let req = self.next().await;
-        // match req {
-        //     None => return Ok(Some(true)),
-        //     Some(Err(e)) => return Err(e),
-        //     Some(Ok(r)) => {
-        //         self.handle_request(r, f).await?;
-        //     }
-        // };
         return Ok(None);
     }
 
@@ -241,7 +233,7 @@ where
     }
 }
 
-impl<T> Stream for H2Connection<T>
+impl<T> Stream for ClientH2Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {

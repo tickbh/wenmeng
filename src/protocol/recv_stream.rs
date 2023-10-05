@@ -4,7 +4,7 @@ use std::{
 };
 
 use futures_core::Stream;
-use tokio::sync::mpsc::{error::TryRecvError, Receiver};
+use tokio::{sync::mpsc::{error::TryRecvError, Receiver}, io::AsyncRead};
 use webparse::{Binary, BinaryMut, Buf, Serialize};
 
 use crate::ProtResult;
@@ -212,6 +212,17 @@ impl Read for RecvStream {
         Ok(read_bytes)
     }
 }
+
+
+// impl AsyncRead for RecvStream {
+//     fn poll_read(
+//         self: std::pin::Pin<&mut Self>,
+//         cx: &mut Context<'_>,
+//         buf: &mut tokio::io::ReadBuf<'_>,
+//     ) -> Poll<std::io::Result<()>> {
+//         todo!()
+//     }
+// }
 
 impl Serialize for RecvStream {
     fn serialize<B: webparse::Buf + webparse::BufMut>(

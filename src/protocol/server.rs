@@ -4,16 +4,16 @@ use futures_core::{Future};
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize};
 
-use crate::{H2Connection, ProtError, ProtResult, RecvStream};
+use crate::{ServerH2Connection, ProtError, ProtResult, RecvStream};
 
-use super::http1::H1Connection;
+use super::http1::ServerH1Connection;
 
 pub struct Server<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    http1: Option<H1Connection<T>>,
-    http2: Option<H2Connection<T>>,
+    http1: Option<ServerH1Connection<T>>,
+    http2: Option<ServerH2Connection<T>>,
 }
 
 impl<T> Server<T>
@@ -22,7 +22,7 @@ where
 {
     pub fn new(io: T) -> Self {
         Self {
-            http1: Some(H1Connection::new(io)),
+            http1: Some(ServerH1Connection::new(io)),
             http2: None,
         }
     }
@@ -102,7 +102,7 @@ where
             };
             match result {
                 Ok(None) | Ok(Some(false)) => continue,
-                Err(ProtError::UpgradeHttp2(b, r)) => {
+                Err(ProtError::ServerUpgradeHttp2(b, r)) => {
                     if self.http1.is_some() {
                         self.http2 = Some(self.http1.take().unwrap().into_h2(b));
                         if let Some(r) = r {
@@ -114,7 +114,7 @@ where
                         }
                         continue;
                     } else {
-                        return Err(ProtError::UpgradeHttp2(b, r));
+                        return Err(ProtError::ServerUpgradeHttp2(b, r));
                     }
                 }
                 Err(e) => return Err(e),

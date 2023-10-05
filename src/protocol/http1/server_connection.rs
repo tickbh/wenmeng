@@ -8,20 +8,20 @@ use futures_core::{Future, Stream};
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{Binary, BinaryMut, HeaderName, Request, Response, Serialize};
 
-use crate::{H2Connection, ProtResult, RecvStream};
+use crate::{ServerH2Connection, ProtResult, RecvStream};
 
 use super::IoBuffer;
 
-pub struct H1Connection<T> {
+pub struct ServerH1Connection<T> {
     io: IoBuffer<T>,
 }
 
-impl<T> H1Connection<T>
+impl<T> ServerH1Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
     pub fn new(io: T) -> Self {
-        H1Connection {
+        ServerH1Connection {
             io: IoBuffer::new(io),
         }
     }
@@ -37,9 +37,9 @@ where
         self.io.poll_request(cx)
     }
 
-    pub fn into_h2(self, binary: Binary) -> H2Connection<T> {
+    pub fn into_h2(self, binary: Binary) -> ServerH2Connection<T> {
         let (io, read_buf, write_buf) = self.io.into();
-        let mut connect = crate::http2::Builder::new().connection(io);
+        let mut connect = crate::http2::Builder::new().server_connection(io);
         connect.set_cache_buf(read_buf, write_buf);
         connect.set_handshake_status(binary);
         connect
@@ -68,7 +68,7 @@ where
                     .unwrap();
                 let mut binary = BinaryMut::new();
                 let _ = response.serialize(&mut binary);
-                return Err(crate::ProtError::UpgradeHttp2(binary.freeze(), Some(r)));
+                return Err(crate::ProtError::ServerUpgradeHttp2(binary.freeze(), Some(r)));
             }
         }
         let mut content_length = 0;
@@ -116,7 +116,7 @@ where
     }
 }
 
-impl<T> Stream for H1Connection<T>
+impl<T> Stream for ServerH1Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {

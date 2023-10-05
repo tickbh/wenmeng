@@ -1,5 +1,6 @@
 use std::{fmt::{Display, Pointer}, io};
 
+use tokio::sync::mpsc::error::SendError;
 use webparse::{WebError, Binary, http::http2::frame::Reason, Request};
 
 use crate::RecvStream;
@@ -14,8 +15,12 @@ pub enum ProtError {
     WebError(WebError),
     /// 其它错误信息
     Extension(&'static str),
+
+    SendError,
     /// 协议数据升级, 第一参数表示将要写给客户端的消息, 第二参数表示原来未处理的请求
-    UpgradeHttp2(Binary, Option<Request<RecvStream>>),
+    ServerUpgradeHttp2(Binary, Option<Request<RecvStream>>),
+    /// 协议数据升级, 第一参数表示将要写给客户端的消息, 第二参数表示原来未处理的请求
+    ClientUpgradeHttp2,
     /// 发生错误或者收到关闭消息将要关闭该链接
     GoAway(Binary, Reason, Initiator),
 }
@@ -36,7 +41,9 @@ impl Display for ProtError {
             ProtError::WebError(w) => w.fmt(f),
             ProtError::GoAway(_, _, _) => f.write_str("go away frame"),
             ProtError::Extension(s) => f.write_fmt(format_args!("extension {}", s)),
-            ProtError::UpgradeHttp2(_, _) => f.write_str("receive upgrade http2 info"),
+            ProtError::ServerUpgradeHttp2(_, _) => f.write_str("receive server upgrade http2 info"),
+            ProtError::ClientUpgradeHttp2 => f.write_str("receive client upgrade http2 info"),
+            ProtError::SendError => f.write_str("send erorr"),
         }
     }
 }
@@ -51,6 +58,12 @@ impl From<io::Error>  for ProtError {
 impl From<WebError>  for ProtError {
     fn from(value: WebError) -> Self {
         ProtError::WebError(value)
+    }
+}
+
+impl<T> From<SendError<T>> for ProtError {
+    fn from(_: SendError<T>) -> Self {
+        ProtError::SendError
     }
 }
 
