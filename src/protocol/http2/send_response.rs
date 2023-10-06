@@ -4,7 +4,7 @@ use webparse::http::http2::frame::PushPromise;
 
 use std::task::Context;
 use tokio::sync::mpsc::{Sender};
-use webparse::{BinaryMut, Buf};
+use webparse::{BinaryMut, Buf, HeaderMap, HeaderValue};
 use webparse::{
     http::http2::{
         frame::{
@@ -49,12 +49,21 @@ impl SendResponse {
         }
     }
 
+    pub fn encode_headers(response: & Response<RecvStream>) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(":status", HeaderValue::from_static(response.status().as_str()));
+        for h in response.headers().iter() {
+            headers.insert(h.0.clone(), h.1.clone());
+        }
+        headers
+    }
+
     pub fn encode_frames(&mut self, cx: &mut Context) -> (bool, Vec<Frame<Binary>>) {
         let mut result = vec![];
         if !self.encode_header {
             if let Some(push_id) = &self.push_id {
                 let header = FrameHeader::new(Kind::PushPromise, Flag::end_headers(), self.stream_id);
-                let fields = self.response.headers().clone();
+                let fields = Self::encode_headers(&self.response);
                 let mut push = PushPromise::new(header, push_id.clone(), fields);
                 push.set_status(self.response.status());
                 result.push(Frame::PushPromise(push));
@@ -62,7 +71,7 @@ impl SendResponse {
                 self.encode_header = true;
             } else {
                 let header = FrameHeader::new(Kind::Headers, Flag::end_headers(), self.stream_id);
-                let fields = self.response.headers().clone();
+                let fields = Self::encode_headers(&self.response);
                 let mut header = Headers::new(header, fields);
                 header.set_status(self.response.status());
                 result.push(Frame::Headers(header));

@@ -64,7 +64,7 @@ where
             inner: InnerConnection {
                 state: State::Open,
                 control: Control::new(ControlConfig {
-                    next_stream_id: 0.into(),
+                    next_stream_id: 1.into(),
                     // Server does not need to locally initiate any streams
                     initial_max_send_streams: 0,
                     max_send_buffer_size: builder.max_send_buffer_size,
@@ -98,7 +98,7 @@ where
     }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<()>> {
-        self.inner.control.poll_write(cx, &mut self.codec)
+        self.inner.control.poll_write(cx, &mut self.codec, false)
     }
 
     pub async fn handle_request<F, Fut, Res, Req>(
@@ -145,7 +145,7 @@ where
                 self.inner.receiver_push = Some(receiver);
                 if res.is_some() {
                     let res = res.unwrap();
-                    let id = self.inner.control.next_server_id();
+                    let id = self.inner.control.next_stream_id();
                     self.inner.control.send_response_may_push(res.1, res.0, Some(id)).await?;
                 }
             },
@@ -222,8 +222,8 @@ where
         self.inner.control.set_handshake_status(binary, true)
     }
 
-    pub fn set_setting_status(&mut self, setting: Settings) {
-        self.inner.control.set_setting_status(setting)
+    pub fn set_setting_status(&mut self, setting: Settings, is_done: bool) {
+        self.inner.control.set_setting_status(setting, is_done)
     }
 
     pub async fn send_response(
@@ -232,6 +232,13 @@ where
         stream_id: StreamIdentifier,
     ) -> ProtResult<()> {
         self.inner.control.send_response(res, stream_id).await
+    }
+
+    pub async fn send_request(
+        &mut self,
+        res: Request<RecvStream>,
+    ) -> ProtResult<()> {
+        self.inner.control.send_request(res).await
     }
 }
 

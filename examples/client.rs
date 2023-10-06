@@ -5,10 +5,11 @@ use wenmeng::{Client, RecvStream};
 async fn test_http2() {
     let mut settings = Settings::default();
     settings.set_enable_push(false);
-    let req = Request::builder().method("GET").url("http://nghttp2.org/").upgrade_http2(settings).body("").unwrap();
+    // let req = Request::builder().method("GET").url("http://nghttp2.org/").upgrade_http2(settings).body("").unwrap();
+    let req = Request::builder().method("GET").url("http://nghttp2.org/").body("").unwrap();
     // let req = Request::builder().method("GET").url("http://www.baidu.com/").upgrade_http2().body("").unwrap();
     println!("req = {}", req);
-    let client = Client::builder().request(&req).await.unwrap();
+    let client = Client::builder().http2_prior_knowledge(true).request(&req).await.unwrap();
     let mut res = client.send(req.into_type()).await.unwrap().recv().await;
     // println!("res = {:?}", res);
     res.as_mut().unwrap().body_mut().wait_all().await;

@@ -44,7 +44,7 @@ where
         let mut connect = crate::http2::Builder::new().client_connection(io);
         connect.set_cache_buf(read_buf, write_buf);
         connect.set_handshake_status(Binary::from_static(HTTP2_MAGIC));
-        connect.set_setting_status(self.settings.unwrap_or(Settings::default()));
+        connect.set_setting_status(self.settings.unwrap_or(Settings::default()), true);
         connect
     }
 

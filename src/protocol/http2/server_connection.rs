@@ -64,7 +64,7 @@ where
             inner: InnerConnection {
                 state: State::Open,
                 control: Control::new(ControlConfig {
-                    next_stream_id: 0.into(),
+                    next_stream_id: 2.into(),
                     // Server does not need to locally initiate any streams
                     initial_max_send_streams: 0,
                     max_send_buffer_size: builder.max_send_buffer_size,
@@ -93,7 +93,7 @@ where
     }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<()>> {
-        self.inner.control.poll_write(cx, &mut self.codec)
+        self.inner.control.poll_write(cx, &mut self.codec, false)
     }
 
     pub async fn handle_request<F, Fut, Res, Req>(
@@ -147,7 +147,7 @@ where
                 self.inner.receiver_push = Some(receiver);
                 if res.is_some() {
                     let res = res.unwrap();
-                    let id = self.inner.control.next_server_id();
+                    let id = self.inner.control.next_stream_id();
                     self.inner.control.send_response_may_push(res.1, res.0, Some(id)).await?;
                 }
             },

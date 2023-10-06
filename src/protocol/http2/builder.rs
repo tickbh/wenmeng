@@ -46,53 +46,53 @@ impl Builder {
         }
     }
 
-    pub fn initial_window_size(&mut self, size: u32) -> &mut Self {
+    pub fn initial_window_size(mut self, size: u32) -> Self {
         self.settings.set_initial_window_size(Some(size));
         self
     }
 
-    pub fn initial_connection_window_size(&mut self, size: u32) -> &mut Self {
+    pub fn initial_connection_window_size(mut self, size: u32) -> Self {
         self.initial_target_connection_window_size = Some(size);
         self
     }
 
-    pub fn max_frame_size(&mut self, max: u32) -> &mut Self {
+    pub fn max_frame_size(mut self, max: u32) -> Self {
         self.settings.set_max_frame_size(Some(max));
         self
     }
 
-    pub fn max_header_list_size(&mut self, max: u32) -> &mut Self {
+    pub fn max_header_list_size(mut self, max: u32) -> Self {
         self.settings.set_max_header_list_size(Some(max));
         self
     }
 
-    pub fn max_concurrent_streams(&mut self, max: u32) -> &mut Self {
+    pub fn max_concurrent_streams(mut self, max: u32) -> Self {
         self.settings.set_max_concurrent_streams(Some(max));
         self
     }
 
-    pub fn max_concurrent_reset_streams(&mut self, max: usize) -> &mut Self {
+    pub fn max_concurrent_reset_streams(mut self, max: usize) -> Self {
         self.reset_stream_max = max;
         self
     }
 
-    pub fn max_pending_accept_reset_streams(&mut self, max: usize) -> &mut Self {
+    pub fn max_pending_accept_reset_streams(mut self, max: usize) -> Self {
         self.pending_accept_reset_stream_max = max;
         self
     }
 
-    pub fn max_send_buffer_size(&mut self, max: usize) -> &mut Self {
+    pub fn max_send_buffer_size(mut self, max: usize) -> Self {
         assert!(max <= std::u32::MAX as usize);
         self.max_send_buffer_size = max;
         self
     }
 
-    pub fn reset_stream_duration(&mut self, dur: Duration) -> &mut Self {
+    pub fn reset_stream_duration(mut self, dur: Duration) -> Self {
         self.reset_stream_duration = dur;
         self
     }
 
-    pub fn enable_connect_protocol(&mut self) -> &mut Self {
+    pub fn enable_connect_protocol(mut self) -> Self {
         self.settings.set_enable_connect_protocol(Some(1));
         self
     }

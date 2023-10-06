@@ -1,13 +1,15 @@
+use crate::http2::{self, ClientH2Connection};
 use crate::{http1::ClientH1Connection, ProtError};
-use crate::http2::ClientH2Connection;
 use crate::{ProtResult, RecvStream};
-use tokio::sync::mpsc::{Receiver, channel, Sender};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
 use tokio_rustls::client::TlsStream;
-use webparse::{Method, Request, Serialize, Url, WebError, Response};
+use webparse::http2::frame::Settings;
+use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
+use webparse::{Binary, Method, Request, Response, Serialize, Url, WebError};
 
 #[derive(Debug)]
 pub struct Builder {
@@ -85,7 +87,6 @@ impl<T> Client<T>
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-
     pub fn new(option: ClientOption, stream: T) -> Self {
         let (sender, receiver) = channel(10);
         let mut client = Self {
@@ -96,11 +97,27 @@ where
             http1: None,
             http2: None,
         };
-        client.http1 = Some(ClientH1Connection::new(stream));
+        if client.option.http2_prior_knowledge {
+            let value = http2::Builder::new()
+                .initial_window_size(DEFAULT_INITIAL_WINDOW_SIZE)
+                .max_concurrent_streams(100)
+                .max_frame_size(DEFAULT_MAX_FRAME_SIZE)
+                .client_connection(stream);
+            client.http2 = Some(value);
+            client
+                .http2
+                .as_mut()
+                .unwrap()
+                .set_handshake_status(Binary::from(HTTP2_MAGIC));
+        } else {
+            client.http1 = Some(ClientH1Connection::new(stream));
+        }
         client
     }
 
-    pub fn split(&mut self) -> ProtResult<(Receiver<Response<RecvStream>>, Sender<Request<RecvStream>>) > {
+    pub fn split(
+        &mut self,
+    ) -> ProtResult<(Receiver<Response<RecvStream>>, Sender<Request<RecvStream>>)> {
         if self.receiver.is_none() {
             return Err(ProtError::Extension("receiver error"));
         }
@@ -112,18 +129,19 @@ where
     async fn inner_operate(mut self, req: Request<RecvStream>) -> ProtResult<()> {
         if let Some(h) = &mut self.http1 {
             h.send_request(req).await?;
+        } else if let Some(h) = &mut self.http2 {
+            h.send_request(req).await?;
         }
         loop {
             let result = if let Some(h1) = &mut self.http1 {
                 h1.incoming().await
             } else if let Some(h2) = &mut self.http2 {
                 h2.incoming().await
-            }
-             else {
+            } else {
                 return Ok(());
             };
             match result {
-                Ok(None) =>  return Ok(()),
+                Ok(None) => return Ok(()),
                 Err(ProtError::ClientUpgradeHttp2(s)) => {
                     if self.http1.is_some() {
                         self.http2 = Some(self.http1.take().unwrap().into_h2());
@@ -135,7 +153,7 @@ where
                 Err(e) => return Err(e),
                 Ok(Some(r)) => {
                     self.sender.send(r).await?;
-                },
+                }
             };
         }
         Ok(())
@@ -150,44 +168,13 @@ where
         Ok(())
     }
 
-    pub async fn send(mut self, req: Request<RecvStream>) -> ProtResult<Receiver<Response<RecvStream>>> {
+    pub async fn send(
+        mut self,
+        req: Request<RecvStream>,
+    ) -> ProtResult<Receiver<Response<RecvStream>>> {
         let (r, _s) = self.split()?;
         self.operate(req).await?;
         Ok(r)
-
-        // if let Some(h) = &mut self.http1 {
-        //     h.send_request(req).await?;
-        // }
-        // loop {
-        //     let result = if let Some(h1) = &mut self.http1 {
-        //         h1.incoming(&mut f).await
-        //     } else if let Some(h2) = &mut self.http2 {
-        //         h2.incoming(&mut f).await
-        //     } else {
-        //         Ok(Some(true))
-        //     };
-        //     match result {
-        //         Ok(None) | Ok(Some(false)) => continue,
-        //         Err(ProtError::ServerUpgradeHttp2(b, r)) => {
-        //             if self.http1.is_some() {
-        //                 self.http2 = Some(self.http1.take().unwrap().into_h2(b));
-        //                 if let Some(r) = r {
-        //                     self.http2
-        //                         .as_mut()
-        //                         .unwrap()
-        //                         .handle_request(r, &mut f)
-        //                         .await?;
-        //                 }
-        //                 continue;
-        //             } else {
-        //                 return Err(ProtError::ServerUpgradeHttp2(b, r));
-        //             }
-        //         }
-        //         Err(e) => return Err(e),
-        //         Ok(Some(true)) => return Ok(Some(true)),
-        //     };
-        // }
-        // Ok(())
     }
 
     pub async fn recv(&mut self) -> ProtResult<Response<RecvStream>> {

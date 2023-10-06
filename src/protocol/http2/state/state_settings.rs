@@ -13,6 +13,7 @@ pub struct StateSettings {
     remote: Option<Settings>,
 }
 
+#[derive(PartialEq, Eq)]
 enum LocalState {
     /// 设置发送的settings
     Send(Settings),
@@ -30,27 +31,37 @@ impl StateSettings {
         }
     }
 
-    pub fn set_settings(&mut self, setting: Settings) {
+    pub fn set_settings(&mut self, setting: Settings, is_done: bool) {
+        if is_done {
+            self.state = LocalState::Done;
+        } else {
+            self.state = LocalState::Send(setting);
+        }
+    }
+
+    pub fn set_settings_done(&mut self) {
         self.state = LocalState::Done;
     }
+
 
     pub fn poll_handle<T>(
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
         config: &mut ControlConfig,
-    ) -> Poll<ProtResult<()>>
+    ) -> Poll<ProtResult<bool>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
+        let mut is_wait = true;
         match &self.state {
             LocalState::Send(settings) => {
                 codec.send_frame(Frame::Settings(settings.clone()))?;
                 self.state = LocalState::WaitAck(settings.clone());
-                return Poll::Ready(Ok(()));
+                return Poll::Ready(Ok(true));
             }
             LocalState::WaitAck(_) => {}
-            LocalState::Done => (),
+            LocalState::Done => is_wait = false,
         };
 
         if let Some(settings) = &self.remote {
@@ -71,7 +82,7 @@ impl StateSettings {
         }
 
         self.remote = None;
-        return Poll::Ready(Ok(()));
+        return Poll::Ready(Ok(is_wait));
     }
 
     pub fn recv_setting<T>(
@@ -79,7 +90,7 @@ impl StateSettings {
         codec: &mut Codec<T>,
         setting: Settings,
         config: &mut ControlConfig,
-    ) -> ProtResult<()>
+    ) -> ProtResult<bool>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -100,10 +111,10 @@ impl StateSettings {
                 }
             }
             self.state = LocalState::Done;
-            Ok(())
+            Ok(true)
         } else {
             self.remote = Some(setting);
-            Ok(())
+            Ok(self.state == LocalState::Done)
         }
     }
 
