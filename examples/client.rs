@@ -11,9 +11,10 @@ async fn test_http2() {
     let req = Request::builder()
         .method("GET")
         .url("http://nghttp2.org/")
-        .header("accept", "*/*")
+        // .header("accept", "*/*")
         .body("")
         .unwrap();
+
     // let req = Request::builder().method("GET").url("http://www.baidu.com/").upgrade_http2().body("").unwrap();
     println!("req = {}", req);
     let client = Client::builder()
@@ -21,6 +22,8 @@ async fn test_http2() {
         .request(&req)
         .await
         .unwrap();
+
+    
     let mut recv = client.send(req.into_type()).await.unwrap();
     while let Some(mut res) = recv.recv().await {
         res.body_mut().wait_all().await;

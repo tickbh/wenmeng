@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use crate::http2::{self, ClientH2Connection};
 use crate::{http1::ClientH1Connection, ProtError};
 use crate::{ProtResult, RecvStream};
@@ -49,6 +51,28 @@ impl Builder {
         }
         let tcp = TcpStream::connect(connect.unwrap()).await?;
         Ok(Client::<TcpStream>::new(self.inner?, tcp))
+    }
+
+    pub async fn connect<T>(&self, addr: T) -> ProtResult<TcpStream>
+    where T: TryInto<SocketAddr> {
+        let url = TryInto::<SocketAddr>::try_into(addr);
+        if url.is_err() {
+            return Err(ProtError::Extension("unknown connection url"));
+        } else {
+            let tcp = TcpStream::connect(url.ok().unwrap()).await?;
+            Ok(tcp)
+        }
+    }
+
+    pub async fn connect_tls<T>(&self, addr: T) -> ProtResult<TcpStream>
+    where T: TryInto<SocketAddr> {
+        let url = TryInto::<SocketAddr>::try_into(addr);
+        if url.is_err() {
+            return Err(ProtError::Extension("unknown connection url"));
+        } else {
+            let tcp = TcpStream::connect(url.ok().unwrap()).await?;
+            Ok(tcp)
+        }
     }
 }
 
@@ -160,22 +184,30 @@ where
         Ok(())
     }
 
-    pub async fn operate(self, req: Request<RecvStream>) -> ProtResult<()> {
-        tokio::spawn(async move {
-            // let _ = self.operate(req).await;
-            let e = self.inner_operate(req).await;
-            println!("errr = {:?}", e);
-        });
-        Ok(())
-    }
-
     pub async fn send(
         mut self,
         req: Request<RecvStream>,
     ) -> ProtResult<Receiver<Response<RecvStream>>> {
         let (r, _s) = self.split()?;
-        self.operate(req).await?;
+        tokio::spawn(async move {
+            // let _ = self.operate(req).await;
+            let e = self.inner_operate(req).await;
+            println!("errr = {:?}", e);
+        });
         Ok(r)
+    }
+
+    pub async fn send2(
+        mut self,
+        req: Request<RecvStream>,
+    ) -> ProtResult<(Receiver<Response<RecvStream>>, Sender<Request<RecvStream>>)> {
+        let (r, s) = self.split()?;
+        tokio::spawn(async move {
+            // let _ = self.operate(req).await;
+            let e = self.inner_operate(req).await;
+            println!("errr = {:?}", e);
+        });
+        Ok((r, s))
     }
 
     pub async fn recv(&mut self) -> ProtResult<Response<RecvStream>> {
