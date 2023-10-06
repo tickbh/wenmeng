@@ -71,10 +71,17 @@ impl Builder {
         self
     }
 
+    pub fn set_enable_push(mut self, enable: bool) -> Self {
+        self.settings.set_enable_push(enable);
+        self
+    }
+
     pub fn max_concurrent_reset_streams(mut self, max: usize) -> Self {
         self.reset_stream_max = max;
         self
     }
+
+    
 
     pub fn max_pending_accept_reset_streams(mut self, max: usize) -> Self {
         self.pending_accept_reset_stream_max = max;

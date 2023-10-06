@@ -102,6 +102,7 @@ where
                 .initial_window_size(DEFAULT_INITIAL_WINDOW_SIZE)
                 .max_concurrent_streams(100)
                 .max_frame_size(DEFAULT_MAX_FRAME_SIZE)
+                // .set_enable_push(false)
                 .client_connection(stream);
             client.http2 = Some(value);
             client

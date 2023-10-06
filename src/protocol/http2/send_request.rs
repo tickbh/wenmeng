@@ -62,7 +62,10 @@ impl SendRequest {
     pub fn encode_frames(&mut self, cx: &mut Context) -> (bool, Vec<Frame<Binary>>) {
         let mut result = vec![];
         if !self.encode_header {
-            let header = FrameHeader::new(Kind::Headers, Flag::end_headers(), self.stream_id);
+            let mut header = FrameHeader::new(Kind::Headers, Flag::end_headers(), self.stream_id);
+            if self.request.method().is_nobody() {
+                header.flag.set(Flag::end_stream(), true);
+            }
             let fields = Self::encode_headers(&self.request);
             let mut header = Headers::new(header, fields);
             header.set_method(self.request.method().clone());
