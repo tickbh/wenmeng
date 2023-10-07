@@ -6,7 +6,7 @@ use std::{
 
 use futures_core::{Future, Stream};
 use tokio::{io::{AsyncRead, AsyncWrite}, sync::mpsc::Sender};
-use webparse::{Binary, BinaryMut, HeaderName, Request, Response, Serialize, http2::{HTTP2_MAGIC, frame::Settings}};
+use webparse::{Binary, BinaryMut, HeaderName, Request, Response, Serialize, http2::{HTTP2_MAGIC, frame::Settings}, Buf};
 
 use crate::{ServerH2Connection, ProtResult, RecvStream, http2::ClientH2Connection};
 
@@ -39,12 +39,15 @@ where
         self.io.poll_request(cx)
     }
 
-    pub fn into_h2(self) -> ClientH2Connection<T> {
+    pub fn into_h2(self, settings: Settings) -> ClientH2Connection<T> {
         let (io, read_buf, write_buf) = self.io.into();
         let mut connect = crate::http2::Builder::new().client_connection(io);
+
+        println!("read buf == {:?}", read_buf.remaining());
         connect.set_cache_buf(read_buf, write_buf);
         connect.set_handshake_status(Binary::from_static(HTTP2_MAGIC));
-        connect.set_setting_status(self.settings.unwrap_or(Settings::default()), true);
+        connect.set_setting_status(settings, false);
+        connect.next_stream_id();
         connect
     }
 

@@ -159,6 +159,7 @@ impl Control {
         T: AsyncRead + AsyncWrite + Unpin,
     {
         ready!(self.handshake.poll_handle(cx, codec))?;
+        let mut has_change = false;
         loop {
             let is_wait = ready!(self.setting.poll_handle(cx, codec, &mut self.config))?;
             // 写入如果pending不直接pending, 等尝试读pending则返回
@@ -169,6 +170,7 @@ impl Control {
 
             match Pin::new(&mut *codec).poll_next(cx) {
                 Poll::Ready(Some(Ok(frame))) => {
+                    has_change = true;
                     match &frame {
                         Frame::Settings(settings) => {
                             self.setting
@@ -206,7 +208,12 @@ impl Control {
                         if let Some(e) = &self.error {
                             return Poll::Ready(Some(Err(ProtError::library_go_away(e.reason()))));
                         } else {
-                            return Poll::Pending
+                            // 有收到消息, 再处理一次数据, 如ack settings或者goway消息
+                            if has_change {
+                                continue;
+                            } else {
+                                return Poll::Pending
+                            }
                         }
                     },
                 },
@@ -413,6 +420,7 @@ impl Control {
 
     pub async fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()>
     {
+        println!("send request ==== {:?}", req);
         let is_end = req.body().is_end();
         let next_id = self.next_stream_id();
         self.request_queue.push(SendRequest::new(next_id, req, is_end));

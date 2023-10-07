@@ -34,7 +34,6 @@ struct InnerConnection {
 
     control: Control,
 
-    receiver_push: Option<Receiver<(StreamIdentifier, Response<RecvStream>)>>,
 }
 
 #[derive(Debug)]
@@ -58,7 +57,7 @@ where
     T: AsyncRead + AsyncWrite + Unpin,
 {
     pub fn new(io: T, builder: Builder) -> ClientH2Connection<T> {
-        let (sender, receiver) = channel(10);
+        let (sender, _receiver) = channel(10);
         ClientH2Connection {
             codec: Codec::new(io),
             inner: InnerConnection {
@@ -73,7 +72,6 @@ where
                     remote_reset_stream_max: builder.pending_accept_reset_stream_max,
                     settings: builder.settings.clone(),
                 }, sender),
-                receiver_push: Some(receiver),
             },
         }
     }
@@ -139,19 +137,9 @@ where
     pub async fn incoming(&mut self) -> ProtResult<Option<Response<RecvStream>>>
     {
         use futures_util::stream::StreamExt;
-        let mut receiver = self.inner.receiver_push.take().unwrap();
         tokio::select! {
-            res = receiver.recv() => {
-                self.inner.receiver_push = Some(receiver);
-                if res.is_some() {
-                    let res = res.unwrap();
-                    let id = self.inner.control.next_stream_id();
-                    self.inner.control.send_response_may_push(res.1, res.0, Some(id)).await?;
-                }
-            },
-            req = self.next() => {
-                self.inner.receiver_push = Some(receiver);
-                match req {
+            res = self.next() => {
+                match res {
                     None => return Ok(None),
                     Some(Err(e)) => return Err(e),
                     Some(Ok(r)) => {
@@ -160,7 +148,6 @@ where
                 };
             }
         }
-        return Ok(None);
     }
 
     fn handle_poll_result(
@@ -225,6 +212,11 @@ where
     pub fn set_setting_status(&mut self, setting: Settings, is_done: bool) {
         self.inner.control.set_setting_status(setting, is_done)
     }
+    
+    pub fn next_stream_id(&mut self) -> StreamIdentifier {
+        self.inner.control.next_stream_id()
+    }
+
 
     pub async fn send_response(
         &mut self,

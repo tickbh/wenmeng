@@ -46,8 +46,14 @@ impl SendRequest {
         let mut headers = HeaderMap::new();
         headers.insert(":method", request.method().as_str().to_string());
         headers.insert(":path", request.path().clone());
-        headers.insert(":scheme", "http");
-        headers.insert(":authority", request.get_host().unwrap_or(String::new()));
+        let scheme = request.scheme().as_str().to_string();
+        let authority = request.get_host().unwrap_or(String::new());
+        if !scheme.is_empty() {
+            headers.insert(":scheme", scheme);
+        }
+        if !authority.is_empty() {
+            headers.insert(":authority", authority);
+        }
         for h in request.headers().iter() {
             if h.0 != "Host" {
                 headers.insert(h.0.clone(), h.1.clone());

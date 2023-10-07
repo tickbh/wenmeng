@@ -17,6 +17,7 @@ use webparse::http2::frame::Settings;
 use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
 use webparse::{Binary, Method, Request, Response, Serialize, Url, WebError};
 
+
 #[derive(Debug)]
 pub struct Builder {
     inner: ProtResult<ClientOption>,
@@ -29,9 +30,16 @@ impl Builder {
         }
     }
 
-    pub fn http2_prior_knowledge(mut self, http2: bool) -> Self {
+    pub fn http2_only(self, http2: bool) -> Self {
         self.and_then(move |mut v| {
-            v.http2_prior_knowledge = true;
+            v.http2_only = http2;
+            Ok(v)
+        })
+    }
+    
+    pub fn http2(self, http2: bool) -> Self {
+        self.and_then(move |mut v| {
+            v.http2 = http2;
             Ok(v)
         })
     }
@@ -61,19 +69,20 @@ impl Builder {
         Ok(Client::<TcpStream>::new(self.inner?, tcp))
     }
 
-    pub async fn connect<T>(&self, url: T) -> ProtResult<TcpStream>
+    pub async fn connect<T>(self, url: T) -> ProtResult<Client<TcpStream>>
     where T: TryInto<Url> {
         let url = TryInto::<Url>::try_into(url);
         if url.is_err() {
             return Err(ProtError::Extension("unknown connection url"));
         } else {
             let tcp = TcpStream::connect(url.ok().unwrap().get_connect_url().unwrap()).await?;
-            Ok(tcp)
+            Ok(Client::<TcpStream>::new(self.inner?, tcp))
         }
     }
 
-    pub async fn connect_tls<T>(&self, url: T) -> ProtResult<TlsStream<TcpStream>>
+    pub async fn connect_tls<T>(self, url: T) -> ProtResult<Client<TlsStream<TcpStream>>>
     where T: TryInto<Url> {
+        let mut option = self.inner?;
         let url = TryInto::<Url>::try_into(url);
         if url.is_err() {
             return Err(ProtError::Extension("unknown connection url"));
@@ -84,6 +93,8 @@ impl Builder {
             if domain.is_none() || connect.is_none() {
                 return Err(ProtError::Extension("unknown connection domain"));
             }
+            println!("domain = {:?}", domain);
+            println!("connect = {:?}", connect);
             let mut root_store = RootCertStore::empty();
             root_store.add_trust_anchors(
                 webpki_roots::TLS_SERVER_ROOTS
@@ -96,11 +107,11 @@ impl Builder {
                         )
                     }),
             );
-            let config = ClientConfig::builder()
+            let mut config = ClientConfig::builder()
                 .with_safe_defaults()
                 .with_root_certificates(root_store)
                 .with_no_client_auth();
-
+            config.alpn_protocols = option.get_alpn_protocol();
             let tls_client = Arc::new(config);
             let connector = TlsConnector::from(tls_client);
 
@@ -111,20 +122,55 @@ impl Builder {
                     .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
 
             let outbound = connector.connect(domain, stream).await?;
-            Ok(outbound)
+            let aa = outbound.get_ref().1.alpn_protocol();
+            if aa.is_none() {
+                return Err(ProtError::Extension("not support protocol"));
+            }
+
+            if aa == Some(&ClientOption::H2_PROTOCOL) {
+                option.http2_only = true;
+            }
+
+            println!("aaaaaaaaaaa == {:?}", aa);
+            println!("aaaaaaaaaaa == {:?}", String::from_utf8_lossy(aa.unwrap()));
+            Ok(Client::new(option, outbound))
         }
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct ClientOption {
-    http2_prior_knowledge: bool,
+    http2_only: bool,
+    http2: bool,
+    settings: Settings,
+}
+
+impl ClientOption {
+    pub const H2_PROTOCOL: [u8; 2] = [104, 50];
+    pub fn get_alpn_protocol(&self) -> Vec<Vec<u8>> {
+        let mut ret = vec![];
+        if self.http2_only {
+            ret.push(Self::H2_PROTOCOL.to_vec());
+        } else {
+            ret.push("http/1.1".as_bytes().to_vec());
+            if self.http2 {
+                ret.push(Self::H2_PROTOCOL.to_vec());
+            }
+        }
+        ret
+    }
+
+    pub fn get_http2_setting(&self) -> String {
+        self.settings.encode_http_settings()
+    }
 }
 
 impl Default for ClientOption {
     fn default() -> Self {
         Self {
-            http2_prior_knowledge: false,
+            http2_only: false,
+            http2: true,
+            settings: Default::default(),
         }
     }
 }
@@ -161,7 +207,7 @@ where
             http1: None,
             http2: None,
         };
-        if client.option.http2_prior_knowledge {
+        if client.option.http2_only {
             let value = http2::Builder::new()
                 .initial_window_size(DEFAULT_INITIAL_WINDOW_SIZE)
                 .max_concurrent_streams(100)
@@ -191,25 +237,80 @@ where
         Ok((self.receiver.take().unwrap(), sender))
     }
 
-    async fn inner_operate(mut self, req: Request<RecvStream>) -> ProtResult<()> {
+    async fn send_req(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
         if let Some(h) = &mut self.http1 {
             h.send_request(req).await?;
         } else if let Some(h) = &mut self.http2 {
             h.send_request(req).await?;
         }
-        loop {
-            let result = if let Some(h1) = &mut self.http1 {
-                h1.incoming().await
-            } else if let Some(h2) = &mut self.http2 {
-                h2.incoming().await
+        Ok(())
+    }
+
+    async fn inner_operate(mut self, req: Request<RecvStream>) -> ProtResult<()> {
+        self.send_req(req).await?;
+
+        async fn http1_wait<T>(connection: &mut Option<ClientH1Connection<T>>) -> Option<ProtResult<Option<Response<RecvStream>>>>
+        where T: AsyncRead + AsyncWrite + Unpin {
+            if connection.is_some() {
+                Some(connection.as_mut().unwrap().incoming().await)
             } else {
-                return Ok(());
+                let pend = std::future::pending();
+                let () = pend.await;
+                None
+            }
+        }
+        
+        async fn http2_wait<T>(connection: &mut Option<ClientH2Connection<T>>) -> Option<ProtResult<Option<Response<RecvStream>>>>
+        where T: AsyncRead + AsyncWrite + Unpin {
+            if connection.is_some() {
+                Some(connection.as_mut().unwrap().incoming().await)
+            } else {
+                let pend = std::future::pending();
+                let () = pend.await;
+                None
+            }
+        }
+        
+        async fn req_receiver(req_receiver: &mut Option<Receiver<Request<RecvStream>>>) -> Option<Request<RecvStream>>
+        {
+            if req_receiver.is_some() {
+                req_receiver.as_mut().unwrap().recv().await
+            } else {
+                let pend = std::future::pending();
+                let () = pend.await;
+                None
+            }
+        }
+
+        loop {
+            let v = tokio::select! {
+                r = http1_wait(&mut self.http1) => {
+                    println!("aaaaaa {:?}", r);
+                    r
+                }
+                r = http2_wait(&mut self.http2) => {
+                    println!("bbbb {:?}", r);
+                    r
+                }
+                req = req_receiver(&mut self.req_receiver) => {
+                    println!("cccc");
+                    if let Some(req) = req {
+                        self.send_req(req).await?;
+                    } else {
+                        self.req_receiver = None;
+                    }
+                    continue;
+                }
             };
+            if v.is_none() {
+                return Ok(());
+            }
+            let result = v.unwrap();
             match result {
                 Ok(None) => return Ok(()),
                 Err(ProtError::ClientUpgradeHttp2(s)) => {
                     if self.http1.is_some() {
-                        self.http2 = Some(self.http1.take().unwrap().into_h2());
+                        self.http2 = Some(self.http1.take().unwrap().into_h2(s));
                         continue;
                     } else {
                         return Err(ProtError::ClientUpgradeHttp2(s));
@@ -221,13 +322,25 @@ where
                 }
             };
         }
-        Ok(())
+    }
+
+    fn rebuild_request(&mut self, req: &mut Request<RecvStream>) {
+        // 支持http2且当前为http1尝试升级
+        if self.option.http2 {
+            if let Some(_) = &self.http1 {
+                let header = req.headers_mut();
+                header.insert("Connection", "Upgrade, HTTP2-Settings");
+                header.insert("Upgrade", "h2c");
+                header.insert("HTTP2-Settings", self.option.get_http2_setting());
+            }
+        }
     }
 
     pub async fn send(
         mut self,
-        req: Request<RecvStream>,
+        mut req: Request<RecvStream>,
     ) -> ProtResult<Receiver<Response<RecvStream>>> {
+        self.rebuild_request(&mut req);
         let (r, _s) = self.split()?;
         tokio::spawn(async move {
             // let _ = self.operate(req).await;
@@ -239,8 +352,9 @@ where
 
     pub async fn send2(
         mut self,
-        req: Request<RecvStream>,
+        mut req: Request<RecvStream>,
     ) -> ProtResult<(Receiver<Response<RecvStream>>, Sender<Request<RecvStream>>)> {
+        self.rebuild_request(&mut req);
         let (r, s) = self.split()?;
         tokio::spawn(async move {
             // let _ = self.operate(req).await;

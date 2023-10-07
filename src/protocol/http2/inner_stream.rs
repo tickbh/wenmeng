@@ -100,7 +100,7 @@ impl InnerStream {
             self.sender = Some(sender);
             RecvStream::new(receiver, binary, is_end_stream)
         };
-        self.content_len = builder.get_body_len();
+        self.content_len = builder.get_body_len() as usize;
         match builder.body(recv) {
             Err(e) => return Err(e.into()),
             Ok(r) => return Ok(r),
@@ -140,7 +140,7 @@ impl InnerStream {
             self.sender = Some(sender);
             RecvStream::new(receiver, binary, is_end_stream)
         };
-        self.content_len = builder.get_body_len();
+        self.content_len = builder.get_body_len() as usize;
         match builder.body(recv) {
             Err(e) => return Err(e.into()),
             Ok(r) => return Ok(r),

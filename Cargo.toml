@@ -27,8 +27,8 @@ tokio-rustls="0.24"
 webpki-roots = "0.25"
 rustls="0.21"
 
-
 rbtree = "0.1.5"
+base64 = "0.21.4"
 
 # http-body-util = { version = "1", optional = true }
 
