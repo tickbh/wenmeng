@@ -24,6 +24,9 @@ futures-core = { version = "0.3", default-features = false }
 futures-sink = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 tokio-rustls="0.24"
+webpki-roots = "0.25"
+rustls="0.21"
+
 
 rbtree = "0.1.5"
 

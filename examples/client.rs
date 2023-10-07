@@ -2,7 +2,7 @@ use webparse::{
     http2::frame::{Frame, Settings},
     Request,
 };
-use wenmeng::{Client, RecvStream};
+use wenmeng::{Client, RecvStream, ProtResult};
 
 async fn test_http2() {
     let mut settings = Settings::default();
@@ -23,7 +23,7 @@ async fn test_http2() {
         .await
         .unwrap();
 
-    
+
     let mut recv = client.send(req.into_type()).await.unwrap();
     while let Some(mut res) = recv.recv().await {
         res.body_mut().wait_all().await;
@@ -32,9 +32,39 @@ async fn test_http2() {
     // println!("res = {:?}", res);
 }
 
+
+async fn test_https2() -> ProtResult<()> {
+    // let req = Request::builder().method("GET").url("http://nghttp2.org/").upgrade_http2(settings).body("").unwrap();
+    let req = Request::builder()
+        .method("GET")
+        .url("https://nghttp2.org/")
+        // .header("accept", "*/*")
+        .body("")
+        .unwrap();
+
+    // let req = Request::builder().method("GET").url("http://www.baidu.com/").upgrade_http2().body("").unwrap();
+    println!("req = {}", req);
+    let tls = Client::builder()
+        .http2_prior_knowledge(true)
+        .connect_tls(req.url().clone())
+        .await
+        .unwrap();
+
+    let client = Client::new(Client::builder().value()?, tls);
+    
+    let mut recv = client.send(req.into_type()).await.unwrap();
+    while let Some(mut res) = recv.recv().await {
+        res.body_mut().wait_all().await;
+        println!("res = {}", res);
+    }
+
+    Ok(())
+    // println!("res = {:?}", res);
+}
+
 #[tokio::main]
 async fn main() {
-    test_http2().await;
+    test_https2().await;
     return;
     let req = Request::builder()
         .method("GET")

@@ -1,13 +1,17 @@
+use std::io;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use crate::http2::{self, ClientH2Connection};
 use crate::{http1::ClientH1Connection, ProtError};
 use crate::{ProtResult, RecvStream};
+use rustls::{RootCertStore, ClientConfig};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
+use tokio_rustls::TlsConnector;
 use tokio_rustls::client::TlsStream;
 use webparse::http2::frame::Settings;
 use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
@@ -41,6 +45,10 @@ impl Builder {
         }
     }
 
+    pub fn value(self) -> ProtResult<ClientOption> {
+        self.inner
+    }
+
     pub async fn request<Req: Serialize>(
         self,
         req: &Request<Req>,
@@ -53,25 +61,57 @@ impl Builder {
         Ok(Client::<TcpStream>::new(self.inner?, tcp))
     }
 
-    pub async fn connect<T>(&self, addr: T) -> ProtResult<TcpStream>
-    where T: TryInto<SocketAddr> {
-        let url = TryInto::<SocketAddr>::try_into(addr);
+    pub async fn connect<T>(&self, url: T) -> ProtResult<TcpStream>
+    where T: TryInto<Url> {
+        let url = TryInto::<Url>::try_into(url);
         if url.is_err() {
             return Err(ProtError::Extension("unknown connection url"));
         } else {
-            let tcp = TcpStream::connect(url.ok().unwrap()).await?;
+            let tcp = TcpStream::connect(url.ok().unwrap().get_connect_url().unwrap()).await?;
             Ok(tcp)
         }
     }
 
-    pub async fn connect_tls<T>(&self, addr: T) -> ProtResult<TcpStream>
-    where T: TryInto<SocketAddr> {
-        let url = TryInto::<SocketAddr>::try_into(addr);
+    pub async fn connect_tls<T>(&self, url: T) -> ProtResult<TlsStream<TcpStream>>
+    where T: TryInto<Url> {
+        let url = TryInto::<Url>::try_into(url);
         if url.is_err() {
             return Err(ProtError::Extension("unknown connection url"));
         } else {
-            let tcp = TcpStream::connect(url.ok().unwrap()).await?;
-            Ok(tcp)
+            let url = url.ok().unwrap();
+            let connect = url.get_connect_url();
+            let domain = url.domain;
+            if domain.is_none() || connect.is_none() {
+                return Err(ProtError::Extension("unknown connection domain"));
+            }
+            let mut root_store = RootCertStore::empty();
+            root_store.add_trust_anchors(
+                webpki_roots::TLS_SERVER_ROOTS
+                    .iter()
+                    .map(|ta| {
+                        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                            ta.subject,
+                            ta.spki,
+                            ta.name_constraints,
+                        )
+                    }),
+            );
+            let config = ClientConfig::builder()
+                .with_safe_defaults()
+                .with_root_certificates(root_store)
+                .with_no_client_auth();
+
+            let tls_client = Arc::new(config);
+            let connector = TlsConnector::from(tls_client);
+
+            let stream = TcpStream::connect(&connect.unwrap()).await?;
+            // 这里的域名只为认证设置
+            let domain =
+                rustls::ServerName::try_from(&*domain.unwrap())
+                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
+
+            let outbound = connector.connect(domain, stream).await?;
+            Ok(outbound)
         }
     }
 }
