@@ -4,7 +4,7 @@ use std::{
 };
 
 use futures_core::Stream;
-use tokio::{sync::mpsc::{error::TryRecvError, Receiver}, io::AsyncRead};
+use tokio::{sync::mpsc::{error::TryRecvError, Receiver}};
 use webparse::{Binary, BinaryMut, Buf, Serialize};
 
 use crate::ProtResult;

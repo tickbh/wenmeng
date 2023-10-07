@@ -15,7 +15,7 @@ use webparse::{
     http::{
         http2::frame::{Frame, GoAway, Reason, Settings, StreamIdentifier},
     },
-    Binary, Request, Response, http2::frame::WindowUpdate,
+    Binary, Request, Response,
 };
 
 use crate::{ProtResult, RecvStream, ProtError};
@@ -131,7 +131,7 @@ impl Control {
         self.config.next_stream_id.next_id()
     }
 
-    pub fn poll_write<T>(&mut self, cx: &mut Context, codec: &mut Codec<T>, is_wait: bool) -> Poll<ProtResult<()>>
+    pub fn poll_write<T>(&mut self, cx: &mut Context, codec: &mut Codec<T>, _is_wait: bool) -> Poll<ProtResult<()>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -243,7 +243,7 @@ impl Control {
                 Poll::Ready(Some(Ok(frame))) => {
                     match &frame {
                         Frame::Settings(settings) => {
-                            let finish = self.setting
+                            let _finish = self.setting
                                 .recv_setting(codec, settings.clone(), &mut self.config)?;
                             // if finish {
                             //     codec.send_frame(Frame::WindowUpdate(WindowUpdate::new(0.into(), 33333)))?;

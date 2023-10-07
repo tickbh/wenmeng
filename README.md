@@ -35,5 +35,35 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 ```
 
+## 客户端使用方法
+
+> http1/http2通用, recv可以接收多个返回及服务端的推送信息
+```rust
+use webparse::Request;
+use wenmeng::{Client, ProtResult};
+
+async fn test_http2() -> ProtResult<()> {
+    let url = "http://nghttp2.org/"; //"http://127.0.0.1:8080/"
+    let req = Request::builder().method("GET").url(url).body("").unwrap();
+
+    let client = Client::builder().http2(false).request(&req).await.unwrap();
+
+    let (mut recv, sender) = client.send2(req.into_type()).await?;
+    let mut res = recv.recv().await.unwrap();
+    res.body_mut().wait_all().await;
+    println!("res = {}", res);
+
+    let req = Request::builder()
+        .method("GET")
+        .url(url.to_owned() + "blog/")
+        .body("")
+        .unwrap();
+    sender.send(req.into_type()).await?;
+    let res = recv.recv().await.unwrap();
+    println!("res = {}", res);
+    Ok(())
+}
+```
+
 ## License
 Apache License, Version 2.0 ([LICENSE-APACHE](./LICENSE) or [https://apache.org/licenses/LICENSE-2.0](https://apache.org/licenses/LICENSE-2.0))

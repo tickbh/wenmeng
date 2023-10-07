@@ -1,5 +1,5 @@
 use std::io;
-use std::net::SocketAddr;
+
 use std::sync::Arc;
 
 use crate::http2::{self, ClientH2Connection};
@@ -15,7 +15,7 @@ use tokio_rustls::TlsConnector;
 use tokio_rustls::client::TlsStream;
 use webparse::http2::frame::Settings;
 use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
-use webparse::{Binary, Method, Request, Response, Serialize, Url, WebError};
+use webparse::{Binary, Request, Response, Serialize, Url};
 
 
 #[derive(Debug)]

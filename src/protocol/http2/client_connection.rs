@@ -6,7 +6,7 @@ use futures_core::{Future, Stream};
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::mpsc::{Receiver, channel},
+    sync::mpsc::{channel},
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},

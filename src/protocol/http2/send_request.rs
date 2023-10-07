@@ -1,10 +1,10 @@
 
 
-use webparse::http::http2::frame::PushPromise;
+
 
 use std::task::Context;
-use tokio::sync::mpsc::{Sender};
-use webparse::{BinaryMut, Buf, Request, HeaderMap, HeaderValue, HeaderName};
+
+use webparse::{BinaryMut, Buf, Request, HeaderMap};
 use webparse::{
     http::http2::{
         frame::{
@@ -12,10 +12,10 @@ use webparse::{
             StreamIdentifier,
         },
     },
-    Binary, Method, Response,
+    Binary,
 };
 
-use crate::{ProtResult, RecvStream};
+use crate::{RecvStream};
 
 
 #[derive(Debug)]

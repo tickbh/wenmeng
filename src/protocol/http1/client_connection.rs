@@ -1,14 +1,13 @@
 use std::{
-    any::{Any, TypeId},
     pin::Pin,
     task::{Context, Poll},
 };
 
-use futures_core::{Future, Stream};
-use tokio::{io::{AsyncRead, AsyncWrite}, sync::mpsc::Sender};
-use webparse::{Binary, BinaryMut, HeaderName, Request, Response, Serialize, http2::{HTTP2_MAGIC, frame::Settings}, Buf};
+use futures_core::{Stream};
+use tokio::{io::{AsyncRead, AsyncWrite}};
+use webparse::{Binary, Request, Response, http2::{HTTP2_MAGIC, frame::Settings}, Buf};
 
-use crate::{ServerH2Connection, ProtResult, RecvStream, http2::ClientH2Connection};
+use crate::{ProtResult, RecvStream, http2::ClientH2Connection};
 
 use super::IoBuffer;
 
