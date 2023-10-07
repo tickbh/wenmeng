@@ -19,11 +19,11 @@ extern crate serde_derive;
 use std::{
     env,
     error::Error,
-    io::{self, Read},
+    io::{self, Read}, sync::Arc,
 };
 use tokio::{
     net::{TcpListener, TcpStream},
-    sync::mpsc::channel,
+    sync::{mpsc::channel, Mutex},
 };
 
 use wenmeng::{self, ProtResult, RecvStream, SendControl, Server};
@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-async fn operate(mut req: Request<RecvStream>) -> ProtResult<Option<Response<RecvStream>>> {
+async fn operate(mut req: Request<RecvStream>, _data: Arc<Mutex<()>>) -> ProtResult<Option<Response<RecvStream>>> {
     let mut builder = Response::builder().version(req.version().clone());
     let body = match &*req.url().path {
         "/plaintext" | "/" => {
@@ -179,7 +179,7 @@ async fn operate(mut req: Request<RecvStream>) -> ProtResult<Option<Response<Rec
 async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     // let mut connect = StateHandshake::handshake(stream).await.unwrap();
     // let mut connect = dmeng::Builder::new().connection(stream);
-    let mut server = Server::new(stream);
+    let mut server = Server::new(stream, ());
     let ret = server.incoming(operate).await;
     println!("end!!!!!!?????????????????? {:?}", ret);
     Ok(())

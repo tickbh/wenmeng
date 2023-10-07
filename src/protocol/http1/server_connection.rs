@@ -1,11 +1,11 @@
 use std::{
     any::{Any, TypeId},
     pin::Pin,
-    task::{Context, Poll},
+    task::{Context, Poll}, sync::Arc,
 };
 
 use futures_core::{Future, Stream};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{io::{AsyncRead, AsyncWrite}, sync::Mutex};
 use webparse::{Binary, BinaryMut, HeaderName, Request, Response, Serialize};
 
 use crate::{ServerH2Connection, ProtResult, RecvStream};
@@ -45,13 +45,14 @@ where
         connect
     }
 
-    pub async fn handle_request<F, Fut, Res, Req>(
+    pub async fn handle_request<F, Fut, Res, Req, D>(
         &mut self,
+        data: &mut Arc<Mutex<D>>,
         mut r: Request<RecvStream>,
         f: &mut F,
     ) -> ProtResult<Option<bool>>
     where
-        F: FnMut(Request<Req>) -> Fut,
+        F: FnMut(Request<Req>, Arc<Mutex<D>>) -> Fut,
         Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
         Req: From<RecvStream>,
         Req: Serialize + Any,
@@ -76,22 +77,24 @@ where
             let _ = r.body_mut().wait_all().await;
             content_length = r.body().body_len();
         }
-        match f(r.into_type::<Req>()).await? {
-            Some(mut res) => {
-                if content_length != 0 && res.get_body_len() == 0 {
+        match f(r.into_type::<Req>(), data.clone()).await? {
+            Some(res) => {
+                let mut res = res.into_type::<RecvStream>();
+                if res.get_body_len() == 0 && res.body().is_end() {
+                    let len = res.body().body_len();
                     res.headers_mut()
-                        .insert(HeaderName::CONTENT_LENGTH, content_length);
+                        .insert(HeaderName::CONTENT_LENGTH, len);
                 }
-                self.send_response(res.into_type()).await?;
+                self.send_response(res).await?;
             }
             None => (),
         }
         return Ok(None);
     }
 
-    pub async fn incoming<F, Fut, Res, Req>(&mut self, f: &mut F) -> ProtResult<Option<bool>>
+    pub async fn incoming<F, Fut, Res, Req, D>(&mut self, f: &mut F, data: &mut Arc<Mutex<D>>) -> ProtResult<Option<bool>>
     where
-        F: FnMut(Request<Req>) -> Fut,
+        F: FnMut(Request<Req>, Arc<Mutex<D>>) -> Fut,
         Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
         Req: From<RecvStream>,
         Req: Serialize + Any,
@@ -105,7 +108,7 @@ where
             None => return Ok(Some(true)),
             Some(Err(e)) => return Err(e),
             Some(Ok(r)) => {
-                self.handle_request(r, f).await?;
+                self.handle_request(data, r, f).await?;
             }
         };
         return Ok(None);

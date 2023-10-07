@@ -1,29 +1,31 @@
-use std::any::{Any, TypeId};
+use std::{any::{Any, TypeId}, sync::Arc};
 
 use futures_core::{Future};
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{io::{AsyncRead, AsyncWrite}, sync::Mutex};
 use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize};
 
 use crate::{ServerH2Connection, ProtError, ProtResult, RecvStream};
 
 use super::http1::ServerH1Connection;
 
-pub struct Server<T>
+pub struct Server<T, D>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
     http1: Option<ServerH1Connection<T>>,
     http2: Option<ServerH2Connection<T>>,
+    data: Arc<Mutex<D>>,
 }
 
-impl<T> Server<T>
+impl<T, D> Server<T, D>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(io: T) -> Self {
+    pub fn new(io: T, data: D) -> Self {
         Self {
             http1: Some(ServerH1Connection::new(io)),
             http2: None,
+            data: Arc::new(Mutex::new(data)),
         }
     }
 
@@ -41,14 +43,7 @@ where
         } else if let Some(h2) = &mut self.http2 {
             if let Some(stream_id) = stream_id {
                 let _recv = RecvStream::only(Binary::new());
-                // let v = res as Response<RecvStream>;
                 let res = res.into_type::<RecvStream>();
-                // let (mut res, mut r) = res.into(recv);
-
-                // let r = unsafe {
-                // (&mut **res.body_mut() as &mut (dyn Any + 'static)).downcast_mut()
-                // Box::new(res).as_mut()
-                // }
                 h2.send_response(res, stream_id).await?;
             }
         };
@@ -85,7 +80,7 @@ where
 
     pub async fn incoming<F, Fut, Res, Req>(&mut self, mut f: F) -> ProtResult<Option<bool>>
     where
-    F: FnMut(Request<Req>) -> Fut,
+    F: FnMut(Request<Req>, Arc<Mutex<D>>) -> Fut,
     Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
     Req: From<RecvStream>,
     Req: Serialize + Any,
@@ -94,9 +89,9 @@ where
     {
         loop {
             let result = if let Some(h1) = &mut self.http1 {
-                h1.incoming(&mut f).await
+                h1.incoming(&mut f, &mut self.data).await
             } else if let Some(h2) = &mut self.http2 {
-                h2.incoming(&mut f).await
+                h2.incoming(&mut f, &mut self.data).await
             } else {
                 Ok(Some(true))
             };
@@ -109,7 +104,7 @@ where
                             self.http2
                                 .as_mut()
                                 .unwrap()
-                                .handle_request(r, &mut f)
+                                .handle_request(&mut self.data, r, &mut f)
                                 .await?;
                         }
                         continue;

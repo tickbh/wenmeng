@@ -1,5 +1,5 @@
-use std::{env, error::Error};
-use tokio::net::TcpListener;
+use std::{env, error::Error, sync::Arc};
+use tokio::{net::TcpListener, sync::Mutex};
 use webparse::{Request, Response};
 use wenmeng::{self, ProtResult, RecvStream, Server};
 
@@ -13,14 +13,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     loop {
         let (stream, _) = server.accept().await?;
         tokio::spawn(async move {
-            let mut server = Server::new(stream);
-            async fn operate(req: Request<RecvStream>) -> ProtResult<Option<Response<String>>> {
+            let mut server = Server::new(stream, ());
+            async fn operate(req: Request<RecvStream>, _: Arc<Mutex<()>>) -> ProtResult<Option<Response<String>>> {
                 let response = Response::builder()
                     .version(req.version().clone())
                     .body("Hello World".to_string())?;
                 Ok(Some(response))
             }
-            let _ = server.incoming(move |req| operate(req)).await;
+            let _ = server.incoming(operate).await;
         });
     }
 }
