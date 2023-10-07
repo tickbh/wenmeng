@@ -57,21 +57,10 @@ impl Builder {
         self.inner
     }
 
-    pub async fn request<Req: Serialize>(
-        self,
-        req: &Request<Req>,
-    ) -> ProtResult<Client<TcpStream>> {
-        let connect = req.get_connect_url();
-        if connect.is_none() {
-            return Err(ProtError::Extension("unknown connection url"));
-        }
-        let tcp = TcpStream::connect(connect.unwrap()).await?;
-        Ok(Client::<TcpStream>::new(self.inner?, tcp))
-    }
-
     pub async fn connect<T>(self, url: T) -> ProtResult<Client<TcpStream>>
     where T: TryInto<Url> {
         let url = TryInto::<Url>::try_into(url);
+        println!("url = {:?}", url.as_ref().ok());
         if url.is_err() {
             return Err(ProtError::Extension("unknown connection url"));
         } else {

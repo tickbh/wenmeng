@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .body("Hello World".to_string())?;
                 Ok(Some(response))
             }
-            let _ = server.incoming(operate).await;
+            let _ = server.incoming(move |req| operate(req)).await;
         });
     }
 }
