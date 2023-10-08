@@ -191,16 +191,17 @@ impl RecvStream {
                 size += Self::encode_data(buffer, bin.chunk(), is_chunked)?;
             }
         }
+        let mut has_encode_end = false;
         if self.receiver.is_some() && !self.is_end {
             loop {
-                let xxx = self.receiver.as_mut().unwrap().poll_recv(cx);
-                match xxx {
+                match self.receiver.as_mut().unwrap().poll_recv(cx) {
                     Poll::Pending => {
                         break;
                     }
-                    Poll::Ready(Some((is_end, mut bin))) => {
+                    Poll::Ready(Some((is_end, bin))) => {
                         size += Self::encode_data(buffer, bin.chunk(), is_chunked)?;
                         self.is_end = is_end;
+                        has_encode_end = is_end;
                     }
                     Poll::Ready(None) => {
                         break;
@@ -208,7 +209,7 @@ impl RecvStream {
                 }
             }
         }
-        if is_chunked && self.is_end {
+        if !has_encode_end && is_chunked && self.is_end {
             Self::encode_data(buffer, &[], is_chunked)?;
         }
         Poll::Ready(Ok(size))
