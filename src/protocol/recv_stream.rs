@@ -1,11 +1,13 @@
 use std::{
+    fmt::Display,
     io::Read,
-    task::{Context, Poll}, fmt::Display,
+    task::{Context, Poll},
 };
 
+use bytes::buf;
 use futures_core::Stream;
-use tokio::{sync::mpsc::{error::TryRecvError, Receiver}};
-use webparse::{Binary, BinaryMut, Buf, Serialize};
+use tokio::sync::mpsc::{error::TryRecvError, Receiver};
+use webparse::{Binary, BinaryMut, Buf, Serialize, Helper};
 
 use crate::ProtResult;
 
@@ -160,17 +162,34 @@ impl RecvStream {
         Some(size)
     }
 
+    fn encode_data<B: webparse::Buf + webparse::BufMut>(
+        buffer: &mut B,
+        data: &[u8],
+        is_chunked: bool,
+    ) -> webparse::WebResult<usize> {
+        if is_chunked {
+            Helper::encode_chunk_data(buffer, data)
+        } else {
+            Ok(buffer.put_slice(data))
+        }
+    }
+
     pub fn poll_encode<B: webparse::Buf + webparse::BufMut>(
         &mut self,
         cx: &mut Context<'_>,
         buffer: &mut B,
+        is_chunked: bool,
     ) -> Poll<webparse::WebResult<usize>> {
         let mut size = 0;
         if let Some(bin) = self.binary.take() {
-            size += buffer.put_slice(bin.chunk());
+            if bin.chunk().len() > 0 {
+                size += Self::encode_data(buffer, bin.chunk(), is_chunked)?;
+            }
         }
         if let Some(bin) = self.binary_mut.take() {
-            size += buffer.put_slice(bin.chunk());
+            if bin.chunk().len() > 0 {
+                size += Self::encode_data(buffer, bin.chunk(), is_chunked)?;
+            }
         }
         if self.receiver.is_some() && !self.is_end {
             loop {
@@ -180,7 +199,7 @@ impl RecvStream {
                         break;
                     }
                     Poll::Ready(Some((is_end, mut bin))) => {
-                        size += bin.serialize(buffer)?;
+                        size += Self::encode_data(buffer, bin.chunk(), is_chunked)?;
                         self.is_end = is_end;
                     }
                     Poll::Ready(None) => {
@@ -188,6 +207,9 @@ impl RecvStream {
                     }
                 }
             }
+        }
+        if is_chunked && self.is_end {
+            Self::encode_data(buffer, &[], is_chunked)?;
         }
         Poll::Ready(Ok(size))
     }
@@ -223,7 +245,6 @@ impl Read for RecvStream {
         Ok(read_bytes)
     }
 }
-
 
 // impl AsyncRead for RecvStream {
 //     fn poll_read(
@@ -271,7 +292,6 @@ impl Serialize for RecvStream {
 unsafe impl Sync for RecvStream {}
 
 unsafe impl Send for RecvStream {}
-
 
 impl From<()> for RecvStream {
     fn from(_: ()) -> Self {

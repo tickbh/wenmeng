@@ -235,9 +235,7 @@ where
         Ok(())
     }
 
-    async fn inner_operate(mut self, req: Request<RecvStream>) -> ProtResult<()> {
-        self.send_req(req).await?;
-
+    pub async fn wait_operate(mut self) -> ProtResult<()> {
         async fn http1_wait<T>(connection: &mut Option<ClientH1Connection<T>>) -> Option<ProtResult<Option<Response<RecvStream>>>>
         where T: AsyncRead + AsyncWrite + Unpin {
             if connection.is_some() {
@@ -274,11 +272,9 @@ where
         loop {
             let v = tokio::select! {
                 r = http1_wait(&mut self.http1) => {
-                    println!("aaaaaa {:?}", r);
                     r
                 }
                 r = http2_wait(&mut self.http2) => {
-                    println!("bbbb {:?}", r);
                     r
                 }
                 req = req_receiver(&mut self.req_receiver) => {
@@ -311,6 +307,11 @@ where
                 }
             };
         }
+    }
+
+    async fn inner_operate(mut self, req: Request<RecvStream>) -> ProtResult<()> {
+        self.send_req(req).await?;
+        self.wait_operate().await
     }
 
     fn rebuild_request(&mut self, req: &mut Request<RecvStream>) {

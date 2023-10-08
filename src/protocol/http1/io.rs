@@ -3,17 +3,15 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-
-
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     sync::mpsc::Sender,
 };
 
-use webparse::{
-    http::http2, Binary, BinaryMut, Buf, BufMut, Request, Response, Helper, WebError, HttpError,
-};
 use crate::{ProtError, ProtResult, RecvStream};
+use webparse::{
+    http::http2, Binary, BinaryMut, Buf, BufMut, Helper, HttpError, Request, Response, WebError,
+};
 
 pub struct IoBuffer<T> {
     io: T,
@@ -29,19 +27,49 @@ struct ConnectionInfo {
     res: Option<Response<RecvStream>>,
     req: Option<Request<RecvStream>>,
     is_keep_alive: bool,
-    is_send_body: bool,
-    is_send_header: bool,
-    is_build_req: bool,
-    is_send_end: bool,
-    left_body_len: usize,
     is_delay_close: bool,
-    is_now_chunked: bool,
+
+    req_status: SendStatus,
+    res_status: SendStatus,
+}
+
+#[derive(Debug)]
+struct SendStatus {
+    pub is_send_body: bool,
+    pub is_send_header: bool,
+    pub is_build_header: bool,
+    pub is_send_end: bool,
+    pub left_body_len: usize,
+    pub is_chunked: bool,
+}
+
+impl Default for SendStatus {
+    fn default() -> Self {
+        Self {
+            is_send_body: Default::default(),
+            is_send_header: Default::default(),
+            is_build_header: Default::default(),
+            is_send_end: false,
+            left_body_len: Default::default(),
+            is_chunked: Default::default(),
+        }
+    }
+}
+
+impl SendStatus {
+    pub fn clear(&mut self) {
+        self.is_send_body = false;
+        self.is_send_header = false;
+        self.is_build_header = false;
+        self.is_send_end = false;
+        self.left_body_len = 0;
+        self.is_chunked = false;
+    }
 }
 
 impl ConnectionInfo {
-
     pub fn is_active_close(&self) -> bool {
-        self.is_send_end && !self.is_keep_alive
+        self.req_status.is_send_end && self.req_status.is_send_end && !self.is_keep_alive
     }
 }
 
@@ -61,59 +89,68 @@ where
                 res: None,
                 req: None,
                 is_keep_alive: false,
-                is_send_body: false,
-                is_send_header: false,
-                is_build_req: false,
-                is_send_end: false,
                 is_delay_close: false,
-                left_body_len: usize::MAX,
-                is_now_chunked: false,
+
+                req_status: SendStatus::default(),
+                res_status: SendStatus::default(),
             },
         }
     }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
         if let Some(res) = &mut self.inner.res {
-            if !self.inner.is_send_header {
+            if !self.inner.res_status.is_send_header {
+                self.inner.res_status.is_chunked = res.headers().is_chunk();
                 res.encode_header(&mut self.write_buf)?;
-                self.inner.is_send_header = true;
+                self.inner.res_status.is_send_header = true;
             }
 
-            if !res.body().is_end() || !self.inner.is_send_body {
-                self.inner.is_send_body = true;
-                let _ = res.body_mut().poll_encode(cx, &mut self.write_buf);
-                if res.body().is_end() {
-                    self.inner.is_send_end = true;
-                    self.inner.deal_req += 1;
-                }
+            if !res.body().is_end() || !self.inner.res_status.is_send_body {
+                self.inner.res_status.is_send_body = true;
+                let _ = res.body_mut().poll_encode(
+                    cx,
+                    &mut self.write_buf,
+                    self.inner.res_status.is_chunked,
+                );
+            }
+            if res.body().is_end() {
+                self.inner.res_status.is_send_end = true;
+                self.inner.deal_req += 1;
             }
         }
 
         if let Some(req) = &mut self.inner.req {
-            if !self.inner.is_send_header {
+            if !self.inner.req_status.is_send_header {
                 req.encode_header(&mut self.write_buf)?;
-                self.inner.is_send_header = true;
+                self.inner.req_status.is_send_header = true;
             }
 
-            if !req.body().is_end() || !self.inner.is_send_body {
-                self.inner.is_send_body = true;
-                let _ = req.body_mut().poll_encode(cx, &mut self.write_buf);
-                if req.body().is_end() {
-                    self.inner.is_send_end = true;
-                    self.inner.deal_req += 1;
-                }
+            if !req.body().is_end() || !self.inner.req_status.is_send_body {
+                self.inner.req_status.is_send_body = true;
+                let _ = req.body_mut().poll_encode(
+                    cx,
+                    &mut self.write_buf,
+                    self.inner.req_status.is_chunked,
+                );
+            }
+            if req.body().is_end() {
+                self.inner.req_status.is_send_end = true;
+                self.inner.deal_req += 1;
             }
         }
 
-        if self.inner.is_send_end {
+        if self.inner.req_status.is_send_end && self.inner.res_status.is_send_end {
             self.set_now_end();
         }
 
         if self.write_buf.is_empty() {
             return Poll::Ready(Ok(0));
         }
+
+        println!("aaaaaaaaaaaaaaa {:?}", std::time::Instant::now());
         match ready!(Pin::new(&mut self.io).poll_write(cx, &self.write_buf.chunk()))? {
             n => {
+                println!("bbbbbbbbbbbbbbbbbb = {} {:?}", n, std::time::Instant::now());
                 self.write_buf.advance(n);
                 if self.write_buf.is_empty() {
                     return Poll::Ready(Ok(n));
@@ -157,13 +194,16 @@ where
         Poll::Ready(Ok(size))
     }
 
-    pub fn receive_body_len(&mut self, body_len: usize) -> bool {
-        println!("left len = {}, reciver = {}", self.inner.left_body_len, body_len);
-        if self.inner.left_body_len <= body_len {
-            self.inner.left_body_len = 0;
+    fn receive_body_len(status: &mut SendStatus, body_len: usize) -> bool {
+        // println!(
+        //     "left len = {}, reciver = {}",
+        //     status.left_body_len, body_len
+        // );
+        if status.left_body_len <= body_len {
+            status.left_body_len = 0;
             true
         } else {
-            self.inner.left_body_len -= body_len;
+            status.left_body_len -= body_len;
             false
         }
     }
@@ -183,9 +223,10 @@ where
                 return Poll::Ready(None);
             }
             // 收到新的消息头, 解析包体消息
-            _ => {
-                if self.inner.is_build_req {
-                    self.do_deal_body()?;
+            n @ _ => {
+                println!("poll request read = {:?}", n);
+                if self.inner.req_status.is_build_header {
+                    self.do_deal_body(true)?;
                     return Poll::Pending;
                 }
                 let mut request = Request::new();
@@ -212,43 +253,56 @@ where
                 }
 
                 self.read_buf.advance(size);
-                self.inner.is_send_body = false;
-                self.inner.is_send_end = false;
-                self.inner.is_build_req = true;
+                self.inner.req_status.is_send_body = false;
+                self.inner.req_status.is_send_end = false;
+                self.inner.req_status.is_build_header = true;
                 self.inner.is_keep_alive = request.is_keep_alive();
                 let body_len = request.get_body_len();
-                self.inner.left_body_len = if body_len < 0 { usize::MAX } else { body_len as usize };
-                let new_request = if body_len == 0 {
-                    request.into(RecvStream::empty()).0
+                self.inner.req_status.left_body_len = if body_len < 0 {
+                    usize::MAX
                 } else {
-                    let (sender, receiver) = tokio::sync::mpsc::channel::<(bool, Binary)>(30);
-                    self.inner.read_sender = Some(sender);
-                    let mut binary = BinaryMut::new();
-                    binary.put_slice(self.read_buf.chunk());
-                    self.read_buf.advance(self.read_buf.remaining());
-                    let is_end = self.receive_body_len(binary.remaining());
-                    request.into(RecvStream::new(receiver, binary, is_end)).0
+                    body_len as usize
                 };
-                return Poll::Ready(Some(Ok(new_request)));
+                if !request.method().is_nobody() && body_len == 0 {
+                    self.inner.req_status.left_body_len = usize::MAX;
+                    if request.headers().is_chunk() {
+                        self.inner.req_status.is_chunked = true;
+                    }
+                }
+                println!("body len = {:?}", self.inner.req_status.left_body_len);
+
+                let (recv, sender) =
+                    Self::build_recv_stream(&mut self.inner.res_status, &mut self.read_buf)?;
+                self.inner.read_sender = sender;
+                return Poll::Ready(Some(Ok(request.into(recv).0)));
             }
         }
     }
 
-
-    pub fn do_deal_body(&mut self) -> ProtResult<bool> {
+    pub fn do_deal_body(&mut self, is_req: bool) -> ProtResult<bool> {
         // chunk 格式数据
         let mut all_is_end = false;
-        if self.inner.is_now_chunked {
+        let is_chunked = if is_req {
+            self.inner.req_status.is_chunked
+        } else {
+            self.inner.res_status.is_chunked
+        };
+        if is_chunked {
             if let Some(sender) = &self.inner.read_sender {
-                if let Ok(p) = sender.try_reserve() {
-                    match Helper::parse_chunk_data(&mut self.read_buf.clone()) {
-                        Ok((data, n, is_end)) => {
-                            self.read_buf.advance(n);
-                            p.send((is_end, Binary::from(data)));
-                            all_is_end = is_end
-                        },
-                        Err(WebError::Http(HttpError::Partial)) => return Ok(false),
-                        Err(err) => return Err(err.into()),
+                loop {
+                    match sender.try_reserve() {
+                        Ok(p) => {
+                            match Helper::parse_chunk_data(&mut self.read_buf.clone()) {
+                                Ok((data, n, is_end)) => {
+                                    self.read_buf.advance(n);
+                                    p.send((is_end, Binary::from(data)));
+                                    all_is_end = is_end
+                                }
+                                Err(WebError::Http(HttpError::Partial)) => return Ok(false),
+                                Err(err) => return Err(err.into()),
+                            }
+                        }
+                        Err(_) => return Err(ProtError::Extension("sender error")),
                     }
                 }
             }
@@ -256,7 +310,11 @@ where
             if let Some(sender) = self.inner.read_sender.take() {
                 if let Ok(p) = sender.try_reserve() {
                     let binary = Binary::from(self.read_buf.chunk().to_vec());
-                    let is_end = self.receive_body_len(binary.len());
+                    let is_end = if is_req {
+                        Self::receive_body_len(&mut self.inner.req_status, binary.len())
+                    } else {
+                        Self::receive_body_len(&mut self.inner.res_status, binary.len())
+                    };
                     p.send((is_end, binary));
                     self.read_buf.advance_all();
                     self.read_buf.clear();
@@ -281,7 +339,6 @@ where
             return Ok(false);
         }
     }
-
 
     pub fn poll_response(
         &mut self,
@@ -309,8 +366,8 @@ where
                 if n == 0 {
                     self.inner.is_delay_close = true;
                 }
-                if self.inner.is_build_req {
-                    let is_close = self.do_deal_body()?;
+                if self.inner.res_status.is_build_header {
+                    let is_close = self.do_deal_body(false)?;
                     if is_close {
                         return Poll::Ready(None);
                     } else {
@@ -342,60 +399,79 @@ where
                 }
 
                 self.read_buf.advance(size);
-                self.inner.is_send_body = false;
-                self.inner.is_send_end = false;
-                self.inner.is_build_req = true;
-                // self.inner.is_keep_alive = response.is_keep_alive();
+                self.inner.res_status.is_send_body = false;
+                self.inner.res_status.is_send_end = false;
+                self.inner.res_status.is_build_header = true;
+                // self.inner.res_status.is_keep_alive = response.is_keep_alive();
                 let body_len = response.get_body_len();
-                self.inner.left_body_len = if body_len < 0 { usize::MAX } else { body_len as usize };
-                if response.status().is_success() && body_len == 0 {
-                    self.inner.left_body_len = usize::MAX;
-                    if response.headers().is_chunk() {
-                        self.inner.is_now_chunked = true;
-                    }
-                }
-                println!("body len = {:?}", self.inner.left_body_len);
-                
-                if self.inner.left_body_len == 0 {
-                    let new_response = response.into(RecvStream::empty()).0;
-                    return Poll::Ready(Some(Ok(new_response)));
-                } else if self.inner.is_now_chunked {
-                    let mut binary = BinaryMut::new();
-                    let mut is_all_end = false;
-                    loop {
-                        match Helper::parse_chunk_data(&mut self.read_buf.clone()) {
-                            Ok((data, n, is_end)) => {
-                                binary.put_slice(&data);
-                                self.read_buf.advance(n);
-                                is_all_end = is_end;
-                            },
-                            Err(WebError::Http(HttpError::Partial)) => break,
-                            Err(err) => return Poll::Ready(Some(Err(err.into()))),
-                        }
-                    }
-                    return Poll::Ready(Some(Ok(self.client_build_reponse(response, binary, is_all_end))));
+                self.inner.res_status.left_body_len = if body_len < 0 {
+                    usize::MAX
                 } else {
-                    let new_response = {
-                        let mut binary = BinaryMut::new();
-                        let is_end = if self.inner.left_body_len > self.read_buf.remaining() {
-                            binary.put_slice(self.read_buf.chunk());
-                            self.read_buf.advance_all();
-                            self.read_buf.clear();
-                            self.receive_body_len(binary.remaining())
-                        } else {
-                            binary.put_slice(&self.read_buf.chunk()[0..self.inner.left_body_len]);
-                            self.read_buf.advance(self.inner.left_body_len);
-                            self.receive_body_len(self.inner.left_body_len)
-                        };
-                        self.client_build_reponse(response, binary, is_end)
-                    };
-                    return Poll::Ready(Some(Ok(new_response)));
+                    body_len as usize
+                };
+                if response.status().is_success() && body_len == 0 {
+                    self.inner.res_status.left_body_len = usize::MAX;
+                    if response.headers().is_chunk() {
+                        self.inner.res_status.is_chunked = true;
+                    }
                 }
+                println!("body len = {:?}", self.inner.res_status.left_body_len);
+
+                let (recv, sender) =
+                    Self::build_recv_stream(&mut self.inner.res_status, &mut self.read_buf)?;
+                self.inner.read_sender = sender;
+                return Poll::Ready(Some(Ok(response.into(recv).0)));
             }
         }
     }
 
-    fn client_build_reponse(&mut self, response: Response<()>, binary: BinaryMut, is_end: bool) -> Response<RecvStream> {
+    fn build_recv_stream(
+        status: &mut SendStatus,
+        read_buf: &mut BinaryMut,
+    ) -> ProtResult<(RecvStream, Option<Sender<(bool, Binary)>>)> {
+        if status.left_body_len == 0 {
+            return Ok((RecvStream::empty(), None));
+        } else if status.is_chunked {
+            let mut binary = BinaryMut::new();
+            let mut is_all_end = false;
+            loop {
+                match Helper::parse_chunk_data(&mut read_buf.clone()) {
+                    Ok((data, n, is_end)) => {
+                        binary.put_slice(&data);
+                        read_buf.advance(n);
+                        is_all_end = is_end;
+                    }
+                    Err(WebError::Http(HttpError::Partial)) => break,
+                    Err(err) => return Err(err.into()),
+                }
+            }
+            let (sender, receiver) = tokio::sync::mpsc::channel::<(bool, Binary)>(30);
+            return Ok((RecvStream::new(receiver, binary, is_all_end), Some(sender)));
+        } else {
+            let new_response = {
+                let mut binary = BinaryMut::new();
+                let is_end = if status.left_body_len > read_buf.remaining() {
+                    binary.put_slice(read_buf.chunk());
+                    read_buf.advance_all();
+                    read_buf.clear();
+                    Self::receive_body_len(status, binary.remaining())
+                } else {
+                    binary.put_slice(&read_buf.chunk()[0..status.left_body_len]);
+                    read_buf.advance(status.left_body_len);
+                    Self::receive_body_len(status, status.left_body_len)
+                };
+                let (sender, receiver) = tokio::sync::mpsc::channel::<(bool, Binary)>(30);
+                return Ok((RecvStream::new(receiver, binary, is_end), Some(sender)));
+            };
+        }
+    }
+
+    fn client_build_reponse(
+        &mut self,
+        response: Response<()>,
+        binary: BinaryMut,
+        is_end: bool,
+    ) -> Response<RecvStream> {
         let (sender, receiver) = tokio::sync::mpsc::channel::<(bool, Binary)>(30);
         self.inner.read_sender = Some(sender);
         if is_end {
@@ -407,9 +483,8 @@ where
     fn set_now_end(&mut self) {
         self.inner.res = None;
         self.inner.req = None;
-        self.inner.is_build_req = false;
-        self.inner.is_now_chunked = false;
-        self.inner.is_send_header = false;
+        self.inner.req_status.clear();
+        self.inner.res_status.clear();
     }
 
     pub fn into(self) -> (T, BinaryMut, BinaryMut) {
@@ -418,11 +493,13 @@ where
 
     pub async fn send_response(&mut self, res: Response<RecvStream>) -> ProtResult<()> {
         self.inner.res = Some(res);
+        self.inner.res_status.is_send_end = false;
         Ok(())
     }
 
     pub async fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
         self.inner.req = Some(req);
+        self.inner.req_status.is_send_end = false;
         Ok(())
     }
 }
