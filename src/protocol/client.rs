@@ -15,7 +15,7 @@ use tokio_rustls::TlsConnector;
 use tokio_rustls::client::TlsStream;
 use webparse::http2::frame::Settings;
 use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
-use webparse::{Binary, Request, Response, Serialize, Url};
+use webparse::{Binary, Request, Response, Url};
 
 
 #[derive(Debug)]

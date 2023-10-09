@@ -1,4 +1,4 @@
-use webparse::{Serialize, Request, HeaderMap, Response};
+use webparse::{Serialize, Request, Response};
 
 pub struct HeaderHelper;
 

@@ -17,7 +17,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             async fn operate(req: Request<RecvStream>, _: Arc<Mutex<()>>) -> ProtResult<Option<Response<String>>> {
                 let response = Response::builder()
                     .version(req.version().clone())
-                    .body("Hello World".to_string())?;
+                    .body("Hello World\r\n".to_string())?;
                 Ok(Some(response))
             }
             let _ = server.incoming(operate).await;
