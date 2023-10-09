@@ -159,8 +159,9 @@ impl Control {
         T: AsyncRead + AsyncWrite + Unpin,
     {
         ready!(self.handshake.poll_handle(cx, codec))?;
-        let mut has_change = false;
+        let mut has_change;
         loop {
+            has_change = false;
             let is_wait = ready!(self.setting.poll_handle(cx, codec, &mut self.config))?;
             // 写入如果pending不直接pending, 等尝试读pending则返回
             match self.poll_write(cx, codec, is_wait) {

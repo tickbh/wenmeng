@@ -2,11 +2,13 @@ use webparse::Request;
 use wenmeng::{Client, ProtResult};
 
 async fn test_http2() -> ProtResult<()> {
-    let url = "http://nghttp2.org/"; //"http://127.0.0.1:8080/"
+    // let url = "http://nghttp2.org/";
+    
+    let url = "http://localhost:8001/";
     let req = Request::builder().method("GET").url(url).body("").unwrap();
 
     println!("url = {:?}", req.get_connect_url());
-    let client = Client::builder().http2(false).connect(url).await.unwrap();
+    let client = Client::builder().http2_only(true).connect(url).await.unwrap();
 
     let (mut recv, sender) = client.send2(req.into_type()).await?;
     let mut res = recv.recv().await.unwrap();

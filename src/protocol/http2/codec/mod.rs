@@ -65,6 +65,9 @@ where
         }
     }
 
+    pub fn get_reader(&mut self) -> &mut FramedRead<FramedWrite<T>> {
+        &mut self.inner
+    }
     pub fn get_mut(&mut self) -> &mut T {
         self.inner.get_mut().get_mut()
     }

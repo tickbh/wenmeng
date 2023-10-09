@@ -69,6 +69,25 @@ where
 
 }
 
+impl<T> AsyncRead for FramedRead<T>
+where
+    T: AsyncRead + Unpin, {
+        fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        use bytes::Buf;
+        if self.inner.read_buffer_mut().remaining() > 0 {
+            let read = std::cmp::min(buf.remaining(), self.inner.read_buffer_mut().remaining());
+            buf.put_slice(&self.inner.read_buffer_mut().chunk()[..read]);
+            self.inner.read_buffer_mut().advance(read);
+            return Poll::Ready(Ok(()))
+        }
+        Pin::new(self.get_mut()).poll_read(cx, buf)
+    }
+}
+
 impl<T> Stream for FramedRead<T>
 where
     T: AsyncRead + Unpin,

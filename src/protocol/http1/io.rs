@@ -272,7 +272,7 @@ where
                             if self.read_buf.remaining() >= http2::MAIGC_LEN
                                 && &self.read_buf[..http2::MAIGC_LEN] == http2::HTTP2_MAGIC
                             {
-                                self.read_buf.advance(http2::MAIGC_LEN);
+                                // self.read_buf.advance(http2::MAIGC_LEN);
                                 let err = ProtError::ServerUpgradeHttp2(Binary::new(), None);
                                 return Poll::Ready(Some(Err(err)));
                             }

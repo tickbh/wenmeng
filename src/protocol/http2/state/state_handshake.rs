@@ -57,7 +57,7 @@ impl ReadPreface {
 
         while rem > 0 {
             let mut buf = ReadBuf::new(&mut buf[..rem]);
-            ready!(Pin::new(codec.get_mut()).poll_read(cx, &mut buf)).map_err(ProtError::from)?;
+            ready!(Pin::new(codec.get_reader()).poll_read(cx, &mut buf)).map_err(ProtError::from)?;
             let n = buf.filled().len();
             if n == 0 {
                 return Poll::Ready(Err(ProtError::from(io::Error::new(
