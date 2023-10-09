@@ -1,14 +1,19 @@
 use std::{
     any::{Any, TypeId},
+    net::SocketAddr,
     pin::Pin,
-    task::{Context, Poll}, sync::Arc,
+    sync::Arc,
+    task::{Context, Poll},
 };
 
 use futures_core::{Future, Stream};
-use tokio::{io::{AsyncRead, AsyncWrite}, sync::Mutex};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    sync::Mutex,
+};
 use webparse::{Binary, BinaryMut, HeaderName, Request, Response, Serialize};
 
-use crate::{ServerH2Connection, ProtResult, RecvStream};
+use crate::{ProtResult, RecvStream, ServerH2Connection};
 
 use super::IoBuffer;
 
@@ -47,6 +52,7 @@ where
 
     pub async fn handle_request<F, Fut, Res, Req, D>(
         &mut self,
+        addr: &Option<SocketAddr>,
         data: &mut Arc<Mutex<D>>,
         mut r: Request<RecvStream>,
         f: &mut F,
@@ -69,21 +75,24 @@ where
                     .unwrap();
                 let mut binary = BinaryMut::new();
                 let _ = response.serialize(&mut binary);
-                return Err(crate::ProtError::ServerUpgradeHttp2(binary.freeze(), Some(r)));
+                return Err(crate::ProtError::ServerUpgradeHttp2(
+                    binary.freeze(),
+                    Some(r),
+                ));
             }
         }
-        let mut content_length = 0;
         if TypeId::of::<Req>() != TypeId::of::<RecvStream>() {
             let _ = r.body_mut().wait_all().await;
-            content_length = r.body().body_len();
+        }
+        if let Some(addr) = addr {
+            r.headers_mut().system_insert("$client_ip".to_string(), format!("{}", addr));
         }
         match f(r.into_type::<Req>(), data.clone()).await? {
             Some(res) => {
                 let mut res = res.into_type::<RecvStream>();
                 if res.get_body_len() == 0 && res.body().is_end() {
                     let len = res.body().body_len();
-                    res.headers_mut()
-                        .insert(HeaderName::CONTENT_LENGTH, len);
+                    res.headers_mut().insert(HeaderName::CONTENT_LENGTH, len);
                 }
                 self.send_response(res).await?;
             }
@@ -92,7 +101,12 @@ where
         return Ok(None);
     }
 
-    pub async fn incoming<F, Fut, Res, Req, D>(&mut self, f: &mut F, data: &mut Arc<Mutex<D>>) -> ProtResult<Option<bool>>
+    pub async fn incoming<F, Fut, Res, Req, D>(
+        &mut self,
+        f: &mut F,
+        addr: &Option<SocketAddr>,
+        data: &mut Arc<Mutex<D>>,
+    ) -> ProtResult<Option<bool>>
     where
         F: FnMut(Request<Req>, Arc<Mutex<D>>) -> Fut,
         Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
@@ -108,7 +122,7 @@ where
             None => return Ok(Some(true)),
             Some(Err(e)) => return Err(e),
             Some(Ok(r)) => {
-                self.handle_request(data, r, f).await?;
+                self.handle_request(addr, data, r, f).await?;
             }
         };
         return Ok(None);

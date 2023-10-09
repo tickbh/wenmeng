@@ -1,4 +1,4 @@
-use std::{any::{Any, TypeId}, sync::Arc};
+use std::{any::{Any, TypeId}, sync::Arc, net::SocketAddr};
 
 use futures_core::{Future};
 use tokio::{io::{AsyncRead, AsyncWrite}, sync::Mutex};
@@ -15,17 +15,19 @@ where
     http1: Option<ServerH1Connection<T>>,
     http2: Option<ServerH2Connection<T>>,
     data: Arc<Mutex<D>>,
+    addr: Option<SocketAddr>,
 }
 
 impl<T, D> Server<T, D>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(io: T, data: D) -> Self {
+    pub fn new(io: T, addr: Option<SocketAddr>, data: D) -> Self {
         Self {
             http1: Some(ServerH1Connection::new(io)),
             http2: None,
             data: Arc::new(Mutex::new(data)),
+            addr,
         }
     }
 
@@ -89,9 +91,9 @@ where
     {
         loop {
             let result = if let Some(h1) = &mut self.http1 {
-                h1.incoming(&mut f, &mut self.data).await
+                h1.incoming(&mut f, &self.addr, &mut self.data).await
             } else if let Some(h2) = &mut self.http2 {
-                h2.incoming(&mut f, &mut self.data).await
+                h2.incoming(&mut f, &self.addr, &mut self.data).await
             } else {
                 Ok(Some(true))
             };
@@ -104,7 +106,7 @@ where
                             self.http2
                                 .as_mut()
                                 .unwrap()
-                                .handle_request(&mut self.data, r, &mut f)
+                                .handle_request(&self.addr, &mut self.data, r, &mut f)
                                 .await?;
                         }
                         continue;

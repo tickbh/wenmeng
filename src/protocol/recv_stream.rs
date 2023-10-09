@@ -4,7 +4,6 @@ use std::{
     task::{Context, Poll},
 };
 
-use bytes::buf;
 use futures_core::Stream;
 use tokio::sync::mpsc::{error::TryRecvError, Receiver};
 use webparse::{Binary, BinaryMut, Buf, Serialize, Helper};

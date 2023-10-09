@@ -1,16 +1,22 @@
 use std::{
-    task::{ready, Context, Poll}, any::{Any, TypeId}, sync::Arc,
+    any::{Any, TypeId},
+    net::SocketAddr,
+    sync::Arc,
+    task::{ready, Context, Poll},
 };
 
 use futures_core::{Future, Stream};
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::{mpsc::{Receiver, channel}, Mutex},
+    sync::{
+        mpsc::{channel, Receiver},
+        Mutex,
+    },
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
-    Binary, BinaryMut, Request, Response, Serialize, HeaderName,
+    Binary, BinaryMut, HeaderName, Request, Response, Serialize,
 };
 
 use crate::{
@@ -18,11 +24,7 @@ use crate::{
     Builder, Initiator, RecvStream,
 };
 
-use super::{
-    codec::{Codec},
-    control::ControlConfig,
-    Control,
-};
+use super::{codec::Codec, control::ControlConfig, Control};
 
 pub struct ServerH2Connection<T> {
     codec: Codec<T>,
@@ -63,16 +65,19 @@ where
             codec: Codec::new(io),
             inner: InnerConnection {
                 state: State::Open,
-                control: Control::new(ControlConfig {
-                    next_stream_id: 2.into(),
-                    // Server does not need to locally initiate any streams
-                    initial_max_send_streams: 0,
-                    max_send_buffer_size: builder.max_send_buffer_size,
-                    reset_stream_duration: builder.reset_stream_duration,
-                    reset_stream_max: builder.reset_stream_max,
-                    remote_reset_stream_max: builder.pending_accept_reset_stream_max,
-                    settings: builder.settings.clone(),
-                }, sender),
+                control: Control::new(
+                    ControlConfig {
+                        next_stream_id: 2.into(),
+                        // Server does not need to locally initiate any streams
+                        initial_max_send_streams: 0,
+                        max_send_buffer_size: builder.max_send_buffer_size,
+                        reset_stream_duration: builder.reset_stream_duration,
+                        reset_stream_max: builder.reset_stream_max,
+                        remote_reset_stream_max: builder.pending_accept_reset_stream_max,
+                        settings: builder.settings.clone(),
+                    },
+                    sender,
+                ),
                 receiver_push: Some(receiver),
             },
         }
@@ -98,6 +103,7 @@ where
 
     pub async fn handle_request<F, Fut, Res, Req, D>(
         &mut self,
+        addr: &Option<SocketAddr>,
         data: &mut Arc<Mutex<D>>,
         mut r: Request<RecvStream>,
         f: &mut F,
@@ -111,18 +117,21 @@ where
         Res: Serialize + Any,
     {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
-        let mut content_length = 0;
         if TypeId::of::<Req>() != TypeId::of::<RecvStream>() {
             let _ = r.body_mut().wait_all().await;
-            content_length = r.body().body_len();
+        }
+        if let Some(addr) = addr {
+            r.headers_mut().system_insert("$client_ip".to_string(), format!("{}", addr));
         }
         match f(r.into_type::<Req>(), data.clone()).await? {
-            Some(mut res) => {
-                if content_length != 0 && res.get_body_len() == 0 {
-                    res.headers_mut().insert(HeaderName::CONTENT_LENGTH, content_length);
+            Some(res) => {
+                let mut res = res.into_type::<RecvStream>();
+                if res.get_body_len() == 0 && res.body().is_end() {
+                    let len = res.body().body_len();
+                    res.headers_mut().insert(HeaderName::CONTENT_LENGTH, len);
                 }
                 self.send_response(
-                    res.into_type(),
+                    res,
                     stream_id.unwrap_or(StreamIdentifier::client_first()),
                 )
                 .await?;
@@ -132,14 +141,19 @@ where
         return Ok(None);
     }
 
-    pub async fn incoming<F, Fut, Res, Req, D>(&mut self, f: &mut F, data: &mut Arc<Mutex<D>>) -> ProtResult<Option<bool>>
+    pub async fn incoming<F, Fut, Res, Req, D>(
+        &mut self,
+        f: &mut F,
+        addr: &Option<SocketAddr>,
+        data: &mut Arc<Mutex<D>>,
+    ) -> ProtResult<Option<bool>>
     where
-    F: FnMut(Request<Req>, Arc<Mutex<D>>) -> Fut,
-    Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
-    Req: From<RecvStream>,
-    Req: Serialize + Any,
-    RecvStream: From<Res>,
-    Res: Serialize + Any,
+        F: FnMut(Request<Req>, Arc<Mutex<D>>) -> Fut,
+        Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
+        Req: From<RecvStream>,
+        Req: Serialize + Any,
+        RecvStream: From<Res>,
+        Res: Serialize + Any,
     {
         use futures_util::stream::StreamExt;
         let mut receiver = self.inner.receiver_push.take().unwrap();
@@ -158,7 +172,7 @@ where
                     None => return Ok(Some(true)),
                     Some(Err(e)) => return Err(e),
                     Some(Ok(r)) => {
-                        self.handle_request(data, r, f).await?;
+                        self.handle_request(addr, data, r, f).await?;
                     }
                 };
             }

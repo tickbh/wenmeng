@@ -11,9 +11,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let server = TcpListener::bind(&addr).await?;
     println!("Listening on: {}", addr);
     loop {
-        let (stream, _) = server.accept().await?;
+        let (stream, addr) = server.accept().await?;
         tokio::spawn(async move {
-            let mut server = Server::new(stream, ());
+            let mut server = Server::new(stream, Some(addr), ());
             async fn operate(req: Request<RecvStream>, _: Arc<Mutex<()>>) -> ProtResult<Option<Response<String>>> {
                 let response = Response::builder()
                     .version(req.version().clone())
