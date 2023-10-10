@@ -1,6 +1,6 @@
-# dianmeng
+# wenmeng
 
-一个包含http1.1及http2的服务器实现, 依赖tokio实现
+一个包含http1.1及http2的服务器及客户端的实现, 依赖tokio实现
 
 ## 使用方法
 
