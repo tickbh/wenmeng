@@ -5,4 +5,4 @@ publish = false
 edition = "2018"
 
 [dependencies]
-reqwest = { version = "0.1", features = ["full"] }
+async-compression = {version="0.4.3", features=["tokio", "brotli", "deflate", "gzip"]}

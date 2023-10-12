@@ -13,7 +13,7 @@
 
 #![warn(rust_2018_idioms)]
 
-use webparse::{Binary, BinaryMut, Request, Response};
+use webparse::{Binary, BinaryMut, Request, Response, HeaderName};
 #[macro_use]
 extern crate serde_derive;
 use std::{
@@ -23,10 +23,12 @@ use std::{
 };
 use tokio::{
     net::{TcpListener, TcpStream},
-    sync::{mpsc::channel, Mutex},
+    sync::{mpsc::channel, Mutex}, io::AsyncReadExt, fs::File,
 };
 
 use wenmeng::{self, ProtResult, RecvStream, SendControl, Server};
+
+// use async_compression::tokio::{bufread::ZstdDecoder, write::GzipEncoder};
 
 trait Xx {
     // async fn xx();
@@ -63,7 +65,7 @@ async fn operate(mut req: Request<RecvStream>, _data: Arc<Mutex<()>>) -> ProtRes
             let body = req.body_mut();
 
             let mut buf = [0u8; 10];
-            if let Ok(len) = body.read(&mut buf) {
+            if let Ok(len) = body.read(&mut buf).await {
                 println!("skip = {:?}", &buf[..len]);
             }
             let mut binary = BinaryMut::new();
@@ -84,61 +86,82 @@ async fn operate(mut req: Request<RecvStream>, _data: Arc<Mutex<()>>) -> ProtRes
             })
             .unwrap()
         }
+        "/file" => {
+            builder = builder.header("content-type", "application/json");
+            #[derive(Serialize)]
+            struct Message {
+                message: &'static str,
+            }
+            serde_json::to_string(&Message {
+                message: "Hello, World!",
+            })
+            .unwrap()
+        }
         _ => {
             builder = builder.status(404);
             String::new()
         }
     };
 
-    let (sender, receiver) = channel(10);
-    let recv = RecvStream::new(receiver, BinaryMut::from(body.into_bytes().to_vec()), false);
+    let file = File::open("README.md").await?;
+    let length = file.metadata().await?.len();
+    let recv = RecvStream::new_file(file, BinaryMut::from(body.into_bytes().to_vec()), false);
     let response = builder
+        // .header("Content-Length", length as usize)
+        .header(HeaderName::TRANSFER_ENCODING, "chunked")
         .body(recv)
         .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-
-    let control = req.extensions_mut().remove::<SendControl>();
-    if control.is_some() {
-        let (sender, receiver) = channel(10);
-        let recv = RecvStream::new(
-            receiver,
-            BinaryMut::from("push info".as_bytes().to_vec()),
-            false,
-        );
-
-        let res = Response::builder()
-            .version(req.version().clone())
-            .header(":path", "/aaa")
-            .header(":scheme", "http")
-            .header(":method", "GET")
-            .header(":authority", req.get_authority())
-            .body(recv)
-            .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-
-        let _send = control.unwrap().send_response(res).await?;
-        tokio::spawn(async move {
-            for i in 1..20 {
-                sender
-                    .send((false, Binary::from(format!("hello{} ", i).into_bytes())))
-                    .await;
-            }
-            println!("send!!!!! end!!!!!!");
-            sender
-                .send((true, Binary::from_static("world\r\n".as_bytes())))
-                .await;
-        });
-        // Ok(Some(response))
-    }
-    tokio::spawn(async move {
-        println!("send!!!!!");
-        for i in 1..2 {
-            sender
-                .send((false, Binary::from(format!("hello{} ", i).into_bytes())))
-                .await;
-        }
-        println!("send!!!!! end!!!!!!");
-        // sender.send((true, Binary::from_static("world\r\n".as_bytes()))).await;
-    });
     Ok(Some(response))
+
+    // let (sender, receiver) = channel(10);
+    // let recv = RecvStream::new(receiver, BinaryMut::from(body.into_bytes().to_vec()), false);
+    // let response = builder
+    //     .body(recv)
+    //     .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
+
+    // let control = req.extensions_mut().remove::<SendControl>();
+    // if control.is_some() {
+    //     let (sender, receiver) = channel(10);
+    //     let recv = RecvStream::new(
+    //         receiver,
+    //         BinaryMut::from("push info".as_bytes().to_vec()),
+    //         false,
+    //     );
+
+    //     let res = Response::builder()
+    //         .version(req.version().clone())
+    //         .header(":path", "/aaa")
+    //         .header(":scheme", "http")
+    //         .header(":method", "GET")
+    //         .header(":authority", req.get_authority())
+    //         .body(recv)
+    //         .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
+
+    //     let _send = control.unwrap().send_response(res).await?;
+    //     tokio::spawn(async move {
+    //         for i in 1..20 {
+    //             sender
+    //                 .send((false, Binary::from(format!("hello{} ", i).into_bytes())))
+    //                 .await;
+    //         }
+    //         println!("send!!!!! end!!!!!!");
+    //         sender
+    //             .send((true, Binary::from_static("world\r\n".as_bytes())))
+    //             .await;
+    //     });
+    //     // Ok(Some(response))
+    // }
+    // tokio::spawn(async move {
+    //     println!("send!!!!!");
+    //     for i in 1..2 {
+    //         sender
+    //             .send((false, Binary::from(format!("hello{} ", i).into_bytes())))
+    //             .await;
+    //     }
+    //     println!("send!!!!! end!!!!!!");
+    //     // sender.send((true, Binary::from_static("world\r\n".as_bytes()))).await;
+    // });
+    // Ok(Some(response))
 }
 
 // async fn operate1(mut req: Request<String>) -> ProtResult<Option<Response<String>>> {
