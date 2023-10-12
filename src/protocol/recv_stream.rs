@@ -331,25 +331,29 @@ impl RecvStream {
     ) -> webparse::WebResult<usize> {
         use std::io::{Read};
         if is_chunked {
-            // if data.len() == 0 {
-            //     self.compress.open_gz();
-            //     let mut gz = self.compress.gz.take().unwrap();
-            //     let value = gz.finish().unwrap();
-            //     if value.remaining() > 0 {
-            //         Helper::encode_chunk_data(buffer, &value);
-            //     }
-            //     Helper::encode_chunk_data(buffer, data)
-            // } else {
-            //     self.compress.open_gz();
-            //     let gz = self.compress.gz.as_mut().unwrap();
-            //     gz.write_all(data).unwrap();
-            //     let s = Helper::encode_chunk_data(buffer, &gz.get_mut().chunk());
-            //     gz.get_mut().clear();
-            //     s
-            //     // Ok(1)
-            //     // Ok(0)
-            // }
-            Helper::encode_chunk_data(buffer, data)
+            if data.len() == 0 {
+                self.compress.open_gz();
+                let mut gz = self.compress.gz.take().unwrap();
+                let value = gz.finish().unwrap();
+                if value.remaining() > 0 {
+                    Helper::encode_chunk_data(buffer, &value);
+                }
+                Helper::encode_chunk_data(buffer, data)
+            } else {
+                self.compress.open_gz();
+                let gz = self.compress.gz.as_mut().unwrap();
+                gz.write_all(data).unwrap();
+                if gz.get_mut().remaining() > 0 {
+                    let s = Helper::encode_chunk_data(buffer, &gz.get_mut().chunk());
+                    gz.get_mut().clear();
+                    s
+                } else {
+                    Ok(0)
+                }
+                // Ok(1)
+                // Ok(0)
+            }
+            // Helper::encode_chunk_data(buffer, data)
         } else {
             Ok(buffer.put_slice(data))
         }
