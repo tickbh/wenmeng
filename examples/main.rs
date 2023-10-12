@@ -13,6 +13,7 @@
 
 #![warn(rust_2018_idioms)]
 
+use flate2::GzBuilder;
 use webparse::{Binary, BinaryMut, Request, Response, HeaderName};
 #[macro_use]
 extern crate serde_derive;
@@ -28,7 +29,7 @@ use tokio::{
 
 use wenmeng::{self, ProtResult, RecvStream, SendControl, Server};
 
-// use async_compression::tokio::{bufread::ZstdDecoder, write::GzipEncoder};
+// use async_compression::tokio::{write::GzipEncoder};
 
 trait Xx {
     // async fn xx();
@@ -41,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap_or_else(|| "0.0.0.0:8080".to_string());
     let server = TcpListener::bind(&addr).await?;
     println!("Listening on: {}", addr);
-
+    let gz = GzBuilder::new();
     loop {
         let (stream, addr) = server.accept().await?;
         println!("recv = {:?}", stream);
@@ -108,6 +109,7 @@ async fn operate(mut req: Request<RecvStream>, _data: Arc<Mutex<()>>) -> ProtRes
     let recv = RecvStream::new_file(file, BinaryMut::from(body.into_bytes().to_vec()), false);
     let response = builder
         // .header("Content-Length", length as usize)
+        .header(HeaderName::CONTENT_ENCODING, "gzip")
         .header(HeaderName::TRANSFER_ENCODING, "chunked")
         .body(recv)
         .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;

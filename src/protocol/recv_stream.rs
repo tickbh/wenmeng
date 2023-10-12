@@ -1,15 +1,19 @@
 use std::{
     fmt::Display,
-    io::Read,
-    task::{Context, Poll, ready}, pin::Pin, future::poll_fn,
+    future::poll_fn,
+    io::{Read, Write},
+    pin::Pin,
+    task::{ready, Context, Poll},
 };
 
+use flate2::{Compression, GzBuilder, write::GzEncoder};
 use futures_core::Stream;
 use tokio::{
     fs::File,
-    sync::mpsc::{error::TryRecvError, Receiver}, io::{AsyncReadExt, ReadBuf, AsyncRead},
+    io::{AsyncRead, AsyncReadExt, ReadBuf},
+    sync::mpsc::{error::TryRecvError, Receiver},
 };
-use webparse::{Binary, BinaryMut, Buf, Helper, Serialize, BufMut};
+use webparse::{Binary, BinaryMut, Buf, BufMut, Helper, Serialize};
 
 use crate::ProtResult;
 
@@ -19,7 +23,6 @@ struct InnerReceiver {
     file: Option<File>,
     cache_buf: Vec<u8>,
 }
-
 impl InnerReceiver {
     pub fn new() -> Self {
         Self {
@@ -52,7 +55,7 @@ impl InnerReceiver {
     pub fn is_none(&self) -> bool {
         self.receiver.is_none() && self.file.is_none()
     }
-    
+
     // pub fn try_recv(&mut self) -> Option<(bool, Binary)> {
     //     if let Some(receiver) = &mut self.receiver {
     //         match receiver.try_recv() {
@@ -71,7 +74,7 @@ impl InnerReceiver {
     //             let mut buf = ReadBuf::new(&mut self.cache_buf);
     //             Pin::new(file).poll_read(cx, &mut buf)
     //         });
-            
+
     //         // file.
     //         match file.read(&mut self.cache_buf).await {
     //             Ok(n) => {
@@ -89,18 +92,18 @@ impl InnerReceiver {
 
     pub async fn recv(&mut self) -> Option<(bool, Binary)> {
         if let Some(receiver) = &mut self.receiver {
-            return receiver.recv().await
+            return receiver.recv().await;
         }
 
         if let Some(file) = &mut self.file {
             match file.read(&mut self.cache_buf).await {
                 Ok(n) => {
                     if n < self.cache_buf.len() {
-                        return Some((true, Binary::from(self.cache_buf[..n].to_vec())))
+                        return Some((true, Binary::from(self.cache_buf[..n].to_vec())));
                     } else {
-                        return Some((false, Binary::from(self.cache_buf[..n].to_vec())))
+                        return Some((false, Binary::from(self.cache_buf[..n].to_vec())));
                     }
-                },
+                }
                 Err(_) => return None,
             };
         }
@@ -109,7 +112,7 @@ impl InnerReceiver {
 
     fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<(bool, Binary)>> {
         if let Some(receiver) = &mut self.receiver {
-            return receiver.poll_recv(cx)
+            return receiver.poll_recv(cx);
         }
 
         if let Some(file) = &mut self.file {
@@ -121,10 +124,30 @@ impl InnerReceiver {
                 }
             };
             let is_end = size < self.cache_buf.len();
-            return Poll::Ready(Some((is_end, Binary::from(self.cache_buf[..size].to_vec()))));
+            return Poll::Ready(Some((
+                is_end,
+                Binary::from(self.cache_buf[..size].to_vec()),
+            )));
         }
-        
-        return Poll::Ready(None)
+
+        return Poll::Ready(None);
+    }
+}
+
+#[derive(Debug)]
+struct InnerCompress {
+    gz: Option<GzEncoder<BinaryMut>>,
+}
+
+impl InnerCompress {
+    pub fn new() -> Self {
+        Self { gz: None }
+    }
+
+    pub fn open_gz(&mut self) {
+        if self.gz.is_none() {
+            self.gz = Some(GzEncoder::new(BinaryMut::new(), Compression::default()));
+        }
     }
 }
 
@@ -133,48 +156,51 @@ pub struct RecvStream {
     receiver: InnerReceiver,
     binary: Option<Binary>,
     binary_mut: Option<BinaryMut>,
-    compress: u8,
+    compress_method: u8,
+    compress: InnerCompress,
     is_end: bool,
+}
+
+impl Default for RecvStream {
+    fn default() -> Self {
+        Self {
+            receiver: InnerReceiver::new(),
+            binary: Default::default(),
+            binary_mut: Default::default(),
+            compress_method: Default::default(),
+            compress: InnerCompress::new(),
+            is_end: true,
+        }
+    }
 }
 
 impl RecvStream {
     pub fn empty() -> RecvStream {
-        RecvStream {
-            receiver: InnerReceiver::new(),
-            binary: None,
-            binary_mut: None,
-            compress: 0,
-            is_end: true,
-        }
+        Default::default()
     }
 
     pub fn only(binary: Binary) -> RecvStream {
         RecvStream {
-            receiver: InnerReceiver::new(),
             binary: Some(binary),
-            binary_mut: None,
-            compress: 0,
-            is_end: true,
+            ..Default::default()
         }
     }
 
     pub fn new(receiver: Receiver<(bool, Binary)>, binary: BinaryMut, is_end: bool) -> RecvStream {
         RecvStream {
             receiver: InnerReceiver::new_receiver(receiver),
-            binary: None,
             binary_mut: Some(binary),
-            compress: 0,
             is_end,
+            ..Default::default()
         }
     }
-    
+
     pub fn new_file(file: File, binary: BinaryMut, is_end: bool) -> RecvStream {
         RecvStream {
             receiver: InnerReceiver::new_file(file),
-            binary: None,
             binary_mut: Some(binary),
-            compress: 0,
             is_end,
+            ..Default::default()
         }
     }
 
@@ -298,11 +324,31 @@ impl RecvStream {
     }
 
     fn encode_data<B: webparse::Buf + webparse::BufMut>(
+        &mut self,
         buffer: &mut B,
         data: &[u8],
         is_chunked: bool,
     ) -> webparse::WebResult<usize> {
+        use std::io::{Read};
         if is_chunked {
+            // if data.len() == 0 {
+            //     self.compress.open_gz();
+            //     let mut gz = self.compress.gz.take().unwrap();
+            //     let value = gz.finish().unwrap();
+            //     if value.remaining() > 0 {
+            //         Helper::encode_chunk_data(buffer, &value);
+            //     }
+            //     Helper::encode_chunk_data(buffer, data)
+            // } else {
+            //     self.compress.open_gz();
+            //     let gz = self.compress.gz.as_mut().unwrap();
+            //     gz.write_all(data).unwrap();
+            //     let s = Helper::encode_chunk_data(buffer, &gz.get_mut().chunk());
+            //     gz.get_mut().clear();
+            //     s
+            //     // Ok(1)
+            //     // Ok(0)
+            // }
             Helper::encode_chunk_data(buffer, data)
         } else {
             Ok(buffer.put_slice(data))
@@ -318,12 +364,12 @@ impl RecvStream {
         let mut size = 0;
         if let Some(bin) = self.binary.take() {
             if bin.chunk().len() > 0 {
-                size += Self::encode_data(buffer, bin.chunk(), is_chunked)?;
+                size += self.encode_data(buffer, bin.chunk(), is_chunked)?;
             }
         }
         if let Some(bin) = self.binary_mut.take() {
             if bin.chunk().len() > 0 {
-                size += Self::encode_data(buffer, bin.chunk(), is_chunked)?;
+                size += self.encode_data(buffer, bin.chunk(), is_chunked)?;
             }
         }
         let mut has_encode_end = false;
@@ -334,7 +380,7 @@ impl RecvStream {
                         break;
                     }
                     Poll::Ready(Some((is_end, bin))) => {
-                        size += Self::encode_data(buffer, bin.chunk(), is_chunked)?;
+                        size += self.encode_data(buffer, bin.chunk(), is_chunked)?;
                         self.is_end = is_end;
                         if bin.remaining() == 0 {
                             has_encode_end = is_end;
@@ -348,7 +394,7 @@ impl RecvStream {
             }
         }
         if !has_encode_end && is_chunked && self.is_end {
-            Self::encode_data(buffer, &[], is_chunked)?;
+            self.encode_data(buffer, &[], is_chunked)?;
         }
         Poll::Ready(Ok(size))
     }
@@ -387,7 +433,7 @@ impl AsyncRead for RecvStream {
             }
         }
         if read_size > 0 || self.is_end {
-            return Poll::Ready(Ok(()))
+            return Poll::Ready(Ok(()));
         }
         if let Some((is_end, bin)) = ready!(self.receiver.poll_recv(cx)) {
             let len = std::cmp::min(buf.remaining(), bin.remaining());
@@ -397,7 +443,7 @@ impl AsyncRead for RecvStream {
                 self.cache_buffer(&bin.chunk()[len..])
             }
         }
-        return Poll::Ready(Ok(()))
+        return Poll::Ready(Ok(()));
     }
 }
 
