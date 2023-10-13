@@ -1,3 +1,10 @@
+use brotli::{BrotliCompress, CompressorWriter};
+use flate2::{
+    write::{DeflateEncoder, GzEncoder},
+    Compression, GzBuilder,
+};
+use futures_core::Stream;
+use std::fmt::Debug;
 use std::{
     fmt::Display,
     future::poll_fn,
@@ -5,9 +12,6 @@ use std::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
-
-use flate2::{write::GzEncoder, Compression, GzBuilder};
-use futures_core::Stream;
 use tokio::{
     fs::File,
     io::{AsyncRead, AsyncReadExt, ReadBuf},
@@ -134,19 +138,48 @@ impl InnerReceiver {
     }
 }
 
-#[derive(Debug)]
 struct InnerCompress {
-    gz: Option<GzEncoder<BinaryMut>>,
+    write_gz: Option<GzEncoder<BinaryMut>>,
+    write_br: Option<CompressorWriter<BinaryMut>>,
+    write_de: Option<DeflateEncoder<BinaryMut>>,
+}
+
+impl Debug for InnerCompress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InnerCompress")
+            .field("write_gz", &self.write_gz)
+            .field("write_de", &self.write_de)
+            .finish()
+    }
 }
 
 impl InnerCompress {
     pub fn new() -> Self {
-        Self { gz: None }
+        Self {
+            write_gz: None,
+            write_br: None,
+            write_de: None,
+        }
     }
 
-    pub fn open_gz(&mut self) {
-        if self.gz.is_none() {
-            self.gz = Some(GzEncoder::new(BinaryMut::new(), Compression::default()));
+    pub fn open_write_gz(&mut self) {
+        if self.write_gz.is_none() {
+            self.write_gz = Some(GzEncoder::new(BinaryMut::new(), Compression::default()));
+        }
+    }
+
+    pub fn open_write_de(&mut self) {
+        if self.write_de.is_none() {
+            self.write_de = Some(DeflateEncoder::new(
+                BinaryMut::new(),
+                Compression::default(),
+            ));
+        }
+    }
+
+    pub fn open_write_br(&mut self) {
+        if self.write_br.is_none() {
+            self.write_br = Some(CompressorWriter::new(BinaryMut::new(), 4096, 11, 22));
         }
     }
 }
@@ -376,20 +409,65 @@ impl RecvStream {
         match self.compress_method {
             Consts::COMPRESS_METHOD_GZIP => {
                 if data.len() == 0 {
-                    self.compress.open_gz();
-                    let gz = self.compress.gz.take().unwrap();
+                    self.compress.open_write_gz();
+                    let gz = self.compress.write_gz.take().unwrap();
                     let value = gz.finish().unwrap();
                     if value.remaining() > 0 {
                         Self::inner_encode_data(buffer, &value, is_chunked)?;
                     }
                     Helper::encode_chunk_data(buffer, data)
                 } else {
-                    self.compress.open_gz();
-                    let gz = self.compress.gz.as_mut().unwrap();
+                    self.compress.open_write_gz();
+                    let gz = self.compress.write_gz.as_mut().unwrap();
                     gz.write_all(data).unwrap();
                     if gz.get_mut().remaining() > 0 {
-                        let s = Helper::encode_chunk_data(buffer, &gz.get_mut().chunk());
+                        let s = Self::inner_encode_data(buffer, &gz.get_mut().chunk(), is_chunked);
                         gz.get_mut().clear();
+                        s
+                    } else {
+                        Ok(0)
+                    }
+                }
+            }
+            Consts::COMPRESS_METHOD_DEFLATE => {
+                if data.len() == 0 {
+                    self.compress.open_write_de();
+                    let de = self.compress.write_de.take().unwrap();
+                    let value = de.finish().unwrap();
+                    if value.remaining() > 0 {
+                        Self::inner_encode_data(buffer, &value, is_chunked)?;
+                    }
+                    Helper::encode_chunk_data(buffer, data)
+                } else {
+                    self.compress.open_write_de();
+                    let de = self.compress.write_de.as_mut().unwrap();
+                    de.write_all(data).unwrap();
+                    if de.get_mut().remaining() > 0 {
+                        let s = Self::inner_encode_data(buffer, &de.get_mut().chunk(), is_chunked);
+                        de.get_mut().clear();
+                        s
+                    } else {
+                        Ok(0)
+                    }
+                }
+            }
+            Consts::COMPRESS_METHOD_BROTLI => {
+                if data.len() == 0 {
+                    self.compress.open_write_br();
+                    let mut de = self.compress.write_br.take().unwrap();
+                    de.flush()?;
+                    let value = de.into_inner();
+                    if value.remaining() > 0 {
+                        Self::inner_encode_data(buffer, &value, is_chunked)?;
+                    }
+                    Helper::encode_chunk_data(buffer, data)
+                } else {
+                    self.compress.open_write_br();
+                    let de = self.compress.write_br.as_mut().unwrap();
+                    de.write_all(data).unwrap();
+                    if de.get_mut().remaining() > 0 {
+                        let s = Self::inner_encode_data(buffer, &de.get_mut().chunk(), is_chunked);
+                        de.get_mut().clear();
                         s
                     } else {
                         Ok(0)
@@ -398,7 +476,6 @@ impl RecvStream {
             }
             _ => Self::inner_encode_data(buffer, data, is_chunked),
         }
-
 
         // use std::io::Read;
         // if is_chunked {

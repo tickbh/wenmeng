@@ -59,12 +59,11 @@ async fn operate(mut req: Request<RecvStream>, _data: Arc<Mutex<()>>) -> ProtRes
     let mut builder = Response::builder().version(req.version().clone());
     let body = match &*req.url().path {
         "/plaintext" | "/" => {
-            builder = builder.header("content-type", "text/plain");
+            builder = builder.header("content-type", "text/plain; charset=utf-8");
             "Hello, World!".to_string()
         }
         "/post" => {
             let body = req.body_mut();
-
             let mut buf = [0u8; 10];
             if let Ok(len) = body.read(&mut buf).await {
                 println!("skip = {:?}", &buf[..len]);
@@ -106,11 +105,12 @@ async fn operate(mut req: Request<RecvStream>, _data: Arc<Mutex<()>>) -> ProtRes
 
     let file = File::open("README.md").await?;
     let length = file.metadata().await?.len();
-    let recv = RecvStream::new_file(file, BinaryMut::from(body.into_bytes().to_vec()), false);
-    
+    // let recv = RecvStream::new_file(file, BinaryMut::from(body.into_bytes().to_vec()), false);
+    let mut recv = RecvStream::new_file(file, BinaryMut::new(), false);
+    // recv.set_compress_origin_gzip();
     let response = builder
         // .header("Content-Length", length as usize)
-        .header(HeaderName::CONTENT_ENCODING, "gzip")
+        .header(HeaderName::CONTENT_ENCODING, "br")
         .header(HeaderName::TRANSFER_ENCODING, "chunked")
         .body(recv)
         .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;

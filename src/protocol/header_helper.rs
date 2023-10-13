@@ -147,7 +147,7 @@ impl HeaderHelper {
                 req.body_mut().add_compress_method(Consts::COMPRESS_METHOD_GZIP);
             } else if value.contains(b"deflate") {
                 req.body_mut().add_compress_method(Consts::COMPRESS_METHOD_DEFLATE);
-            } else if value.contains(b"brotli") {
+            } else if value.contains(b"br") {
                 req.body_mut().add_compress_method(Consts::COMPRESS_METHOD_BROTLI);
             }
         };
@@ -160,7 +160,7 @@ impl HeaderHelper {
                 res.body_mut().add_compress_method(Consts::COMPRESS_METHOD_GZIP);
             } else if value.contains(b"deflate") {
                 res.body_mut().add_compress_method(Consts::COMPRESS_METHOD_DEFLATE);
-            } else if value.contains(b"brotli") {
+            } else if value.contains(b"br") {
                 res.body_mut().add_compress_method(Consts::COMPRESS_METHOD_BROTLI);
             }
         };
