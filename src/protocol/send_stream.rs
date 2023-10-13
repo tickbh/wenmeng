@@ -184,13 +184,10 @@ impl SendStream {
                 } else {
                     self.compress.open_reader_gz();
                     let gz = self.compress.reader_gz.as_mut().unwrap();
-                    gz.write_all(data).unwrap();
-                    if gz.get_mut().remaining() > 0 {
+                    gz.get_mut().write_all(data)?;
+                    // gz.write_all(data).unwrap();
                         Self::read_all_data(&mut self.cache_buf, &mut self.real_read_buf, gz)
-                        // Ok(0)
-                    } else {
-                        Ok(0)
-                    }
+                        
                 }
             }
             Consts::COMPRESS_METHOD_DEFLATE => {
