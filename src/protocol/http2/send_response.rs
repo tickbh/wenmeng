@@ -82,7 +82,7 @@ impl SendResponse {
         if !self.response.body().is_end() || !self.encode_body {
             self.encode_body = true;
             let mut binary = BinaryMut::new();
-            let _ = self.response.body_mut().poll_encode(cx, &mut binary, false);
+            let _ = self.response.body_mut().poll_encode(cx, &mut binary);
             if binary.remaining() > 0 {
                 self.is_end_stream = self.response.body().is_end();
                 let flag = if self.is_end_stream {

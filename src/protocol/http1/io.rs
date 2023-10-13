@@ -119,7 +119,7 @@ where
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
         if let Some(res) = self.inner.res.front_mut() {
             if !self.inner.res_status.is_send_header {
-                self.inner.res_status.is_chunked = res.headers().is_chunk();
+                self.inner.res_status.is_chunked = res.headers().is_chunked();
                 HeaderHelper::process_response_header(res)?;
                 res.encode_header(&mut self.write_buf)?;
                 self.inner.res_status.is_send_header = true;
@@ -130,7 +130,6 @@ where
                 let _ = res.body_mut().poll_encode(
                     cx,
                     &mut self.write_buf,
-                    self.inner.res_status.is_chunked,
                 );
             }
 
@@ -156,7 +155,6 @@ where
                 let _ = req.body_mut().poll_encode(
                     cx,
                     &mut self.write_buf,
-                    self.inner.req_status.is_chunked,
                 );
             }
             if req.body().is_end() {
@@ -302,7 +300,7 @@ where
                 };
                 if !request.method().is_nobody() && body_len == 0 {
                     self.inner.req_status.left_read_body_len = usize::MAX;
-                    if request.headers().is_chunk() {
+                    if request.headers().is_chunked() {
                         self.inner.req_status.is_chunked = true;
                     }
                 }
@@ -440,7 +438,7 @@ where
                 };
                 if response.status().is_success() && body_len == 0 {
                     self.inner.res_status.left_read_body_len = usize::MAX;
-                    if response.headers().is_chunk() {
+                    if response.headers().is_chunked() {
                         self.inner.res_status.is_chunked = true;
                     }
                 }

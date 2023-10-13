@@ -105,8 +105,8 @@ async fn operate(mut req: Request<RecvStream>, _data: Arc<Mutex<()>>) -> ProtRes
 
     let file = File::open("README.md").await?;
     let length = file.metadata().await?.len();
-    // let recv = RecvStream::new_file(file, BinaryMut::from(body.into_bytes().to_vec()), false);
-    let mut recv = RecvStream::new_file(file, BinaryMut::new(), false);
+    let recv = RecvStream::new_file(file, BinaryMut::from(body.into_bytes().to_vec()), false);
+    // let mut recv = RecvStream::new_file(file, BinaryMut::new(), false);
     // recv.set_compress_origin_gzip();
     let response = builder
         // .header("Content-Length", length as usize)

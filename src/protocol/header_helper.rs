@@ -151,6 +151,8 @@ impl HeaderHelper {
                 req.body_mut().add_compress_method(Consts::COMPRESS_METHOD_BROTLI);
             }
         };
+        let is_chunked = req.headers().is_chunked();
+        req.body_mut().set_chunked(is_chunked);
         Ok(())
     }
 
@@ -164,6 +166,8 @@ impl HeaderHelper {
                 res.body_mut().add_compress_method(Consts::COMPRESS_METHOD_BROTLI);
             }
         };
+        let is_chunked = res.headers().is_chunked();
+        res.body_mut().set_chunked(is_chunked);
         Ok(())
     }
 
