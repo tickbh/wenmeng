@@ -281,11 +281,11 @@ impl RecvStream {
     pub fn add_compress_method(&mut self, method: i8) {
         self.compress_method += method;
     }
-    
+
     pub fn is_chunked(&mut self) -> bool {
         self.is_chunked
     }
-    
+
     pub fn set_chunked(&mut self, chunked: bool) {
         self.is_chunked = chunked;
     }
@@ -430,7 +430,8 @@ impl RecvStream {
                     let gz = self.compress.write_gz.as_mut().unwrap();
                     gz.write_all(data).unwrap();
                     if gz.get_mut().remaining() > 0 {
-                        let s = Self::inner_encode_data(buffer, &gz.get_mut().chunk(), self.is_chunked);
+                        let s =
+                            Self::inner_encode_data(buffer, &gz.get_mut().chunk(), self.is_chunked);
                         gz.get_mut().clear();
                         s
                     } else {
@@ -452,7 +453,8 @@ impl RecvStream {
                     let de = self.compress.write_de.as_mut().unwrap();
                     de.write_all(data).unwrap();
                     if de.get_mut().remaining() > 0 {
-                        let s = Self::inner_encode_data(buffer, &de.get_mut().chunk(), self.is_chunked);
+                        let s =
+                            Self::inner_encode_data(buffer, &de.get_mut().chunk(), self.is_chunked);
                         de.get_mut().clear();
                         s
                     } else {
@@ -475,7 +477,8 @@ impl RecvStream {
                     let de = self.compress.write_br.as_mut().unwrap();
                     de.write_all(data).unwrap();
                     if de.get_mut().remaining() > 0 {
-                        let s = Self::inner_encode_data(buffer, &de.get_mut().chunk(), self.is_chunked);
+                        let s =
+                            Self::inner_encode_data(buffer, &de.get_mut().chunk(), self.is_chunked);
                         de.get_mut().clear();
                         s
                     } else {
@@ -530,10 +533,7 @@ impl RecvStream {
         Poll::Ready(Ok(size))
     }
 
-    fn inner_poll_read(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<bool>> {
+    fn inner_poll_read(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<bool>> {
         if self.is_end {
             return Poll::Ready(Ok(false));
         }
@@ -547,18 +547,17 @@ impl RecvStream {
                     if self.is_end {
                         break;
                     }
-                },
+                }
                 Poll::Ready(None) => {
                     self.is_end = true;
                     has_change = true;
                     break;
-                },
+                }
                 Poll::Pending => break,
             }
         }
         return Poll::Ready(Ok(has_change));
     }
-
 }
 
 impl AsyncRead for RecvStream {
@@ -568,7 +567,7 @@ impl AsyncRead for RecvStream {
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
         match ready!(self.inner_poll_read(cx)?) {
-            true => {},
+            true => {}
             false => return Poll::Pending,
         };
 

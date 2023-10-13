@@ -1,4 +1,4 @@
-use webparse::{Serialize, Request, Response, HeaderName};
+use webparse::{Serialize, Request, Response, HeaderName, HeaderMap};
 
 use crate::{RecvStream, ProtResult, Consts};
 
@@ -140,33 +140,31 @@ impl HeaderHelper {
         return value;
     }
 
-
-    pub fn process_request_header(req: &mut Request<RecvStream>) -> ProtResult<()> {
-        if let Some(value) = req.headers().get_option_value(&HeaderName::CONTENT_ENCODING) {
+    pub fn get_compress_method(header: &HeaderMap) -> i8 {
+        if let Some(value) = header.get_option_value(&HeaderName::CONTENT_ENCODING) {
             if value.contains(b"gzip") {
-                req.body_mut().add_compress_method(Consts::COMPRESS_METHOD_GZIP);
+                return Consts::COMPRESS_METHOD_GZIP;
             } else if value.contains(b"deflate") {
-                req.body_mut().add_compress_method(Consts::COMPRESS_METHOD_DEFLATE);
+                return Consts::COMPRESS_METHOD_DEFLATE;
             } else if value.contains(b"br") {
-                req.body_mut().add_compress_method(Consts::COMPRESS_METHOD_BROTLI);
+                return Consts::COMPRESS_METHOD_BROTLI;
             }
         };
+        return Consts::COMPRESS_METHOD_NONE;
+    }
+
+    pub fn process_request_header(req: &mut Request<RecvStream>) -> ProtResult<()> {
+        let compress = Self::get_compress_method(req.headers());
         let is_chunked = req.headers().is_chunked();
+        req.body_mut().add_compress_method(compress);
         req.body_mut().set_chunked(is_chunked);
         Ok(())
     }
 
     pub fn process_response_header(res: &mut Response<RecvStream>) -> ProtResult<()> {
-        if let Some(value) = res.headers().get_option_value(&HeaderName::CONTENT_ENCODING) {
-            if value.contains(b"gzip") {
-                res.body_mut().add_compress_method(Consts::COMPRESS_METHOD_GZIP);
-            } else if value.contains(b"deflate") {
-                res.body_mut().add_compress_method(Consts::COMPRESS_METHOD_DEFLATE);
-            } else if value.contains(b"br") {
-                res.body_mut().add_compress_method(Consts::COMPRESS_METHOD_BROTLI);
-            }
-        };
+        let compress = Self::get_compress_method(res.headers());
         let is_chunked = res.headers().is_chunked();
+        res.body_mut().add_compress_method(compress);
         res.body_mut().set_chunked(is_chunked);
         Ok(())
     }
