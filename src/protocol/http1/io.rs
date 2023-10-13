@@ -8,7 +8,7 @@ use tokio::{
     sync::mpsc::Sender,
 };
 
-use crate::{ProtError, ProtResult, RecvStream};
+use crate::{ProtError, ProtResult, RecvStream, HeaderHelper};
 use webparse::{
     http::http2, Binary, BinaryMut, Buf, BufMut, Helper, HttpError, Request, Response, WebError,
 };
@@ -117,9 +117,10 @@ where
     }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
-        if let Some(res) = &mut self.inner.res.front_mut() {
+        if let Some(res) = self.inner.res.front_mut() {
             if !self.inner.res_status.is_send_header {
                 self.inner.res_status.is_chunked = res.headers().is_chunk();
+                HeaderHelper::process_response_header(res)?;
                 res.encode_header(&mut self.write_buf)?;
                 self.inner.res_status.is_send_header = true;
             }
@@ -143,8 +144,9 @@ where
             self.inner.res_status.clear_write();
         }
 
-        if let Some(req) = &mut self.inner.req.front_mut() {
+        if let Some(req) = self.inner.req.front_mut() {
             if !self.inner.req_status.is_send_header {
+                HeaderHelper::process_request_header(req)?;
                 req.encode_header(&mut self.write_buf)?;
                 self.inner.req_status.is_send_header = true;
             }

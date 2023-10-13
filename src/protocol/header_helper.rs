@@ -1,4 +1,6 @@
-use webparse::{Serialize, Request, Response};
+use webparse::{Serialize, Request, Response, HeaderName};
+
+use crate::{RecvStream, ProtResult, Consts};
 
 pub struct HeaderHelper;
 
@@ -136,6 +138,33 @@ impl HeaderHelper {
             }
         }
         return value;
+    }
+
+
+    pub fn process_request_header(req: &mut Request<RecvStream>) -> ProtResult<()> {
+        if let Some(value) = req.headers().get_option_value(&HeaderName::CONTENT_ENCODING) {
+            if value.contains(b"gzip") {
+                req.body_mut().add_compress_method(Consts::COMPRESS_METHOD_GZIP);
+            } else if value.contains(b"deflate") {
+                req.body_mut().add_compress_method(Consts::COMPRESS_METHOD_DEFLATE);
+            } else if value.contains(b"brotli") {
+                req.body_mut().add_compress_method(Consts::COMPRESS_METHOD_BROTLI);
+            }
+        };
+        Ok(())
+    }
+
+    pub fn process_response_header(res: &mut Response<RecvStream>) -> ProtResult<()> {
+        if let Some(value) = res.headers().get_option_value(&HeaderName::CONTENT_ENCODING) {
+            if value.contains(b"gzip") {
+                res.body_mut().add_compress_method(Consts::COMPRESS_METHOD_GZIP);
+            } else if value.contains(b"deflate") {
+                res.body_mut().add_compress_method(Consts::COMPRESS_METHOD_DEFLATE);
+            } else if value.contains(b"brotli") {
+                res.body_mut().add_compress_method(Consts::COMPRESS_METHOD_BROTLI);
+            }
+        };
+        Ok(())
     }
 
 }

@@ -6,7 +6,7 @@ use std::{
     task::{ready, Context, Poll},
 };
 
-use flate2::{Compression, GzBuilder, write::GzEncoder};
+use flate2::{write::GzEncoder, Compression, GzBuilder};
 use futures_core::Stream;
 use tokio::{
     fs::File,
@@ -15,7 +15,7 @@ use tokio::{
 };
 use webparse::{Binary, BinaryMut, Buf, BufMut, Helper, Serialize};
 
-use crate::ProtResult;
+use crate::{Consts, ProtResult};
 
 #[derive(Debug)]
 struct InnerReceiver {
@@ -156,7 +156,7 @@ pub struct RecvStream {
     receiver: InnerReceiver,
     binary: Option<Binary>,
     binary_mut: Option<BinaryMut>,
-    compress_method: u8,
+    compress_method: i8,
     compress: InnerCompress,
     is_end: bool,
 }
@@ -167,7 +167,7 @@ impl Default for RecvStream {
             receiver: InnerReceiver::new(),
             binary: Default::default(),
             binary_mut: Default::default(),
-            compress_method: Default::default(),
+            compress_method: Consts::COMPRESS_METHOD_NONE,
             compress: InnerCompress::new(),
             is_end: true,
         }
@@ -213,6 +213,38 @@ impl RecvStream {
             buffer.put_slice(bin.chunk());
         }
         buffer.freeze()
+    }
+
+    pub fn set_compress_gzip(&mut self) {
+        self.compress_method = Consts::COMPRESS_METHOD_GZIP;
+    }
+
+    pub fn set_compress_deflate(&mut self) {
+        self.compress_method = Consts::COMPRESS_METHOD_DEFLATE;
+    }
+
+    pub fn set_compress_brotli(&mut self) {
+        self.compress_method = Consts::COMPRESS_METHOD_BROTLI;
+    }
+
+    pub fn set_compress_origin_gzip(&mut self) {
+        self.compress_method = Consts::COMPRESS_METHOD_ORIGIN_GZIP;
+    }
+
+    pub fn set_compress_origin_deflate(&mut self) {
+        self.compress_method = Consts::COMPRESS_METHOD_ORIGIN_DEFLATE;
+    }
+
+    pub fn set_compress_origin_brotli(&mut self) {
+        self.compress_method = Consts::COMPRESS_METHOD_ORIGIN_BROTLI;
+    }
+
+    pub fn set_compress_method(&mut self, method: i8) {
+        self.compress_method = method;
+    }
+
+    pub fn add_compress_method(&mut self, method: i8) {
+        self.compress_method += method;
     }
 
     pub fn cache_buffer(&mut self, buf: &[u8]) {
@@ -323,40 +355,87 @@ impl RecvStream {
         Some(size)
     }
 
+    fn inner_encode_data<B: webparse::Buf + webparse::BufMut>(
+        buffer: &mut B,
+        data: &[u8],
+        is_chunked: bool,
+    ) -> webparse::WebResult<usize> {
+        if is_chunked {
+            Helper::encode_chunk_data(buffer, data)
+        } else {
+            Ok(buffer.put_slice(data))
+        }
+    }
+
     fn encode_data<B: webparse::Buf + webparse::BufMut>(
         &mut self,
         buffer: &mut B,
         data: &[u8],
         is_chunked: bool,
     ) -> webparse::WebResult<usize> {
-        use std::io::{Read};
-        if is_chunked {
-            if data.len() == 0 {
-                self.compress.open_gz();
-                let mut gz = self.compress.gz.take().unwrap();
-                let value = gz.finish().unwrap();
-                if value.remaining() > 0 {
-                    Helper::encode_chunk_data(buffer, &value);
-                }
-                Helper::encode_chunk_data(buffer, data)
-            } else {
-                self.compress.open_gz();
-                let gz = self.compress.gz.as_mut().unwrap();
-                gz.write_all(data).unwrap();
-                if gz.get_mut().remaining() > 0 {
-                    let s = Helper::encode_chunk_data(buffer, &gz.get_mut().chunk());
-                    gz.get_mut().clear();
-                    s
+        match self.compress_method {
+            Consts::COMPRESS_METHOD_GZIP => {
+                if data.len() == 0 {
+                    self.compress.open_gz();
+                    let gz = self.compress.gz.take().unwrap();
+                    let value = gz.finish().unwrap();
+                    if value.remaining() > 0 {
+                        Self::inner_encode_data(buffer, &value, is_chunked)?;
+                    }
+                    Helper::encode_chunk_data(buffer, data)
                 } else {
-                    Ok(0)
+                    self.compress.open_gz();
+                    let gz = self.compress.gz.as_mut().unwrap();
+                    gz.write_all(data).unwrap();
+                    if gz.get_mut().remaining() > 0 {
+                        let s = Helper::encode_chunk_data(buffer, &gz.get_mut().chunk());
+                        gz.get_mut().clear();
+                        s
+                    } else {
+                        Ok(0)
+                    }
                 }
-                // Ok(1)
-                // Ok(0)
             }
-            // Helper::encode_chunk_data(buffer, data)
-        } else {
-            Ok(buffer.put_slice(data))
+            _ => Self::inner_encode_data(buffer, data, is_chunked),
         }
+
+
+        // use std::io::Read;
+        // if is_chunked {
+        //     match self.compress_method {
+        //         Consts::COMPRESS_METHOD_GZIP => {
+
+        //         }
+        //         _ => {
+
+        //         }
+        //     }
+        //     if data.len() == 0 {
+        //         self.compress.open_gz();
+        //         let mut gz = self.compress.gz.take().unwrap();
+        //         let value = gz.finish().unwrap();
+        //         if value.remaining() > 0 {
+        //             Helper::encode_chunk_data(buffer, &value);
+        //         }
+        //         Helper::encode_chunk_data(buffer, data)
+        //     } else {
+        //         self.compress.open_gz();
+        //         let gz = self.compress.gz.as_mut().unwrap();
+        //         gz.write_all(data).unwrap();
+        //         if gz.get_mut().remaining() > 0 {
+        //             let s = Helper::encode_chunk_data(buffer, &gz.get_mut().chunk());
+        //             gz.get_mut().clear();
+        //             s
+        //         } else {
+        //             Ok(0)
+        //         }
+        //         // Ok(1)
+        //         // Ok(0)
+        //     }
+        //     // Helper::encode_chunk_data(buffer, data)
+        // } else {
+        //     Ok(buffer.put_slice(data))
+        // }
     }
 
     pub fn poll_encode<B: webparse::Buf + webparse::BufMut>(
