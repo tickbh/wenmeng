@@ -27,7 +27,7 @@ use tokio::{
     sync::{mpsc::channel, Mutex}, io::AsyncReadExt, fs::File,
 };
 
-use wenmeng::{self, ProtResult, RecvStream, SendControl, Server};
+use wenmeng::{self, ProtResult, RecvStream, SendControl, Server, FileServer};
 
 // use async_compression::tokio::{write::GzipEncoder};
 
@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-async fn operate(mut req: Request<RecvStream>, _data: Arc<Mutex<()>>) -> ProtResult<Option<Response<RecvStream>>> {
+async fn operate(mut req: Request<RecvStream>) -> ProtResult<Option<Response<RecvStream>>> {
     let mut builder = Response::builder().version(req.version().clone());
     let body = match &*req.url().path {
         "/plaintext" | "/" => {
@@ -103,18 +103,21 @@ async fn operate(mut req: Request<RecvStream>, _data: Arc<Mutex<()>>) -> ProtRes
         }
     };
 
-    let file = File::open("README.md").await?;
-    let length = file.metadata().await?.len();
-    // let recv = RecvStream::new_file(file, BinaryMut::from(body.into_bytes().to_vec()), false);
-    let mut recv = RecvStream::new_file(file, BinaryMut::new(), false);
-    // recv.set_compress_origin_gzip();
-    let response = builder
-        // .header("Content-Length", length as usize)
-        .header(HeaderName::CONTENT_ENCODING, "gzip")
-        .header(HeaderName::TRANSFER_ENCODING, "chunked")
-        .body(recv)
-        .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-    Ok(Some(response))
+    // let file_server = FileServer;
+    FileServer::deal_request(req, "".to_string(), "/root/".to_string()).await
+
+    // let file = File::open("README.md").await?;
+    // let length = file.metadata().await?.len();
+    // // let recv = RecvStream::new_file(file, BinaryMut::from(body.into_bytes().to_vec()), false);
+    // let mut recv = RecvStream::new_file(file, BinaryMut::new(), false);
+    // // recv.set_compress_origin_gzip();
+    // let response = builder
+    //     // .header("Content-Length", length as usize)
+    //     .header(HeaderName::CONTENT_ENCODING, "gzip")
+    //     .header(HeaderName::TRANSFER_ENCODING, "chunked")
+    //     .body(recv)
+    //     .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
+    // Ok(Some(response))
 
     // let (sender, receiver) = channel(10);
     // let recv = RecvStream::new(receiver, BinaryMut::from(body.into_bytes().to_vec()), false);

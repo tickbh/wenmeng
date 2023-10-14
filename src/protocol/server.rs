@@ -8,9 +8,10 @@ use crate::{ServerH2Connection, ProtError, ProtResult, RecvStream};
 
 use super::http1::ServerH1Connection;
 
-pub struct Server<T, D>
+pub struct Server<T, D=()>
 where
     T: AsyncRead + AsyncWrite + Unpin,
+    D: std::marker::Send + 'static
 {
     http1: Option<ServerH1Connection<T>>,
     http2: Option<ServerH2Connection<T>>,
@@ -21,6 +22,7 @@ where
 impl<T, D> Server<T, D>
 where
     T: AsyncRead + AsyncWrite + Unpin,
+    D: std::marker::Send + 'static
 {
     pub fn new(io: T, addr: Option<SocketAddr>, data: D) -> Self {
         Self {
@@ -82,7 +84,7 @@ where
 
     pub async fn incoming<F, Fut, Res, Req>(&mut self, mut f: F) -> ProtResult<Option<bool>>
     where
-    F: FnMut(Request<Req>, Arc<Mutex<D>>) -> Fut,
+    F: FnMut(Request<Req>) -> Fut,
     Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
     Req: From<RecvStream>,
     Req: Serialize + Any,
@@ -102,11 +104,12 @@ where
                 Err(ProtError::ServerUpgradeHttp2(b, r)) => {
                     if self.http1.is_some() {
                         self.http2 = Some(self.http1.take().unwrap().into_h2(b));
-                        if let Some(r) = r {
+                        if let Some(mut r) = r {
+                            r.extensions_mut().insert(self.data.clone());
                             self.http2
                                 .as_mut()
                                 .unwrap()
-                                .handle_request(&self.addr, &mut self.data, r, &mut f)
+                                .handle_request(&self.addr, r, &mut f)
                                 .await?;
                         }
                         continue;

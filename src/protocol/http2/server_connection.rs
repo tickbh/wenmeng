@@ -101,15 +101,14 @@ where
         self.inner.control.poll_write(cx, &mut self.codec, false)
     }
 
-    pub async fn handle_request<F, Fut, Res, Req, D>(
+    pub async fn handle_request<F, Fut, Res, Req>(
         &mut self,
         addr: &Option<SocketAddr>,
-        data: &mut Arc<Mutex<D>>,
         mut r: Request<RecvStream>,
         f: &mut F,
     ) -> ProtResult<Option<bool>>
     where
-        F: FnMut(Request<Req>, Arc<Mutex<D>>) -> Fut,
+        F: FnMut(Request<Req>) -> Fut,
         Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
         Req: From<RecvStream>,
         Req: Serialize + Any,
@@ -123,7 +122,7 @@ where
         if let Some(addr) = addr {
             r.headers_mut().system_insert("$client_ip".to_string(), format!("{}", addr));
         }
-        match f(r.into_type::<Req>(), data.clone()).await? {
+        match f(r.into_type::<Req>()).await? {
             Some(res) => {
                 let mut res = res.into_type::<RecvStream>();
                 if res.get_body_len() == 0 && res.body().is_end() {
@@ -148,12 +147,13 @@ where
         data: &mut Arc<Mutex<D>>,
     ) -> ProtResult<Option<bool>>
     where
-        F: FnMut(Request<Req>, Arc<Mutex<D>>) -> Fut,
+        F: FnMut(Request<Req>) -> Fut,
         Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
         Req: From<RecvStream>,
         Req: Serialize + Any,
         RecvStream: From<Res>,
         Res: Serialize + Any,
+        D: std::marker::Send + 'static
     {
         use futures_util::stream::StreamExt;
         let mut receiver = self.inner.receiver_push.take().unwrap();
@@ -171,8 +171,9 @@ where
                 match req {
                     None => return Ok(Some(true)),
                     Some(Err(e)) => return Err(e),
-                    Some(Ok(r)) => {
-                        self.handle_request(addr, data, r, f).await?;
+                    Some(Ok(mut r)) => {
+                        r.extensions_mut().insert(data.clone());
+                        self.handle_request(addr, r, f).await?;
                     }
                 };
             }

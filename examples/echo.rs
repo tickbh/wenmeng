@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let (stream, addr) = server.accept().await?;
         tokio::spawn(async move {
             let mut server = Server::new(stream, Some(addr), ());
-            async fn operate(req: Request<RecvStream>, _: Arc<Mutex<()>>) -> ProtResult<Option<Response<String>>> {
+            async fn operate(req: Request<RecvStream>) -> ProtResult<Option<Response<String>>> {
                 let response = Response::builder()
                     .version(req.version().clone())
                     .body("Hello World\r\n".to_string())?;
