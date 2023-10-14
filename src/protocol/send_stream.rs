@@ -1,5 +1,5 @@
-use brotli::CompressorReader;
-use flate2::{read::{DeflateEncoder, GzEncoder, GzDecoder}, Compression};
+use brotli::{CompressorReader, Decompressor};
+use flate2::{read::{DeflateEncoder, GzEncoder, GzDecoder, MultiGzDecoder, DeflateDecoder}, Compression};
 use futures_core::Stream;
 use std::{fmt::Debug, io::Write};
 use std::io::Read;
@@ -9,9 +9,9 @@ use webparse::{Binary, BinaryMut, Serialize, Buf, Helper, HttpError, WebError};
 use crate::{ProtResult, Consts};
 
 struct InnerCompress {
-    reader_gz: Option<GzDecoder<BinaryMut>>,
-    reader_br: Option<CompressorReader<BinaryMut>>,
-    reader_de: Option<DeflateEncoder<BinaryMut>>,
+    reader_gz: Option<MultiGzDecoder<BinaryMut>>,
+    reader_br: Option<Decompressor<BinaryMut>>,
+    reader_de: Option<DeflateDecoder<BinaryMut>>,
 }
 
 impl Debug for InnerCompress {
@@ -33,24 +33,23 @@ impl InnerCompress {
         }
     }
 
-    pub fn open_reader_gz(&mut self) {
+    pub fn open_reader_gz(&mut self, bin: BinaryMut) {
         if self.reader_gz.is_none() {
-            self.reader_gz = Some(GzDecoder::new(BinaryMut::new()));
+            self.reader_gz = Some(MultiGzDecoder::new(bin));
         }
     }
 
-    pub fn open_reader_de(&mut self) {
+    pub fn open_reader_de(&mut self, bin: BinaryMut) {
         if self.reader_de.is_none() {
-            self.reader_de = Some(DeflateEncoder::new(
-                BinaryMut::new(),
-                Compression::default(),
+            self.reader_de = Some(DeflateDecoder::new(
+                bin,
             ));
         }
     }
 
-    pub fn open_reader_br(&mut self) {
+    pub fn open_reader_br(&mut self, bin: BinaryMut) {
         if self.reader_br.is_none() {
-            self.reader_br = Some(CompressorReader::new(BinaryMut::new(), 4096, 11, 22));
+            self.reader_br = Some(Decompressor::new(bin, 4096));
         }
     }
 }
@@ -61,6 +60,7 @@ pub struct SendStream {
     compress: InnerCompress,
     pub read_buf: BinaryMut,
     real_read_buf: BinaryMut,
+    cache_body_data: BinaryMut,
     compress_method: i8,
     is_chunked: bool,
     is_end: bool,
@@ -76,6 +76,7 @@ impl SendStream {
             compress: InnerCompress::new(),
             read_buf: BinaryMut::new(),
             real_read_buf: BinaryMut::new(),
+            cache_body_data: BinaryMut::new(),
             compress_method: Consts::COMPRESS_METHOD_NONE,
             is_end: true,
             is_chunked: false,
@@ -159,7 +160,7 @@ impl SendStream {
         }
         let mut size = 0;
         loop {
-            let s = read.read_to_end(cache_buf)?;
+            let s = read.read(cache_buf)?;
             size += s;
             read_buf.put_slice(&cache_buf[..s]);
             if s < cache_buf.len() {
@@ -177,60 +178,38 @@ impl SendStream {
         }
         match self.compress_method {
             Consts::COMPRESS_METHOD_GZIP => {
-                if data.len() == 0 {
-                    self.compress.open_reader_gz();
-                    let mut gz = self.compress.reader_gz.take().unwrap();
-                    Self::read_all_data(&mut self.cache_buf, &mut self.real_read_buf, &mut gz)
-                } else {
-                    self.compress.open_reader_gz();
+                self.cache_body_data.put_slice(data);
+                if self.is_end {
+                    self.compress.open_reader_gz(self.cache_body_data.clone());
                     let gz = self.compress.reader_gz.as_mut().unwrap();
-                    gz.get_mut().write_all(data)?;
-                    // gz.write_all(data).unwrap();
-                        Self::read_all_data(&mut self.cache_buf, &mut self.real_read_buf, gz)
-                        
+                    let s = Self::read_all_data(&mut self.cache_buf, &mut self.real_read_buf, gz);
+                    self.cache_body_data.clear();
+                    s
+                } else {
+                    Ok(0)
                 }
             }
             Consts::COMPRESS_METHOD_DEFLATE => {
-                if data.len() == 0 {
-                    self.compress.open_reader_de();
-                    let de = self.compress.reader_de.take().unwrap();
-                    let value = de.into_inner();
-                    if value.remaining() > 0 {
-                        self.real_read_buf.put_slice(&value);
-                    }
-                    Ok(0)
-                } else {
-                    self.compress.open_reader_de();
+                self.cache_body_data.put_slice(data);
+                if self.is_end {
+                    self.compress.open_reader_de(self.cache_body_data.clone());
                     let de = self.compress.reader_de.as_mut().unwrap();
-                    de.write_all(data).unwrap();
-                    if de.get_mut().remaining() > 0 {
-                        Self::read_all_data(&mut self.cache_buf, &mut self.real_read_buf, de)
-                    } else {
-                        Ok(0)
-                    }
+                    let s = Self::read_all_data(&mut self.cache_buf, &mut self.real_read_buf, de);
+                    self.cache_body_data.clear();
+                    s
+                } else {
+                    Ok(0)
                 }
             }
             Consts::COMPRESS_METHOD_BROTLI => {
-                if data.len() == 0 {
-                    self.compress.open_reader_br();
-                    let mut de = self.compress.reader_br.take().unwrap();
-                    let value = de.into_inner();
-                    if value.remaining() > 0 {
-                        self.real_read_buf.put_slice(&value);
-                    }
-                    Ok(0)
+                self.cache_body_data.put_slice(data);
+                if self.is_end {
+                    self.compress.open_reader_br(self.cache_body_data.clone());
+                    let br = self.compress.reader_br.as_mut().unwrap();
+                    let s = Self::read_all_data(&mut self.cache_buf, &mut self.real_read_buf, br);
+                    self.cache_body_data.clear();
+                    s
                 } else {
-                    self.compress.open_reader_br();
-                    let de = self.compress.reader_br.as_mut().unwrap();
-                    // de.write_all(data).unwrap();
-                    // if de.get_mut().remaining() > 0 {
-                    //     let s =
-                    //         Self::inner_decode_data(buffer, &de.get_mut().chunk(), self.is_chunked);
-                    //     de.get_mut().clear();
-                    //     s
-                    // } else {
-                    //     Ok(0)
-                    // }
                     Ok(0)
                 }
             }
@@ -250,9 +229,9 @@ impl SendStream {
                 // TODO 接收小部分的chunk
                 match Helper::parse_chunk_data(&mut self.read_buf.clone()) {
                     Ok((data, n, is_end)) => {
+                        self.is_end = is_end;
                         self.decode_data(&data)?;
                         self.read_buf.advance(n);
-                        self.is_end = is_end;
                     }
                     Err(WebError::Http(HttpError::Partial)) => break,
                     Err(err) => return Err(err.into()),
@@ -262,12 +241,12 @@ impl SendStream {
                 if len == 0 {
                     return Ok(())
                 }
-                self.decode_data(&self.read_buf.clone().chunk()[..len])?;
                 self.left_read_body_len -= len;
-                self.read_buf.advance(len);
                 if self.left_read_body_len == 0 {
                     self.is_end = true;
                 }
+                self.decode_data(&self.read_buf.clone().chunk()[..len])?;
+                self.read_buf.advance(len);
                 break;
             }
         }
