@@ -189,6 +189,7 @@ pub struct RecvStream {
     receiver: InnerReceiver,
     binary: Option<Binary>,
     binary_mut: Option<BinaryMut>,
+    cache_body_data: BinaryMut,
     compress_method: i8,
     compress: InnerCompress,
     is_chunked: bool,
@@ -201,6 +202,7 @@ impl Default for RecvStream {
             receiver: InnerReceiver::new(),
             binary: Default::default(),
             binary_mut: Default::default(),
+            cache_body_data: BinaryMut::new(),
             compress_method: Consts::COMPRESS_METHOD_NONE,
             compress: InnerCompress::new(),
             is_chunked: false,
@@ -304,22 +306,6 @@ impl RecvStream {
     pub fn set_end(&mut self, end: bool) {
         self.is_end = end
     }
-
-    // pub fn try_recv(&mut self) {
-    //     if self.receiver.is_none() {
-    //         return;
-    //     }
-    //     while let Some(v) = self.receiver.try_recv() {
-    //         if self.binary_mut.is_none() {
-    //             self.binary_mut = Some(BinaryMut::new());
-    //         }
-    //         self.binary_mut.as_mut().unwrap().put_slice(v.1.chunk());
-    //         self.is_end = v.0;
-    //         if self.is_end == true {
-    //             break;
-    //         }
-    //     }
-    // }
 
     pub fn read_now(&mut self) -> Binary {
         let mut buffer = BinaryMut::new();
@@ -558,6 +544,91 @@ impl RecvStream {
         }
         return Poll::Ready(Ok(has_change));
     }
+
+
+    // pub fn process_data(&mut self) -> ProtResult<()> {
+    //     let mut size = 0;
+    //     if let Some(bin) = self.binary.take() {
+    //         if bin.chunk().len() > 0 {
+    //             size += self.encode_data(buffer, bin.chunk())?;
+    //         }
+    //     }
+    //     if let Some(bin) = self.binary_mut.take() {
+    //         if bin.chunk().len() > 0 {
+    //             size += self.encode_data(buffer, bin.chunk())?;
+    //         }
+    //     }
+    //     let mut has_encode_end = false;
+    //     if !self.is_end {
+    //         loop {
+    //             match self.receiver.poll_recv(cx) {
+    //                 Poll::Pending => {
+    //                     break;
+    //                 }
+    //                 Poll::Ready(Some((is_end, bin))) => {
+    //                     size += self.encode_data(buffer, bin.chunk())?;
+    //                     self.is_end = is_end;
+    //                     if bin.remaining() == 0 {
+    //                         has_encode_end = is_end;
+    //                     }
+    //                 }
+    //                 Poll::Ready(None) => {
+    //                     self.is_end = true;
+    //                     break;
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     if !has_encode_end && self.is_chunked && self.is_end {
+    //         self.encode_data(buffer, &[])?;
+    //     }
+    //     Poll::Ready(Ok(size))
+        
+    //     loop {
+    //         if self.is_chunked {
+    //             if self.is_end {
+    //                 return Ok(())
+    //             }
+                
+                
+
+    //             // TODO 接收小部分的chunk
+    //             match Helper::parse_chunk_data(&mut self.read_buf.clone()) {
+    //                 Ok((data, n, is_end)) => {
+    //                     self.is_end = is_end;
+    //                     self.decode_data(&data)?;
+    //                     self.read_buf.advance(n);
+    //                 }
+    //                 Err(WebError::Http(HttpError::Partial)) => break,
+    //                 Err(err) => return Err(err.into()),
+    //             }
+    //         } else {
+    //             let len = std::cmp::min(self.left_read_body_len, self.read_buf.remaining());
+    //             if len == 0 {
+    //                 return Ok(())
+    //             }
+    //             self.left_read_body_len -= len;
+    //             if self.left_read_body_len == 0 {
+    //                 self.is_end = true;
+    //             }
+    //             self.decode_data(&self.read_buf.clone().chunk()[..len])?;
+    //             self.read_buf.advance(len);
+    //             break;
+    //         }
+    //     }
+    //     Ok(())
+    // }
+
+    // pub fn read_data<B: webparse::Buf + webparse::BufMut>(&mut self, read_data: &mut B) -> ProtResult<usize> {
+    //     self.process_data()?;
+
+    //     let mut size = 0;
+    //     if self.real_read_buf.remaining() > 0 {
+    //         size += read_data.put_slice(&self.real_read_buf.chunk());
+    //         self.real_read_buf.advance_all();
+    //     }
+    //     Ok(size)
+    // }
 }
 
 impl AsyncRead for RecvStream {

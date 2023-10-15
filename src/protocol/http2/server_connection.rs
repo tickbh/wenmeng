@@ -21,7 +21,7 @@ use webparse::{
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, Initiator, RecvStream,
+    Builder, Initiator, RecvStream, HeaderHelper,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -124,11 +124,8 @@ where
         }
         match f(r.into_type::<Req>()).await? {
             Some(res) => {
-                let mut res = res.into_type::<RecvStream>();
-                if res.get_body_len() == 0 && res.body().is_end() {
-                    let len = res.body().body_len();
-                    res.headers_mut().insert(HeaderName::CONTENT_LENGTH, len);
-                }
+                let mut res = res.into_type();
+                HeaderHelper::process_response_header(&mut res)?;
                 self.send_response(
                     res,
                     stream_id.unwrap_or(StreamIdentifier::client_first()),

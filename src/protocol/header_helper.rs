@@ -166,6 +166,14 @@ impl HeaderHelper {
         let is_chunked = res.headers().is_chunked();
         res.body_mut().add_compress_method(compress);
         res.body_mut().set_chunked(is_chunked);
+        if compress == Consts::COMPRESS_METHOD_NONE {
+            if res.get_body_len() == 0 && res.body().is_end() {
+                let len = res.body().body_len();
+                res.headers_mut().insert(HeaderName::CONTENT_LENGTH, len);
+            }
+        } else {
+            
+        }
         Ok(())
     }
 

@@ -15,7 +15,7 @@ use webparse::{
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, Initiator, RecvStream,
+    Builder, Initiator, RecvStream, HeaderHelper,
 };
 
 use super::{
@@ -113,18 +113,15 @@ where
         Res: Serialize + Any,
     {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
-        let mut content_length = 0;
         if TypeId::of::<Req>() != TypeId::of::<RecvStream>() {
             let _ = r.body_mut().wait_all().await;
-            content_length = r.body().body_len();
         }
         match f(r.into_type::<Req>()).await? {
-            Some(mut res) => {
-                if content_length != 0 && res.get_body_len() == 0 {
-                    res.headers_mut().insert(HeaderName::CONTENT_LENGTH, content_length);
-                }
+            Some(res) => {
+                let mut res = res.into_type();
+                HeaderHelper::process_response_header(&mut res)?;
                 self.send_response(
-                    res.into_type(),
+                    res,
                     stream_id.unwrap_or(StreamIdentifier::client_first()),
                 )
                 .await?;
