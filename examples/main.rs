@@ -102,8 +102,10 @@ async fn operate(mut req: Request<RecvStream>) -> ProtResult<Response<RecvStream
         }
     };
 
-    // let file_server = FileServer;
-    FileServer::deal_request(req, "".to_string(), "/root/".to_string()).await
+    let mut file_server = FileServer::new("".to_string(), "/root".to_string());
+    file_server.set_disable_folder(true);
+    file_server.set_disable_compress(true);
+    file_server.deal_request(req).await
 
     // let file = File::open("README.md").await?;
     // let length = file.metadata().await?.len();

@@ -1,11 +1,9 @@
-
-use crate::{ProtResult, plugins::calc_file_size};
-use std::{path::Path, io, collections::HashMap};
-use tokio::fs::File;
-use webparse::{Response, Request, BinaryMut, HeaderName, Buf};
 use crate::RecvStream;
+use crate::{plugins::calc_file_size, ProtResult};
 use lazy_static::lazy_static;
-
+use std::{collections::HashMap, io, path::Path};
+use tokio::fs::File;
+use webparse::{BinaryMut, Buf, HeaderName, Request, Response};
 
 lazy_static! {
     static ref DEFAULT_MIMETYPE: HashMap<&'static str, &'static str> = {
@@ -63,7 +61,10 @@ lazy_static! {
 }
 
 pub struct FileServer {
-
+    pub root: String,
+    pub prefix: String,
+    pub disable_compress: bool,
+    pub disable_folder: bool,
 }
 
 const HEAD_HTML_PRE: &'static str = r#"
@@ -96,23 +97,60 @@ i.icon-zip {
 "#;
 
 impl FileServer {
-    pub async fn deal_request(req: Request<RecvStream>, mut root: String, prefix: String) -> ProtResult<Response<RecvStream>> {
-        let path = req.path().clone();
-        if !path.starts_with(&prefix) {
-            return Ok(Response::builder().status(404).body("unknow path").unwrap().into_type())
-        }
+    pub fn new(mut root: String, prefix: String) -> Self {
         if root.is_empty() {
-            root = std::env::current_dir()?.to_str().unwrap().to_string();
+            if let Ok(path) = std::env::current_dir() {
+                root = path.to_string_lossy().to_string();
+            }
         }
-        let root_path = Path::new(&root);
-        let href = "/".to_string() + path.strip_prefix(&prefix).unwrap();
-        let real_path = root.clone() + &href;
+        Self {
+            root,
+            prefix,
+            disable_compress: false,
+            disable_folder: false,
+        }
+    }
+
+    pub fn set_disable_folder(&mut self, disable: bool) {
+        self.disable_folder = disable;
+    }
+
+    pub fn set_disable_compress(&mut self, disable: bool) {
+        self.disable_compress = disable;
+    }
+
+    pub async fn deal_request(
+        &self,
+        req: Request<RecvStream>,
+    ) -> ProtResult<Response<RecvStream>> {
+        let path = req.path().clone();
+        if !path.starts_with(&self.prefix) {
+            return Ok(Response::builder()
+                .status(404)
+                .body("unknow path")
+                .unwrap()
+                .into_type());
+        }
+        let root_path = Path::new(&self.root);
+        let href = "/".to_string() + path.strip_prefix(&self.prefix).unwrap();
+        let real_path = self.root.clone() + &href;
         let real_path = Path::new(&real_path);
         if !real_path.starts_with(root_path) {
-            return Ok(Response::builder().status(404).body("can't view parent file").unwrap().into_type())
+            return Ok(Response::builder()
+                .status(404)
+                .body("can't view parent file")
+                .unwrap()
+                .into_type());
         }
 
         if real_path.is_dir() {
+            if self.disable_folder {
+                return Ok(Response::builder()
+                    .status(404)
+                    .body("can't view parent file")
+                    .unwrap()
+                    .into_type());
+            }
             let mut binary = BinaryMut::new();
             binary.put_slice(HEAD_HTML_PRE.as_bytes());
             binary.put_slice(href.as_bytes());
@@ -137,15 +175,28 @@ impl FileServer {
                     if path.is_dir() {
                         op_ref.put_slice("<td><i class=\"icon icon-_blank\"></i></td>".as_bytes());
                         op_ref.put_slice("<td class=\"file-size\"><code></code></td>".as_bytes());
-                        op_ref.put_slice(format!("<td><a href=\"{}{}\">{}</td>", prefix, href, filename).as_bytes());
+                        op_ref.put_slice(
+                            format!("<td><a href=\"{}{}\">{}</td>", self.prefix, href, filename)
+                                .as_bytes(),
+                        );
                     } else {
                         op_ref.put_slice("<td><i class=\"icon icon-_page\"></i></td>".as_bytes());
                         if let Ok(meta) = path.metadata() {
-                            op_ref.put_slice(format!("<td class=\"file-size\"><code>{}</code></td>", calc_file_size(meta.len())).as_bytes());
+                            op_ref.put_slice(
+                                format!(
+                                    "<td class=\"file-size\"><code>{}</code></td>",
+                                    calc_file_size(meta.len())
+                                )
+                                .as_bytes(),
+                            );
                         } else {
-                            op_ref.put_slice("<td class=\"file-size\"><code></code></td>".as_bytes());
+                            op_ref
+                                .put_slice("<td class=\"file-size\"><code></code></td>".as_bytes());
                         }
-                        op_ref.put_slice(format!("<td><a href=\"{}{}\">{}</td>", prefix, href, filename).as_bytes());
+                        op_ref.put_slice(
+                            format!("<td><a href=\"{}{}\">{}</td>", self.prefix, href, filename)
+                                .as_bytes(),
+                        );
                     }
                     op_ref.put_slice("</tr>".as_bytes());
                     println!("{:?}", entry.path());
@@ -156,18 +207,20 @@ impl FileServer {
             binary.put_slice("</tbody>\r\n</table>".as_bytes());
             binary.put_slice("<br><address>wengmeng <a href=\"https://github.com/tickbh/wenmeng\">wenmeng</a></address>".as_bytes());
             binary.put_slice("</body></html>".as_bytes());
-            
+
             let recv = RecvStream::only(binary.freeze());
             let builder = Response::builder().version(req.version().clone());
-            let response = builder
+            let mut response = builder
                 // .header("Content-Length", length as usize)
                 .header(HeaderName::CONTENT_TYPE, "text/html; charset=utf-8")
                 .body(recv)
                 .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-            return Ok(response)
-
+            if self.disable_compress {
+                response.headers_mut().insert(HeaderName::CONTENT_ENCODING, "");
+            }
+            return Ok(response);
         } else {
-            let extension =  if let Some(s) = real_path.extension() {
+            let extension = if let Some(s) = real_path.extension() {
                 s.to_string_lossy().to_string()
             } else {
                 String::new()
@@ -179,18 +232,21 @@ impl FileServer {
             let recv = RecvStream::new_file(file, BinaryMut::new(), false);
             // recv.set_compress_origin_gzip();
             let builder = Response::builder().version(req.version().clone());
-            let response = builder
+            let mut response = builder
                 // .header("Content-Length", length as usize)
-                .header(HeaderName::CONTENT_TYPE, format!("{}; charset=utf-8", application))
+                .header(
+                    HeaderName::CONTENT_TYPE,
+                    format!("{}; charset=utf-8", application),
+                )
                 .header(HeaderName::TRANSFER_ENCODING, "chunked")
                 .body(recv)
                 .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-            return Ok(response)
+            if self.disable_compress {
+                response.headers_mut().insert(HeaderName::CONTENT_ENCODING, "");
+            }
+            return Ok(response);
         }
-        
-
     }
-
 }
 
 // impl PluginTrait for FileServer {

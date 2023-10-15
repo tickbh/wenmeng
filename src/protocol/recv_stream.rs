@@ -325,6 +325,17 @@ impl RecvStream {
         return buffer.freeze();
     }
 
+    pub fn origin_len(&self) -> usize {
+        let mut size = 0;
+        if let Some(bin) = &self.binary {
+            size += bin.remaining();
+        }
+        if let Some(bin) = &self.binary_mut {
+            size += bin.remaining();
+        }
+        return size;
+    }
+
     pub fn copy_now(&self) -> Binary {
         let mut buffer = BinaryMut::new();
         if let Some(bin) = &self.binary {
@@ -337,7 +348,6 @@ impl RecvStream {
     }
 
     pub fn body_len(&mut self) -> usize {
-        let _ = self.process_data(None);
         return self.cache_body_data.remaining();
     }
 

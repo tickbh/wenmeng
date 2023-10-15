@@ -50,7 +50,7 @@ impl HttpHelper {
             Ok(res) => {
                 let mut res = res.into_type::<RecvStream>();
                 // 如果外部有设置编码，内部不做改变
-                if res.headers_mut().get_option_value(&HeaderName::CONTENT_ENCODING).is_none() && (!res.body().is_end() || res.body_mut().body_len() > 1024) {
+                if res.headers_mut().get_option_value(&HeaderName::CONTENT_ENCODING).is_none() && (!res.body().is_end() || res.body_mut().origin_len() > 1024) {
                     if gzip {
                         res.headers_mut().insert(HeaderName::CONTENT_ENCODING, "gzip");
                     } else if br {
