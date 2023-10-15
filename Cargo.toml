@@ -27,6 +27,7 @@ webpki-roots = "0.25"
 rustls="0.21"
 rbtree = "0.1.5"
 base64 = "0.21.4"
+lazy_static = "1.4.0"
 
 # webparse="0.1.5"
 

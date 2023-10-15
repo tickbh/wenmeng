@@ -10,7 +10,7 @@ use tokio::{
 
 use crate::{ProtError, ProtResult, RecvStream, HeaderHelper, SendStream};
 use webparse::{
-    http::http2, Binary, BinaryMut, Buf, BufMut, Helper, HttpError, Request, Response, WebError,
+    http::http2, Binary, BinaryMut, Buf, BufMut, Request, Response,
 };
 
 pub struct IoBuffer<T> {

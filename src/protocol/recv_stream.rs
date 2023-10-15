@@ -1,13 +1,12 @@
-use brotli::{BrotliCompress, CompressorWriter};
+use brotli::{CompressorWriter};
 use flate2::{
     write::{DeflateEncoder, GzEncoder},
-    Compression, GzBuilder,
+    Compression,
 };
-use futures_core::Stream;
+
 use std::fmt::Debug;
 use std::{
     fmt::Display,
-    future::poll_fn,
     io::{Read, Write},
     pin::Pin,
     task::{ready, Context, Poll},
@@ -15,11 +14,11 @@ use std::{
 use tokio::{
     fs::File,
     io::{AsyncRead, AsyncReadExt, ReadBuf},
-    sync::mpsc::{error::TryRecvError, Receiver},
+    sync::mpsc::{Receiver},
 };
 use webparse::{Binary, BinaryMut, Buf, BufMut, Helper, Serialize, WebResult};
 
-use crate::{Consts, ProtResult};
+use crate::{Consts};
 
 #[derive(Debug)]
 struct InnerReceiver {
@@ -391,6 +390,7 @@ impl RecvStream {
     ) -> std::io::Result<usize> {
         match self.compress_method {
             Consts::COMPRESS_METHOD_GZIP => {
+                // 数据结束，需要主动调用结束以导出全部结果
                 if data.len() == 0 {
                     self.compress.open_write_gz();
                     let gz = self.compress.write_gz.take().unwrap();
@@ -407,6 +407,7 @@ impl RecvStream {
                     self.compress.open_write_gz();
                     let gz = self.compress.write_gz.as_mut().unwrap();
                     gz.write_all(data).unwrap();
+                    // 每次写入，在尝试读取出数据
                     if gz.get_mut().remaining() > 0 {
                         let s =
                             Self::inner_encode_data(&mut self.cache_body_data, &gz.get_mut().chunk(), self.is_chunked);
@@ -418,6 +419,7 @@ impl RecvStream {
                 }
             }
             Consts::COMPRESS_METHOD_DEFLATE => {
+                // 数据结束，需要主动调用结束以导出全部结果
                 if data.len() == 0 {
                     self.compress.open_write_de();
                     let de = self.compress.write_de.take().unwrap();
@@ -434,6 +436,7 @@ impl RecvStream {
                     self.compress.open_write_de();
                     let de = self.compress.write_de.as_mut().unwrap();
                     de.write_all(data).unwrap();
+                    // 每次写入，在尝试读取出数据
                     if de.get_mut().remaining() > 0 {
                         let s =
                             Self::inner_encode_data(&mut self.cache_body_data, &de.get_mut().chunk(), self.is_chunked);
@@ -445,6 +448,7 @@ impl RecvStream {
                 }
             }
             Consts::COMPRESS_METHOD_BROTLI => {
+                // 数据结束，需要主动调用结束以导出全部结果
                 if data.len() == 0 {
                     self.compress.open_write_br();
                     let mut de = self.compress.write_br.take().unwrap();
@@ -462,6 +466,7 @@ impl RecvStream {
                     self.compress.open_write_br();
                     let de = self.compress.write_br.as_mut().unwrap();
                     de.write_all(data).unwrap();
+                    // 每次写入，在尝试读取出数据
                     if de.get_mut().remaining() > 0 {
                         let s =
                             Self::inner_encode_data(&mut self.cache_body_data, &de.get_mut().chunk(), self.is_chunked);

@@ -14,20 +14,19 @@
 #![warn(rust_2018_idioms)]
 
 use flate2::GzBuilder;
-use webparse::{Binary, BinaryMut, Request, Response, HeaderName};
+use webparse::{BinaryMut, Request, Response};
 #[macro_use]
 extern crate serde_derive;
 use std::{
     env,
     error::Error,
-    io::{self, Read}, sync::Arc, net::SocketAddr,
+    io::{Read}, net::SocketAddr,
 };
 use tokio::{
-    net::{TcpListener, TcpStream},
-    sync::{mpsc::channel, Mutex}, io::AsyncReadExt, fs::File,
+    net::{TcpListener, TcpStream}, io::AsyncReadExt,
 };
 
-use wenmeng::{self, ProtResult, RecvStream, SendControl, Server, FileServer};
+use wenmeng::{self, ProtResult, RecvStream, Server, FileServer};
 
 // use async_compression::tokio::{write::GzipEncoder};
 
@@ -42,7 +41,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap_or_else(|| "0.0.0.0:8080".to_string());
     let server = TcpListener::bind(&addr).await?;
     println!("Listening on: {}", addr);
-    let gz = GzBuilder::new();
+    let _gz = GzBuilder::new();
     loop {
         let (stream, addr) = server.accept().await?;
         println!("recv = {:?}", stream);
@@ -55,9 +54,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-async fn operate(mut req: Request<RecvStream>) -> ProtResult<Option<Response<RecvStream>>> {
+async fn operate(mut req: Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
     let mut builder = Response::builder().version(req.version().clone());
-    let body = match &*req.url().path {
+    let _body = match &*req.url().path {
         "/plaintext" | "/" => {
             builder = builder.header("content-type", "text/plain; charset=utf-8");
             "Hello, World!".to_string()

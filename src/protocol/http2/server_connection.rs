@@ -1,5 +1,5 @@
 use std::{
-    any::{Any, TypeId},
+    any::{Any},
     net::SocketAddr,
     sync::Arc,
     task::{ready, Context, Poll},
@@ -16,12 +16,12 @@ use tokio::{
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
-    Binary, BinaryMut, HeaderName, Request, Response, Serialize,
+    Binary, BinaryMut, Request, Response, Serialize,
 };
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, Initiator, RecvStream, HeaderHelper,
+    Builder, Initiator, RecvStream, HttpHelper,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -109,31 +109,20 @@ where
     ) -> ProtResult<Option<bool>>
     where
         F: FnMut(Request<Req>) -> Fut,
-        Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
+        Fut: Future<Output = ProtResult<Response<Res>>>,
         Req: From<RecvStream>,
         Req: Serialize + Any,
         RecvStream: From<Res>,
         Res: Serialize + Any,
     {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
-        if TypeId::of::<Req>() != TypeId::of::<RecvStream>() {
-            let _ = r.body_mut().wait_all().await;
-        }
-        if let Some(addr) = addr {
-            r.headers_mut().system_insert("$client_ip".to_string(), format!("{}", addr));
-        }
-        match f(r.into_type::<Req>()).await? {
-            Some(res) => {
-                let mut res = res.into_type();
-                HeaderHelper::process_response_header(&mut res)?;
-                self.send_response(
-                    res,
-                    stream_id.unwrap_or(StreamIdentifier::client_first()),
-                )
-                .await?;
-            }
-            None => (),
-        }
+
+        let res = HttpHelper::handle_request(addr, r, f).await?;
+        self.send_response(
+            res,
+            stream_id.unwrap_or(StreamIdentifier::client_first()),
+        )
+        .await?;
         return Ok(None);
     }
 
@@ -145,7 +134,7 @@ where
     ) -> ProtResult<Option<bool>>
     where
         F: FnMut(Request<Req>) -> Fut,
-        Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
+        Fut: Future<Output = ProtResult<Response<Res>>>,
         Req: From<RecvStream>,
         Req: Serialize + Any,
         RecvStream: From<Res>,

@@ -10,7 +10,7 @@ use tokio::{
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
-    Binary, BinaryMut, Request, Response, Serialize, HeaderName, http2::frame::Settings,
+    Binary, BinaryMut, Request, Response, Serialize, http2::frame::Settings,
 };
 
 use crate::{

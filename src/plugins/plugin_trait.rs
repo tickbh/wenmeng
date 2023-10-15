@@ -1,5 +1,5 @@
 
-use std::future::Future;
+
 use webparse::{Request, Response};
 
 use crate::{ProtResult, RecvStream};

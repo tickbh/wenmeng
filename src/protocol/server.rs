@@ -85,7 +85,7 @@ where
     pub async fn incoming<F, Fut, Res, Req>(&mut self, mut f: F) -> ProtResult<Option<bool>>
     where
     F: FnMut(Request<Req>) -> Fut,
-    Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
+    Fut: Future<Output = ProtResult<Response<Res>>>,
     Req: From<RecvStream>,
     Req: Serialize + Any,
     RecvStream: From<Res>,

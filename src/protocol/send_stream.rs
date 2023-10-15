@@ -1,9 +1,9 @@
-use brotli::{CompressorReader, Decompressor};
-use flate2::{read::{DeflateEncoder, GzEncoder, GzDecoder, MultiGzDecoder, DeflateDecoder}, Compression};
+use brotli::{Decompressor};
+use flate2::{read::{MultiGzDecoder, DeflateDecoder}};
 use futures_core::Stream;
-use std::{fmt::Debug, io::Write};
+use std::{fmt::Debug};
 use std::io::Read;
-use tokio::sync::mpsc::{error::TrySendError, Sender};
+use tokio::sync::mpsc::{Sender};
 use webparse::{Binary, BinaryMut, Serialize, Buf, Helper, HttpError, WebError};
 
 use crate::{ProtResult, Consts};
@@ -176,6 +176,7 @@ impl SendStream {
         if self.compress_method != 0 && self.cache_buf.len() != 4096 {
             self.cache_buf.resize(4096, 0);
         }
+        // 收到数据进行缓存，只有到结束时才进行解压缩
         match self.compress_method {
             Consts::COMPRESS_METHOD_GZIP => {
                 self.cache_body_data.put_slice(data);

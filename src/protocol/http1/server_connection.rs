@@ -1,5 +1,5 @@
 use std::{
-    any::{Any, TypeId},
+    any::{Any},
     net::SocketAddr,
     pin::Pin,
     sync::Arc,
@@ -11,9 +11,9 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::Mutex,
 };
-use webparse::{Binary, BinaryMut, HeaderName, Request, Response, Serialize};
+use webparse::{Binary, BinaryMut, Request, Response, Serialize};
 
-use crate::{ProtResult, RecvStream, ServerH2Connection, HeaderHelper};
+use crate::{ProtResult, RecvStream, ServerH2Connection, HttpHelper};
 
 use super::IoBuffer;
 
@@ -53,12 +53,12 @@ where
     pub async fn handle_request<F, Fut, Res, Req>(
         &mut self,
         addr: &Option<SocketAddr>,
-        mut r: Request<RecvStream>,
+        r: Request<RecvStream>,
         f: &mut F,
     ) -> ProtResult<Option<bool>>
     where
         F: FnMut(Request<Req>) -> Fut,
-        Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
+        Fut: Future<Output = ProtResult<Response<Res>>>,
         Req: From<RecvStream>,
         Req: Serialize + Any,
         RecvStream: From<Res>,
@@ -80,20 +80,8 @@ where
                 ));
             }
         }
-        if TypeId::of::<Req>() != TypeId::of::<RecvStream>() {
-            let _ = r.body_mut().wait_all().await;
-        }
-        if let Some(addr) = addr {
-            r.headers_mut().system_insert("$client_ip".to_string(), format!("{}", addr));
-        }
-        match f(r.into_type::<Req>()).await? {
-            Some(res) => {
-                let mut res = res.into_type::<RecvStream>();
-                HeaderHelper::process_response_header(&mut res)?;
-                self.send_response(res).await?;
-            }
-            None => (),
-        }
+        let res = HttpHelper::handle_request(addr, r, f).await?;
+        self.send_response(res).await?;
         return Ok(None);
     }
 
@@ -105,7 +93,7 @@ where
     ) -> ProtResult<Option<bool>>
     where
         F: FnMut(Request<Req>) -> Fut,
-        Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
+        Fut: Future<Output = ProtResult<Response<Res>>>,
         Req: From<RecvStream>,
         Req: Serialize + Any,
         RecvStream: From<Res>,

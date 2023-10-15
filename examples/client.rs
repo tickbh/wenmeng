@@ -13,7 +13,7 @@ async fn test_http2() -> ProtResult<()> {
         http2_only(true)
         .connect(url).await.unwrap();
 
-    let (mut recv, sender) = client.send2(req.into_type()).await?;
+    let (mut recv, _sender) = client.send2(req.into_type()).await?;
     let mut res = recv.recv().await.unwrap();
     res.body_mut().wait_all().await;
     println!("res = {}", res);
