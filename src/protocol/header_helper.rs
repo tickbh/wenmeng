@@ -153,27 +153,46 @@ impl HeaderHelper {
         return Consts::COMPRESS_METHOD_NONE;
     }
 
+    pub fn process_headers(headers: &mut HeaderMap, body: &mut RecvStream) -> ProtResult<()> {
+        let compress = Self::get_compress_method(headers);
+        let compress = body.add_compress_method(compress);
+
+        let is_chunked = headers.is_chunked();
+        body.set_chunked(is_chunked);
+        let header_body_len = headers.get_body_len();
+        if compress == Consts::COMPRESS_METHOD_NONE {
+            if !is_chunked && header_body_len == 0 && body.is_end() {
+                let len = body.body_len();
+                headers.insert(HeaderName::CONTENT_LENGTH, len);
+            }
+        } else {
+            if header_body_len == 0 {
+                // 非完整数据，无法立马得到最终数据，写入chunked
+                if !body.is_end() {
+                    if !is_chunked {
+                        headers.insert(HeaderName::TRANSFER_ENCODING, "chunked");
+                    }
+                } else {
+                    if !is_chunked {
+                        body.process_data(None)?;
+                        let len = body.body_len();
+                        headers.insert(HeaderName::CONTENT_LENGTH, len);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn process_request_header(req: &mut Request<RecvStream>) -> ProtResult<()> {
-        let compress = Self::get_compress_method(req.headers());
-        let is_chunked = req.headers().is_chunked();
-        req.body_mut().add_compress_method(compress);
-        req.body_mut().set_chunked(is_chunked);
+        let (h, b) = req.headers_body_mut();
+        Self::process_headers(h, b)?;
         Ok(())
     }
 
     pub fn process_response_header(res: &mut Response<RecvStream>) -> ProtResult<()> {
-        let compress = Self::get_compress_method(res.headers());
-        let is_chunked = res.headers().is_chunked();
-        res.body_mut().add_compress_method(compress);
-        res.body_mut().set_chunked(is_chunked);
-        if compress == Consts::COMPRESS_METHOD_NONE {
-            if res.get_body_len() == 0 && res.body().is_end() {
-                let len = res.body().body_len();
-                res.headers_mut().insert(HeaderName::CONTENT_LENGTH, len);
-            }
-        } else {
-            
-        }
+        let (h, b) = res.headers_body_mut();
+        Self::process_headers(h, b)?;
         Ok(())
     }
 

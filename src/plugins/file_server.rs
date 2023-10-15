@@ -1,8 +1,8 @@
 use super::plugin_trait::PluginTrait;
-use crate::ProtResult;
+use crate::{ProtResult, plugins::calc_file_size};
 use std::{future::Future, path::Path, io};
 use tokio::fs::File;
-use webparse::{Response, Request, BinaryMut, HeaderName};
+use webparse::{Response, Request, BinaryMut, HeaderName, Buf};
 use crate::RecvStream;
 
 pub struct FileServer;
@@ -298,27 +298,46 @@ impl FileServer {
             binary.put_slice(HEAD_HTML_PRE.as_bytes());
             binary.put_slice(href.as_bytes());
             binary.put_slice(HEAD_HTML_AFTER.as_bytes());
+            binary.put_slice(format!("<body><h1>Index Of {}</h1>", href).as_bytes());
             binary.put_slice("<table>\r\n<tbody>".as_bytes());
 
+            let mut folder_binary = BinaryMut::new();
+            let mut file_binary = BinaryMut::new();
             for entry in real_path.read_dir()? {
                 if let Ok(entry) = entry {
                     let path = entry.path();
                     let new = path.strip_prefix(root_path).unwrap();
-                    binary.put_slice("<tr>".as_bytes());
+                    let op_ref = if path.is_dir() {
+                        &mut folder_binary
+                    } else {
+                        &mut file_binary
+                    };
+                    op_ref.put_slice("<tr>".as_bytes());
                     let href = new.to_str().unwrap();
                     let filename = path.file_name().unwrap().to_str().unwrap();
                     if path.is_dir() {
-                        binary.put_slice("<td>folder</td>".as_bytes());
-                        binary.put_slice(format!("<td><a href=\"{}{}\">{}</td>", prefix, href, filename).as_bytes());
+                        op_ref.put_slice("<td><i class=\"icon icon-_blank\"></i></td>".as_bytes());
+                        op_ref.put_slice("<td class=\"file-size\"><code></code></td>".as_bytes());
+                        op_ref.put_slice(format!("<td><a href=\"{}{}\">{}</td>", prefix, href, filename).as_bytes());
                     } else {
-                        binary.put_slice("<td>file</td>".as_bytes());
-                        binary.put_slice(format!("<td><a href=\"{}{}\">{}</td>", prefix, href, filename).as_bytes());
+                        op_ref.put_slice("<td><i class=\"icon icon-_page\"></i></td>".as_bytes());
+                        if let Ok(meta) = path.metadata() {
+                            op_ref.put_slice(format!("<td class=\"file-size\"><code>{}</code></td>", calc_file_size(meta.len())).as_bytes());
+                        } else {
+                            op_ref.put_slice("<td class=\"file-size\"><code></code></td>".as_bytes());
+                        }
+                        op_ref.put_slice(format!("<td><a href=\"{}{}\">{}</td>", prefix, href, filename).as_bytes());
                     }
-                    binary.put_slice("</tr>".as_bytes());
+                    op_ref.put_slice("</tr>".as_bytes());
                     println!("{:?}", entry.path());
                 }
             }
-            binary.put_slice("</td>\r\n</a>".as_bytes());
+            binary.put_slice(folder_binary.chunk());
+            binary.put_slice(file_binary.chunk());
+            binary.put_slice("</tbody>\r\n</table>".as_bytes());
+            binary.put_slice("<br><address>wengmeng <a href=\"https://github.com/tickbh/wenmeng\">wenmeng</a></address>".as_bytes());
+            binary.put_slice("</body></html>".as_bytes());
+            
             let mut recv = RecvStream::only(binary.freeze());
             let mut builder = Response::builder().version(req.version().clone());
             let response = builder

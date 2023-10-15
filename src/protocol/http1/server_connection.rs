@@ -13,7 +13,7 @@ use tokio::{
 };
 use webparse::{Binary, BinaryMut, HeaderName, Request, Response, Serialize};
 
-use crate::{ProtResult, RecvStream, ServerH2Connection};
+use crate::{ProtResult, RecvStream, ServerH2Connection, HeaderHelper};
 
 use super::IoBuffer;
 
@@ -89,10 +89,7 @@ where
         match f(r.into_type::<Req>()).await? {
             Some(res) => {
                 let mut res = res.into_type::<RecvStream>();
-                if res.get_body_len() == 0 && res.body().is_end() {
-                    let len = res.body().body_len();
-                    res.headers_mut().insert(HeaderName::CONTENT_LENGTH, len);
-                }
+                HeaderHelper::process_response_header(&mut res)?;
                 self.send_response(res).await?;
             }
             None => (),

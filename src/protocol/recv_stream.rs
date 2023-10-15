@@ -17,7 +17,7 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, ReadBuf},
     sync::mpsc::{error::TryRecvError, Receiver},
 };
-use webparse::{Binary, BinaryMut, Buf, BufMut, Helper, Serialize};
+use webparse::{Binary, BinaryMut, Buf, BufMut, Helper, Serialize, WebResult};
 
 use crate::{Consts, ProtResult};
 
@@ -194,6 +194,7 @@ pub struct RecvStream {
     compress: InnerCompress,
     is_chunked: bool,
     is_end: bool,
+    is_process_end: bool,
 }
 
 impl Default for RecvStream {
@@ -207,6 +208,7 @@ impl Default for RecvStream {
             compress: InnerCompress::new(),
             is_chunked: false,
             is_end: true,
+            is_process_end: false,
         }
     }
 }
@@ -280,8 +282,13 @@ impl RecvStream {
         self.compress_method = method;
     }
 
-    pub fn add_compress_method(&mut self, method: i8) {
-        self.compress_method += method;
+    pub fn add_compress_method(&mut self, method: i8) -> i8 {
+        if self.compress_method > 0 {
+            self.compress_method = method
+        } else {
+            self.compress_method += method;
+        }
+        self.compress_method
     }
 
     pub fn is_chunked(&mut self) -> bool {
@@ -292,11 +299,12 @@ impl RecvStream {
         self.is_chunked = chunked;
     }
 
-    pub fn cache_buffer(&mut self, buf: &[u8]) {
+    pub fn cache_buffer(&mut self, buf: &[u8]) -> usize {
         if self.binary_mut.is_none() {
             self.binary_mut = Some(BinaryMut::new());
         }
         self.binary_mut.as_mut().unwrap().put_slice(buf);
+        buf.len()
     }
 
     pub fn is_end(&self) -> bool {
@@ -329,66 +337,47 @@ impl RecvStream {
         return buffer.freeze();
     }
 
-    pub fn body_len(&self) -> usize {
-        let mut len = 0;
-        if let Some(bin) = &self.binary {
-            len += bin.remaining();
-        }
-        if let Some(bin) = &self.binary_mut {
-            len += bin.remaining();
-        }
-        return len;
+    pub fn body_len(&mut self) -> usize {
+        let _ = self.process_data(None);
+        return self.cache_body_data.remaining();
     }
 
     pub async fn wait_all(&mut self) -> Option<usize> {
         let mut size = 0;
-        if self.receiver.is_none() || self.is_end {
-            return Some(size);
-        }
-        while let Some(v) = self.receiver.recv().await {
-            if self.binary_mut.is_none() {
-                self.binary_mut = Some(BinaryMut::new());
-            }
-            size += self.binary_mut.as_mut().unwrap().put_slice(v.1.chunk());
-            self.is_end = v.0;
-            if self.is_end == true {
-                break;
+        if !self.is_end && !self.receiver.is_none() {
+            while let Some(v) = self.receiver.recv().await {
+                size += self.cache_buffer(v.1.chunk());
+                self.is_end = v.0;
+                if self.is_end == true {
+                    break;
+                }
             }
         }
         Some(size)
     }
 
     pub async fn read_all(&mut self, buffer: &mut BinaryMut) -> Option<usize> {
-        let mut size = 0;
-        if let Some(binary) = &mut self.binary {
-            size += buffer.put_slice(binary.chunk());
-            binary.advance_all();
-        }
-        if let Some(binary) = &mut self.binary_mut {
-            size += buffer.put_slice(binary.chunk());
-            binary.advance_all();
-        }
-        if self.is_end {
-            return Some(size);
-        }
-        if self.receiver.is_none() {
-            return Some(size);
-        }
-        while let Some(v) = self.receiver.recv().await {
-            size += buffer.put_slice(v.1.chunk());
-            self.is_end = v.0;
-            if self.is_end == true {
-                break;
+        if !self.is_end && !self.receiver.is_none() {
+            while let Some(v) = self.receiver.recv().await {
+                self.cache_buffer(v.1.chunk());
+                self.is_end = v.0;
+                if self.is_end == true {
+                    break;
+                }
             }
         }
-        Some(size)
+        let _ = self.process_data(None);
+        match self.read_data(buffer) {
+            Ok(s) => Some(s),
+            _ => None,
+        }
     }
 
     fn inner_encode_data<B: webparse::Buf + webparse::BufMut>(
         buffer: &mut B,
         data: &[u8],
         is_chunked: bool,
-    ) -> webparse::WebResult<usize> {
+    ) -> std::io::Result<usize> {
         if is_chunked {
             Helper::encode_chunk_data(buffer, data)
         } else {
@@ -396,11 +385,10 @@ impl RecvStream {
         }
     }
 
-    fn encode_data<B: webparse::Buf + webparse::BufMut>(
+    fn encode_data(
         &mut self,
-        buffer: &mut B,
         data: &[u8],
-    ) -> webparse::WebResult<usize> {
+    ) -> std::io::Result<usize> {
         match self.compress_method {
             Consts::COMPRESS_METHOD_GZIP => {
                 if data.len() == 0 {
@@ -408,16 +396,20 @@ impl RecvStream {
                     let gz = self.compress.write_gz.take().unwrap();
                     let value = gz.finish().unwrap();
                     if value.remaining() > 0 {
-                        Self::inner_encode_data(buffer, &value, self.is_chunked)?;
+                        Self::inner_encode_data(&mut self.cache_body_data, &value, self.is_chunked)?;
                     }
-                    Helper::encode_chunk_data(buffer, data)
+                    if self.is_chunked {
+                        Helper::encode_chunk_data(&mut self.cache_body_data, data)
+                    } else {
+                        Ok(0)
+                    }
                 } else {
                     self.compress.open_write_gz();
                     let gz = self.compress.write_gz.as_mut().unwrap();
                     gz.write_all(data).unwrap();
                     if gz.get_mut().remaining() > 0 {
                         let s =
-                            Self::inner_encode_data(buffer, &gz.get_mut().chunk(), self.is_chunked);
+                            Self::inner_encode_data(&mut self.cache_body_data, &gz.get_mut().chunk(), self.is_chunked);
                         gz.get_mut().clear();
                         s
                     } else {
@@ -431,16 +423,20 @@ impl RecvStream {
                     let de = self.compress.write_de.take().unwrap();
                     let value = de.finish().unwrap();
                     if value.remaining() > 0 {
-                        Self::inner_encode_data(buffer, &value, self.is_chunked)?;
+                        Self::inner_encode_data(&mut self.cache_body_data, &value, self.is_chunked)?;
                     }
-                    Helper::encode_chunk_data(buffer, data)
+                    if self.is_chunked {
+                        Helper::encode_chunk_data(&mut self.cache_body_data, data)
+                    } else {
+                        Ok(0)
+                    }
                 } else {
                     self.compress.open_write_de();
                     let de = self.compress.write_de.as_mut().unwrap();
                     de.write_all(data).unwrap();
                     if de.get_mut().remaining() > 0 {
                         let s =
-                            Self::inner_encode_data(buffer, &de.get_mut().chunk(), self.is_chunked);
+                            Self::inner_encode_data(&mut self.cache_body_data, &de.get_mut().chunk(), self.is_chunked);
                         de.get_mut().clear();
                         s
                     } else {
@@ -455,16 +451,20 @@ impl RecvStream {
                     de.flush()?;
                     let value = de.into_inner();
                     if value.remaining() > 0 {
-                        Self::inner_encode_data(buffer, &value, self.is_chunked)?;
+                        Self::inner_encode_data(&mut self.cache_body_data, &value, self.is_chunked)?;
                     }
-                    Helper::encode_chunk_data(buffer, data)
+                    if self.is_chunked {
+                        Helper::encode_chunk_data(&mut self.cache_body_data, data)
+                    } else {
+                        Ok(0)
+                    }
                 } else {
                     self.compress.open_write_br();
                     let de = self.compress.write_br.as_mut().unwrap();
                     de.write_all(data).unwrap();
                     if de.get_mut().remaining() > 0 {
                         let s =
-                            Self::inner_encode_data(buffer, &de.get_mut().chunk(), self.is_chunked);
+                            Self::inner_encode_data(&mut self.cache_body_data, &de.get_mut().chunk(), self.is_chunked);
                         de.get_mut().clear();
                         s
                     } else {
@@ -472,7 +472,7 @@ impl RecvStream {
                     }
                 }
             }
-            _ => Self::inner_encode_data(buffer, data, self.is_chunked),
+            _ => Self::inner_encode_data(&mut self.cache_body_data, data, self.is_chunked),
         }
     }
 
@@ -481,42 +481,9 @@ impl RecvStream {
         cx: &mut Context<'_>,
         buffer: &mut B,
     ) -> Poll<webparse::WebResult<usize>> {
-        let mut size = 0;
-        if let Some(bin) = self.binary.take() {
-            if bin.chunk().len() > 0 {
-                size += self.encode_data(buffer, bin.chunk())?;
-            }
-        }
-        if let Some(bin) = self.binary_mut.take() {
-            if bin.chunk().len() > 0 {
-                size += self.encode_data(buffer, bin.chunk())?;
-            }
-        }
-        let mut has_encode_end = false;
-        if !self.is_end {
-            loop {
-                match self.receiver.poll_recv(cx) {
-                    Poll::Pending => {
-                        break;
-                    }
-                    Poll::Ready(Some((is_end, bin))) => {
-                        size += self.encode_data(buffer, bin.chunk())?;
-                        self.is_end = is_end;
-                        if bin.remaining() == 0 {
-                            has_encode_end = is_end;
-                        }
-                    }
-                    Poll::Ready(None) => {
-                        self.is_end = true;
-                        break;
-                    }
-                }
-            }
-        }
-        if !has_encode_end && self.is_chunked && self.is_end {
-            self.encode_data(buffer, &[])?;
-        }
-        Poll::Ready(Ok(size))
+        self.process_data(Some(cx))?;
+        let s = self.read_data(buffer)?;
+        Poll::Ready(Ok(s))
     }
 
     fn inner_poll_read(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<bool>> {
@@ -546,89 +513,60 @@ impl RecvStream {
     }
 
 
-    // pub fn process_data(&mut self) -> ProtResult<()> {
-    //     let mut size = 0;
-    //     if let Some(bin) = self.binary.take() {
-    //         if bin.chunk().len() > 0 {
-    //             size += self.encode_data(buffer, bin.chunk())?;
-    //         }
-    //     }
-    //     if let Some(bin) = self.binary_mut.take() {
-    //         if bin.chunk().len() > 0 {
-    //             size += self.encode_data(buffer, bin.chunk())?;
-    //         }
-    //     }
-    //     let mut has_encode_end = false;
-    //     if !self.is_end {
-    //         loop {
-    //             match self.receiver.poll_recv(cx) {
-    //                 Poll::Pending => {
-    //                     break;
-    //                 }
-    //                 Poll::Ready(Some((is_end, bin))) => {
-    //                     size += self.encode_data(buffer, bin.chunk())?;
-    //                     self.is_end = is_end;
-    //                     if bin.remaining() == 0 {
-    //                         has_encode_end = is_end;
-    //                     }
-    //                 }
-    //                 Poll::Ready(None) => {
-    //                     self.is_end = true;
-    //                     break;
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     if !has_encode_end && self.is_chunked && self.is_end {
-    //         self.encode_data(buffer, &[])?;
-    //     }
-    //     Poll::Ready(Ok(size))
-        
-    //     loop {
-    //         if self.is_chunked {
-    //             if self.is_end {
-    //                 return Ok(())
-    //             }
-                
-                
+    pub fn process_data(&mut self, 
+        mut cx: Option<&mut Context<'_>>) -> std::io::Result<usize> {
+        if self.is_process_end {
+            return Ok(0)
+        }
+        let mut size = 0;
+        if let Some(bin) = self.binary.take() {
+            if bin.chunk().len() > 0 {
+                size += self.encode_data(bin.chunk())?;
+            }
+        }
+        if let Some(bin) = self.binary_mut.take() {
+            if bin.chunk().len() > 0 {
+                size += self.encode_data(bin.chunk())?;
+            }
+        }
+        let mut has_encode_end = false;
+        if !self.is_end && cx.is_some() {
+            loop {
+                match self.receiver.poll_recv(cx.as_mut().unwrap()) {
+                    Poll::Pending => {
+                        break;
+                    }
+                    Poll::Ready(Some((is_end, bin))) => {
+                        size += self.encode_data(bin.chunk())?;
+                        self.is_end = is_end;
+                        if bin.remaining() == 0 {
+                            has_encode_end = is_end;
+                        }
+                    }
+                    Poll::Ready(None) => {
+                        self.is_end = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if !has_encode_end && self.is_end {
+            self.encode_data(&[])?;
+        }
+        self.is_process_end = has_encode_end || self.is_end;
+        Ok(size)
+    }
 
-    //             // TODO 接收小部分的chunk
-    //             match Helper::parse_chunk_data(&mut self.read_buf.clone()) {
-    //                 Ok((data, n, is_end)) => {
-    //                     self.is_end = is_end;
-    //                     self.decode_data(&data)?;
-    //                     self.read_buf.advance(n);
-    //                 }
-    //                 Err(WebError::Http(HttpError::Partial)) => break,
-    //                 Err(err) => return Err(err.into()),
-    //             }
-    //         } else {
-    //             let len = std::cmp::min(self.left_read_body_len, self.read_buf.remaining());
-    //             if len == 0 {
-    //                 return Ok(())
-    //             }
-    //             self.left_read_body_len -= len;
-    //             if self.left_read_body_len == 0 {
-    //                 self.is_end = true;
-    //             }
-    //             self.decode_data(&self.read_buf.clone().chunk()[..len])?;
-    //             self.read_buf.advance(len);
-    //             break;
-    //         }
-    //     }
-    //     Ok(())
-    // }
+    pub fn read_data<B: webparse::Buf + webparse::BufMut>(&mut self, read_data: &mut B) -> WebResult<usize> {
+        self.process_data(None)?;
 
-    // pub fn read_data<B: webparse::Buf + webparse::BufMut>(&mut self, read_data: &mut B) -> ProtResult<usize> {
-    //     self.process_data()?;
-
-    //     let mut size = 0;
-    //     if self.real_read_buf.remaining() > 0 {
-    //         size += read_data.put_slice(&self.real_read_buf.chunk());
-    //         self.real_read_buf.advance_all();
-    //     }
-    //     Ok(size)
-    // }
+        let mut size = 0;
+        if self.cache_body_data.remaining() > 0 {
+            size += read_data.put_slice(&self.cache_body_data.chunk());
+            self.cache_body_data.advance_all();
+        }
+        Ok(size)
+    }
 }
 
 impl AsyncRead for RecvStream {
@@ -641,22 +579,10 @@ impl AsyncRead for RecvStream {
             true => {}
             false => return Poll::Pending,
         };
-
-        let mut read_size = 0;
-        if let Some(bin) = &mut self.binary {
-            if bin.remaining() > 0 {
-                let len = std::cmp::min(buf.remaining(), bin.remaining());
-                buf.put_slice(&bin[..len]);
-                read_size += len;
-            }
-        }
-        if let Some(bin) = &mut self.binary_mut {
-            if bin.remaining() > 0 {
-                let len = std::cmp::min(buf.remaining(), bin.remaining());
-                buf.put_slice(&bin[..len]);
-                read_size += len;
-            }
-        }
+        self.process_data(Some(cx))?;
+        let len = std::cmp::min(self.cache_body_data.remaining(), buf.remaining());
+        buf.put_slice(&self.cache_body_data.chunk()[..len]);
+        self.cache_body_data.advance(len);
         return Poll::Ready(Ok(()));
     }
 }
@@ -751,7 +677,7 @@ impl Display for RecvStream {
             let mut f = f.debug_struct("RecvStream");
             f.field("状态", &self.is_end);
             if self.is_end {
-                f.field("接收字节数", &self.body_len());
+                f.field("接收字节数", &self.cache_body_data.remaining());
             }
             f.finish()
         }

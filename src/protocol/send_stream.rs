@@ -146,7 +146,7 @@ impl SendStream {
         buffer: &mut B,
         data: &[u8],
         is_chunked: bool,
-    ) -> webparse::WebResult<usize> {
+    ) -> std::io::Result<usize> {
         if is_chunked {
             Helper::encode_chunk_data(buffer, data)
         } else {
