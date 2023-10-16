@@ -29,10 +29,13 @@ rbtree = "0.1.5"
 base64 = "0.21.4"
 lazy_static = "1.4.0"
 
-# webparse="0.1.5"
 
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
 flate2 = "1.0"
 brotli = "3.4.0"
+
+# webparse="0.1.5"
 # async-compression = {version="0.4.3", features=["all"]}
 
 #"tokio", "brotli", "deflate", "gzip"

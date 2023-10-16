@@ -1,6 +1,7 @@
 use crate::RecvStream;
 use crate::{plugins::calc_file_size, ProtResult};
 use lazy_static::lazy_static;
+use serde::{Serialize, Deserialize};
 use std::{collections::HashMap, io};
 use std::path::{Path, PathBuf};
 use tokio::fs::File;
@@ -61,14 +62,44 @@ lazy_static! {
     };
 }
 
+fn default_bool_true() -> bool {
+    true
+}
+
+fn default_status() -> u16 {
+    404
+}
+
+fn default_hide() -> Vec<String> {
+    vec!["index.html".to_string(), "index.htm".to_string()]
+}
+
+fn default_index() -> Vec<String> {
+    vec!["index.html".to_string(), "index.htm".to_string()]
+}
+
+fn default_precompressed() -> Vec<String> {
+    vec!["gzip".to_string(), "br".to_string()]
+}
+
+/// 代理类, 一个代理类启动一种类型的代理
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FileServer {
+    #[serde(default)]
     pub root: String,
+    #[serde(default)]
     pub prefix: String,
+    #[serde(default="default_hide")]
     pub hide: Vec<String>,
+    #[serde(default = "default_index")]
     pub index: Vec<String>,
+    #[serde(default = "default_status")]
     pub status: u16,
+    #[serde(default = "default_precompressed")]
     pub precompressed: Vec<String>,
+    #[serde(default)]
     pub disable_compress: bool,
+    #[serde(default = "default_bool_true")]
     pub browse: bool,
 }
 
@@ -115,7 +146,7 @@ impl FileServer {
             root,
             prefix,
             hide: vec![],
-            index: vec!["index.html".to_string(), "index.htm".to_string()],
+            index: default_index(),
             status: 404,
             precompressed: vec![],
             disable_compress: false,
