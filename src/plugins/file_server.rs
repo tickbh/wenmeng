@@ -62,6 +62,15 @@ lazy_static! {
     };
 }
 
+
+fn default_root() -> String {
+    if let Ok(path) = std::env::current_dir() {
+       path.to_string_lossy().to_string()
+    } else {
+        String::new()
+    }
+}
+
 fn default_bool_true() -> bool {
     true
 }
@@ -71,7 +80,7 @@ fn default_status() -> u16 {
 }
 
 fn default_hide() -> Vec<String> {
-    vec!["index.html".to_string(), "index.htm".to_string()]
+    vec![]
 }
 
 fn default_index() -> Vec<String> {
@@ -85,7 +94,7 @@ fn default_precompressed() -> Vec<String> {
 /// 代理类, 一个代理类启动一种类型的代理
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FileServer {
-    #[serde(default)]
+    #[serde(default = "default_root")]
     pub root: String,
     #[serde(default)]
     pub prefix: String,
@@ -133,16 +142,8 @@ i.icon-zip {
 "#;
 
 impl FileServer {
-    pub fn new(mut root: String, mut prefix: String) -> Self {
-        if root.is_empty() {
-            if let Ok(path) = std::env::current_dir() {
-                root = path.to_string_lossy().to_string();
-            }
-        }
-        if prefix.ends_with("/") {
-            prefix = prefix.strip_suffix("/").unwrap().to_string();
-        }
-        Self {
+    pub fn new(root: String, prefix: String) -> Self {
+        let mut config = Self {
             root,
             prefix,
             hide: vec![],
@@ -151,6 +152,19 @@ impl FileServer {
             precompressed: vec![],
             disable_compress: false,
             browse: true,
+        };
+        config.fix_default();
+        config
+    }
+
+    pub fn fix_default(&mut self) {
+        if self.root.is_empty() {
+            if let Ok(path) = std::env::current_dir() {
+                self.root = path.to_string_lossy().to_string();
+            }
+        }
+        if self.prefix.ends_with("/") {
+            self.prefix = self.prefix.strip_suffix("/").unwrap().to_string();
         }
     }
 
