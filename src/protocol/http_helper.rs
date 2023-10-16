@@ -59,7 +59,7 @@ impl HttpHelper {
                         res.headers_mut().insert(HeaderName::CONTENT_ENCODING, "deflate");
                     }
                 }
-                HeaderHelper::process_response_header(&mut res)?;
+                // HeaderHelper::process_response_header(&mut res)?;
                 return Ok(res)
             }
             Err(_) => {

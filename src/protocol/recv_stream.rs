@@ -1,4 +1,4 @@
-use brotli::{CompressorWriter};
+use brotli::CompressorWriter;
 use flate2::{
     write::{DeflateEncoder, GzEncoder},
     Compression,
@@ -14,11 +14,11 @@ use std::{
 use tokio::{
     fs::File,
     io::{AsyncRead, AsyncReadExt, ReadBuf},
-    sync::mpsc::{Receiver},
+    sync::mpsc::Receiver,
 };
 use webparse::{Binary, BinaryMut, Buf, BufMut, Helper, Serialize, WebResult};
 
-use crate::{Consts};
+use crate::Consts;
 
 #[derive(Debug)]
 struct InnerReceiver {
@@ -189,7 +189,8 @@ pub struct RecvStream {
     binary: Option<Binary>,
     binary_mut: Option<BinaryMut>,
     cache_body_data: BinaryMut,
-    compress_method: i8,
+    origin_compress_method: i8,
+    now_compress_method: i8,
     compress: InnerCompress,
     is_chunked: bool,
     is_end: bool,
@@ -203,7 +204,8 @@ impl Default for RecvStream {
             binary: Default::default(),
             binary_mut: Default::default(),
             cache_body_data: BinaryMut::new(),
-            compress_method: Consts::COMPRESS_METHOD_NONE,
+            origin_compress_method: Consts::COMPRESS_METHOD_NONE,
+            now_compress_method: Consts::COMPRESS_METHOD_NONE,
             compress: InnerCompress::new(),
             is_chunked: false,
             is_end: true,
@@ -253,41 +255,52 @@ impl RecvStream {
         buffer.freeze()
     }
 
+    pub fn get_now_compress(&self) -> i8 {
+        if self.origin_compress_method > 0 {
+            return self.origin_compress_method
+        } else {
+            self.origin_compress_method + self.now_compress_method
+        }
+    }
+
     pub fn set_compress_gzip(&mut self) {
-        self.compress_method = Consts::COMPRESS_METHOD_GZIP;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_GZIP;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_compress_deflate(&mut self) {
-        self.compress_method = Consts::COMPRESS_METHOD_DEFLATE;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_DEFLATE;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_compress_brotli(&mut self) {
-        self.compress_method = Consts::COMPRESS_METHOD_BROTLI;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_BROTLI;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_compress_origin_gzip(&mut self) {
-        self.compress_method = Consts::COMPRESS_METHOD_ORIGIN_GZIP;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_ORIGIN_GZIP;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_compress_origin_deflate(&mut self) {
-        self.compress_method = Consts::COMPRESS_METHOD_ORIGIN_DEFLATE;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_ORIGIN_DEFLATE;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_compress_origin_brotli(&mut self) {
-        self.compress_method = Consts::COMPRESS_METHOD_ORIGIN_BROTLI;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_ORIGIN_BROTLI;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_compress_method(&mut self, method: i8) {
-        self.compress_method = method;
+        self.origin_compress_method = method;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn add_compress_method(&mut self, method: i8) -> i8 {
-        if self.compress_method > 0 {
-            self.compress_method = method
-        } else {
-            self.compress_method += method;
-        }
-        self.compress_method
+        self.now_compress_method = method;
+        self.get_now_compress()
     }
 
     pub fn is_chunked(&mut self) -> bool {
@@ -394,11 +407,8 @@ impl RecvStream {
         }
     }
 
-    fn encode_data(
-        &mut self,
-        data: &[u8],
-    ) -> std::io::Result<usize> {
-        match self.compress_method {
+    fn encode_data(&mut self, data: &[u8]) -> std::io::Result<usize> {
+        match self.get_now_compress() {
             Consts::COMPRESS_METHOD_GZIP => {
                 // 数据结束，需要主动调用结束以导出全部结果
                 if data.len() == 0 {
@@ -406,7 +416,11 @@ impl RecvStream {
                     let gz = self.compress.write_gz.take().unwrap();
                     let value = gz.finish().unwrap();
                     if value.remaining() > 0 {
-                        Self::inner_encode_data(&mut self.cache_body_data, &value, self.is_chunked)?;
+                        Self::inner_encode_data(
+                            &mut self.cache_body_data,
+                            &value,
+                            self.is_chunked,
+                        )?;
                     }
                     if self.is_chunked {
                         Helper::encode_chunk_data(&mut self.cache_body_data, data)
@@ -419,8 +433,11 @@ impl RecvStream {
                     gz.write_all(data).unwrap();
                     // 每次写入，在尝试读取出数据
                     if gz.get_mut().remaining() > 0 {
-                        let s =
-                            Self::inner_encode_data(&mut self.cache_body_data, &gz.get_mut().chunk(), self.is_chunked);
+                        let s = Self::inner_encode_data(
+                            &mut self.cache_body_data,
+                            &gz.get_mut().chunk(),
+                            self.is_chunked,
+                        );
                         gz.get_mut().clear();
                         s
                     } else {
@@ -435,7 +452,11 @@ impl RecvStream {
                     let de = self.compress.write_de.take().unwrap();
                     let value = de.finish().unwrap();
                     if value.remaining() > 0 {
-                        Self::inner_encode_data(&mut self.cache_body_data, &value, self.is_chunked)?;
+                        Self::inner_encode_data(
+                            &mut self.cache_body_data,
+                            &value,
+                            self.is_chunked,
+                        )?;
                     }
                     if self.is_chunked {
                         Helper::encode_chunk_data(&mut self.cache_body_data, data)
@@ -448,8 +469,11 @@ impl RecvStream {
                     de.write_all(data).unwrap();
                     // 每次写入，在尝试读取出数据
                     if de.get_mut().remaining() > 0 {
-                        let s =
-                            Self::inner_encode_data(&mut self.cache_body_data, &de.get_mut().chunk(), self.is_chunked);
+                        let s = Self::inner_encode_data(
+                            &mut self.cache_body_data,
+                            &de.get_mut().chunk(),
+                            self.is_chunked,
+                        );
                         de.get_mut().clear();
                         s
                     } else {
@@ -465,7 +489,11 @@ impl RecvStream {
                     de.flush()?;
                     let value = de.into_inner();
                     if value.remaining() > 0 {
-                        Self::inner_encode_data(&mut self.cache_body_data, &value, self.is_chunked)?;
+                        Self::inner_encode_data(
+                            &mut self.cache_body_data,
+                            &value,
+                            self.is_chunked,
+                        )?;
                     }
                     if self.is_chunked {
                         Helper::encode_chunk_data(&mut self.cache_body_data, data)
@@ -478,8 +506,11 @@ impl RecvStream {
                     de.write_all(data).unwrap();
                     // 每次写入，在尝试读取出数据
                     if de.get_mut().remaining() > 0 {
-                        let s =
-                            Self::inner_encode_data(&mut self.cache_body_data, &de.get_mut().chunk(), self.is_chunked);
+                        let s = Self::inner_encode_data(
+                            &mut self.cache_body_data,
+                            &de.get_mut().chunk(),
+                            self.is_chunked,
+                        );
                         de.get_mut().clear();
                         s
                     } else {
@@ -527,11 +558,9 @@ impl RecvStream {
         return Poll::Ready(Ok(has_change));
     }
 
-
-    pub fn process_data(&mut self, 
-        mut cx: Option<&mut Context<'_>>) -> std::io::Result<usize> {
+    pub fn process_data(&mut self, mut cx: Option<&mut Context<'_>>) -> std::io::Result<usize> {
         if self.is_process_end {
-            return Ok(0)
+            return Ok(0);
         }
         let mut size = 0;
         if let Some(bin) = self.binary.take() {
@@ -572,7 +601,10 @@ impl RecvStream {
         Ok(size)
     }
 
-    pub fn read_data<B: webparse::Buf + webparse::BufMut>(&mut self, read_data: &mut B) -> WebResult<usize> {
+    pub fn read_data<B: webparse::Buf + webparse::BufMut>(
+        &mut self,
+        read_data: &mut B,
+    ) -> WebResult<usize> {
         self.process_data(None)?;
 
         let mut size = 0;

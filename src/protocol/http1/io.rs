@@ -145,7 +145,7 @@ where
 
         if let Some(req) = self.inner.req.front_mut() {
             if !self.inner.req_status.is_send_header {
-                HeaderHelper::process_request_header(req)?;
+                // HeaderHelper::process_request_header(req)?;
                 req.encode_header(&mut self.write_buf)?;
                 self.inner.req_status.is_send_header = true;
             }

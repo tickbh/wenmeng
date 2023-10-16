@@ -61,7 +61,8 @@ pub struct SendStream {
     pub read_buf: BinaryMut,
     real_read_buf: BinaryMut,
     cache_body_data: BinaryMut,
-    compress_method: i8,
+    origin_compress_method: i8,
+    now_compress_method: i8,
     is_chunked: bool,
     is_end: bool,
     left_read_body_len: usize,
@@ -77,7 +78,8 @@ impl SendStream {
             read_buf: BinaryMut::new(),
             real_read_buf: BinaryMut::new(),
             cache_body_data: BinaryMut::new(),
-            compress_method: Consts::COMPRESS_METHOD_NONE,
+            origin_compress_method: Consts::COMPRESS_METHOD_NONE,
+            now_compress_method: Consts::COMPRESS_METHOD_NONE,
             is_end: true,
             is_chunked: false,
             left_read_body_len: 0,
@@ -97,7 +99,8 @@ impl SendStream {
         self.is_end = false;
         self.is_chunked = false;
         self.left_read_body_len = 0;
-        self.compress_method = Consts::COMPRESS_METHOD_NONE;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_NONE;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_left_body(&mut self, left_read_body_len: usize) {
@@ -110,48 +113,52 @@ impl SendStream {
     }
 
     
+    pub fn get_now_compress(&self) -> i8 {
+        if self.origin_compress_method > 0 {
+            return self.origin_compress_method
+        } else {
+            self.origin_compress_method + self.now_compress_method
+        }
+    }
+
     pub fn set_compress_gzip(&mut self) {
-        self.compress_method = Consts::COMPRESS_METHOD_GZIP;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_GZIP;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_compress_deflate(&mut self) {
-        self.compress_method = Consts::COMPRESS_METHOD_DEFLATE;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_DEFLATE;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_compress_brotli(&mut self) {
-        self.compress_method = Consts::COMPRESS_METHOD_BROTLI;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_BROTLI;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_compress_origin_gzip(&mut self) {
-        self.compress_method = Consts::COMPRESS_METHOD_ORIGIN_GZIP;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_ORIGIN_GZIP;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_compress_origin_deflate(&mut self) {
-        self.compress_method = Consts::COMPRESS_METHOD_ORIGIN_DEFLATE;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_ORIGIN_DEFLATE;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_compress_origin_brotli(&mut self) {
-        self.compress_method = Consts::COMPRESS_METHOD_ORIGIN_BROTLI;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_ORIGIN_BROTLI;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_compress_method(&mut self, method: i8) {
-        self.compress_method = method;
+        self.origin_compress_method = method;
+        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
-    pub fn add_compress_method(&mut self, method: i8) {
-        self.compress_method += method;
-    }
-
-    fn inner_decode_data<B: webparse::Buf + webparse::BufMut>(
-        buffer: &mut B,
-        data: &[u8],
-        is_chunked: bool,
-    ) -> std::io::Result<usize> {
-        if is_chunked {
-            Helper::encode_chunk_data(buffer, data)
-        } else {
-            Ok(buffer.put_slice(data))
-        }
+    pub fn add_compress_method(&mut self, method: i8) -> i8 {
+        self.now_compress_method = method;
+        self.get_now_compress()
     }
 
     fn read_all_data<R: Read>(cache_buf: &mut Vec<u8>, read_buf: &mut BinaryMut, mut read: R) -> webparse::WebResult<usize> {
@@ -173,11 +180,11 @@ impl SendStream {
         &mut self,
         data: &[u8],
     ) -> webparse::WebResult<usize> {
-        if self.compress_method != 0 && self.cache_buf.len() != 4096 {
+        if self.get_now_compress() != 0 && self.cache_buf.len() != 4096 {
             self.cache_buf.resize(4096, 0);
         }
         // 收到数据进行缓存，只有到结束时才进行解压缩
-        match self.compress_method {
+        match self.get_now_compress() {
             Consts::COMPRESS_METHOD_GZIP => {
                 self.cache_body_data.put_slice(data);
                 if self.is_end {
