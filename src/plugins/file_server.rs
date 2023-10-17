@@ -72,6 +72,11 @@ fn default_root() -> String {
     }
 }
 
+
+fn default_mimetype() -> String {
+    "application/octet-stream".to_string()
+}
+
 fn default_bool_true() -> bool {
     true
 }
@@ -99,6 +104,8 @@ pub struct FileServer {
     pub root: String,
     #[serde(default)]
     pub prefix: String,
+    #[serde(default="default_mimetype")]
+    pub default_mimetype: String,
     #[serde(default="default_hide")]
     pub hide: Vec<String>,
     #[serde(default = "default_index")]
@@ -109,7 +116,7 @@ pub struct FileServer {
     pub precompressed: Vec<String>,
     #[serde(default)]
     pub disable_compress: bool,
-    #[serde(default = "default_bool_true")]
+    #[serde(default)]
     pub browse: bool,
 }
 
@@ -148,6 +155,7 @@ impl FileServer {
             root,
             prefix,
             hide: vec![],
+            default_mimetype: default_mimetype(),
             index: default_index(),
             status: 404,
             precompressed: vec![],
@@ -200,6 +208,7 @@ impl FileServer {
         req: Request<RecvStream>,
     ) -> ProtResult<Response<RecvStream>> {
         let path = req.path().clone();
+        // 无效前缀，无法处理
         if !path.starts_with(&self.prefix) {
             return Ok(self.ret_error_msg("unknow path"));
         }
@@ -207,10 +216,12 @@ impl FileServer {
         let href = "/".to_string() + path.strip_prefix(&self.prefix).unwrap();
         let real_path = self.root.clone() + &href;
         let mut real_path = Path::new(&real_path).to_owned();
+        // 必须保证不会跑出root设置的目录之外，如故意访问`../`之类的
         if !real_path.starts_with(root_path) || self.is_hide_path(root_path.as_ref()) {
             return Ok(self.ret_error_msg("can't view parent file"));
         }
         
+        // 访问路径是目录，尝试是否有index的文件，如果有还是以文件访问
         if real_path.is_dir() {
             for index in &self.index {
                 let new_path = real_path.join(index);
@@ -221,6 +232,7 @@ impl FileServer {
             }
         }
 
+        // 访问为目录，如果启用目录访问，则返回当前的文件夹的内容
         if real_path.is_dir() {
             if !self.browse {
                 return Ok(self.ret_error_msg("can't view parent file"));
@@ -289,7 +301,6 @@ impl FileServer {
             let recv = RecvStream::only(binary.freeze());
             let builder = Response::builder().version(req.version().clone());
             let mut response = builder
-                // .header("Content-Length", length as usize)
                 .header(HeaderName::CONTENT_TYPE, "text/html; charset=utf-8")
                 .body(recv)
                 .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
@@ -298,17 +309,26 @@ impl FileServer {
             }
             return Ok(response);
         } else {
+            // 访问为文件，判断当前的后缀，返回合适的mimetype，如果有合适的预压缩文件，也及时返回
             if self.is_hide_path(path.as_ref()) {
                 return Ok(self.ret_error_msg("can't view file"));
             }
+            // 获取后缀
             let extension = if let Some(s) = real_path.extension() {
                 s.to_string_lossy().to_string()
             } else {
                 String::new()
             };
-            let application = DEFAULT_MIMETYPE.get(&*extension).unwrap_or(&"");
+
+            let application = if let Some(s) = DEFAULT_MIMETYPE.get(&*extension) {
+                s.to_string()
+            } else {
+                self.default_mimetype.to_string()
+            };
+            //查找是否有合适的预压缩文件
             if let Some(accept) = req.headers().get_option_value(&HeaderName::ACCEPT_ENCODING) {
                 for pre in &self.precompressed {
+                    // 得客户端发送支持该格式
                     if !accept.contains(pre.as_bytes()) {
                         continue;
                     }
@@ -318,8 +338,8 @@ impl FileServer {
                         "gzip" => new.as_mut_os_string().push("gz"),
                         "br" => new.as_mut_os_string().push("br"),
                         _ => continue,
-                    }
-                    ;
+                    };
+                    // 如果预压缩文件存在
                     if new.exists() {
                         println!("convert to new file {}", new.to_string_lossy());
                         let file = File::open(new).await?;
@@ -349,12 +369,9 @@ impl FileServer {
             }
 
             let file = File::open(real_path).await?;
-            // let recv = RecvStream::new_file(file, BinaryMut::from(body.into_bytes().to_vec()), false);
             let recv = RecvStream::new_file(file, BinaryMut::new(), false);
-            // recv.set_compress_origin_gzip();
             let builder = Response::builder().version(req.version().clone());
             let mut response = builder
-                // .header("Content-Length", length as usize)
                 .header(
                     HeaderName::CONTENT_TYPE,
                     format!("{}; charset=utf-8", application),
@@ -370,10 +387,3 @@ impl FileServer {
     }
 }
 
-// impl PluginTrait for FileServer {
-//     type NextFuture = dyn Future<Output = ProtResult<Option<Response<RecvStream>>>>;
-
-//     fn deal_request(req: webparse::Request<crate::RecvStream>) -> Self::NextFuture {
-//         todo!()
-//     }
-// }
