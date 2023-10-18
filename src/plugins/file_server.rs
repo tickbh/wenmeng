@@ -61,17 +61,20 @@ lazy_static! {
         m.insert("avi", "video/x-msvideo");
         m
     };
+
+    static ref CURRENT_DIR: String = {
+        if let Ok(path) = std::env::current_dir() {
+            path.to_string_lossy().to_string()
+         } else {
+             String::new()
+         }
+    };
 }
 
 
 fn default_root() -> String {
-    if let Ok(path) = std::env::current_dir() {
-       path.to_string_lossy().to_string()
-    } else {
-        String::new()
-    }
+    CURRENT_DIR.to_string()
 }
-
 
 fn default_mimetype() -> String {
     "application/octet-stream".to_string()
