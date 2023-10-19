@@ -165,19 +165,20 @@ impl FileServer {
             disable_compress: false,
             browse: true,
         };
-        config.fix_default();
         config
     }
 
-    pub fn fix_default(&mut self) {
+    pub fn pre_deal_request(&mut self) {
         if self.root.is_empty() {
-            if let Ok(path) = std::env::current_dir() {
-                self.root = path.to_string_lossy().to_string();
-            }
+            self.root = CURRENT_DIR.clone();
         }
         if self.prefix.ends_with("/") {
             self.prefix = self.prefix.strip_suffix("/").unwrap().to_string();
         }
+    }
+
+    pub fn set_prefix(&mut self, prefix: String) {
+        self.prefix = prefix;
     }
 
     pub fn set_browse(&mut self, browse: bool) {
@@ -207,9 +208,10 @@ impl FileServer {
     }
 
     pub async fn deal_request(
-        &self,
+        &mut self,
         req: Request<RecvStream>,
     ) -> ProtResult<Response<RecvStream>> {
+        self.pre_deal_request();
         let path = req.path().clone();
         // 无效前缀，无法处理
         if !path.starts_with(&self.prefix) {

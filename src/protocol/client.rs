@@ -5,18 +5,17 @@ use std::sync::Arc;
 use crate::http2::{self, ClientH2Connection};
 use crate::{http1::ClientH1Connection, ProtError};
 use crate::{ProtResult, RecvStream};
-use rustls::{RootCertStore, ClientConfig};
+use rustls::{ClientConfig, RootCertStore};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
-use tokio_rustls::TlsConnector;
 use tokio_rustls::client::TlsStream;
+use tokio_rustls::TlsConnector;
 use webparse::http2::frame::Settings;
 use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
 use webparse::{Binary, Request, Response, Url};
-
 
 #[derive(Debug)]
 pub struct Builder {
@@ -36,7 +35,7 @@ impl Builder {
             Ok(v)
         })
     }
-    
+
     pub fn http2(self, http2: bool) -> Self {
         self.and_then(move |mut v| {
             v.http2 = http2;
@@ -58,7 +57,9 @@ impl Builder {
     }
 
     pub async fn connect<T>(self, url: T) -> ProtResult<Client<TcpStream>>
-    where T: TryInto<Url> {
+    where
+        T: TryInto<Url>,
+    {
         let url = TryInto::<Url>::try_into(url);
         println!("url = {:?}", url.as_ref().ok());
         if url.is_err() {
@@ -70,7 +71,9 @@ impl Builder {
     }
 
     pub async fn connect_tls<T>(self, url: T) -> ProtResult<Client<TlsStream<TcpStream>>>
-    where T: TryInto<Url> {
+    where
+        T: TryInto<Url>,
+    {
         let mut option = self.inner?;
         let url = TryInto::<Url>::try_into(url);
         if url.is_err() {
@@ -85,17 +88,13 @@ impl Builder {
             println!("domain = {:?}", domain);
             println!("connect = {:?}", connect);
             let mut root_store = RootCertStore::empty();
-            root_store.add_trust_anchors(
-                webpki_roots::TLS_SERVER_ROOTS
-                    .iter()
-                    .map(|ta| {
-                        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-                            ta.subject,
-                            ta.spki,
-                            ta.name_constraints,
-                        )
-                    }),
-            );
+            root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
+                rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                    ta.subject,
+                    ta.spki,
+                    ta.name_constraints,
+                )
+            }));
             let mut config = ClientConfig::builder()
                 .with_safe_defaults()
                 .with_root_certificates(root_store)
@@ -106,9 +105,8 @@ impl Builder {
 
             let stream = TcpStream::connect(&connect.unwrap()).await?;
             // 这里的域名只为认证设置
-            let domain =
-                rustls::ServerName::try_from(&*domain.unwrap())
-                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
+            let domain = rustls::ServerName::try_from(&*domain.unwrap())
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
 
             let outbound = connector.connect(domain, stream).await?;
             let aa = outbound.get_ref().1.alpn_protocol();
@@ -236,30 +234,39 @@ where
     }
 
     pub async fn wait_operate(mut self) -> ProtResult<()> {
-        async fn http1_wait<T>(connection: &mut Option<ClientH1Connection<T>>) -> Option<ProtResult<Option<Response<RecvStream>>>>
-        where T: AsyncRead + AsyncWrite + Unpin {
-            if connection.is_some() {
-                Some(connection.as_mut().unwrap().incoming().await)
-            } else {
-                let pend = std::future::pending();
-                let () = pend.await;
-                None
-            }
-        }
-        
-        async fn http2_wait<T>(connection: &mut Option<ClientH2Connection<T>>) -> Option<ProtResult<Option<Response<RecvStream>>>>
-        where T: AsyncRead + AsyncWrite + Unpin {
-            if connection.is_some() {
-                Some(connection.as_mut().unwrap().incoming().await)
-            } else {
-                let pend = std::future::pending();
-                let () = pend.await;
-                None
-            }
-        }
-        
-        async fn req_receiver(req_receiver: &mut Option<Receiver<Request<RecvStream>>>) -> Option<Request<RecvStream>>
+        async fn http1_wait<T>(
+            connection: &mut Option<ClientH1Connection<T>>,
+        ) -> Option<ProtResult<Option<Response<RecvStream>>>>
+        where
+            T: AsyncRead + AsyncWrite + Unpin,
         {
+            if connection.is_some() {
+                Some(connection.as_mut().unwrap().incoming().await)
+            } else {
+                let pend = std::future::pending();
+                let () = pend.await;
+                None
+            }
+        }
+
+        async fn http2_wait<T>(
+            connection: &mut Option<ClientH2Connection<T>>,
+        ) -> Option<ProtResult<Option<Response<RecvStream>>>>
+        where
+            T: AsyncRead + AsyncWrite + Unpin,
+        {
+            if connection.is_some() {
+                Some(connection.as_mut().unwrap().incoming().await)
+            } else {
+                let pend = std::future::pending();
+                let () = pend.await;
+                None
+            }
+        }
+
+        async fn req_receiver(
+            req_receiver: &mut Option<Receiver<Request<RecvStream>>>,
+        ) -> Option<Request<RecvStream>> {
             if req_receiver.is_some() {
                 req_receiver.as_mut().unwrap().recv().await
             } else {
@@ -352,6 +359,21 @@ where
             println!("errr = {:?}", e);
         });
         Ok((r, s))
+    }
+
+    pub async fn send_now(
+        mut self,
+        mut req: Request<RecvStream>,
+    ) -> ProtResult<Response<RecvStream>> {
+        self.rebuild_request(&mut req);
+        let (mut r, _) = self.split()?;
+        // let _ = self.operate(req).await;
+        self.inner_operate(req).await?;
+        if let Some(s) = r.recv().await {
+            return Ok(s);
+        } else {
+            return Err(ProtError::Extension("unknow response"));
+        }
     }
 
     pub async fn recv(&mut self) -> ProtResult<Response<RecvStream>> {

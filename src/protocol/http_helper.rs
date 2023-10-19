@@ -49,8 +49,8 @@ impl HttpHelper {
         match f(r.into_type::<Req>()).await {
             Ok(res) => {
                 let mut res = res.into_type::<RecvStream>();
-                // 如果外部有设置编码，内部不做改变
-                if res.headers_mut().get_option_value(&HeaderName::CONTENT_ENCODING).is_none() && (!res.body().is_end() || res.body_mut().origin_len() > 1024) {
+                // 如果外部有设置编码，内部不做改变，如果有body大小值，不做任何改变，因为改变会变更大小值
+                if res.get_body_len() == 0 && res.headers_mut().get_option_value(&HeaderName::CONTENT_ENCODING).is_none() && (!res.body().is_end() || res.body_mut().origin_len() > 1024) {
                     if gzip {
                         res.headers_mut().insert(HeaderName::CONTENT_ENCODING, "gzip");
                     } else if br {
