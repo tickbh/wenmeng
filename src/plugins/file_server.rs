@@ -103,8 +103,8 @@ fn default_precompressed() -> Vec<String> {
 /// 代理类, 一个代理类启动一种类型的代理
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FileServer {
-    #[serde(default = "default_root")]
-    pub root: String,
+    // #[serde(default = "default_root")]
+    pub root: Option<String>,
     #[serde(default)]
     pub prefix: String,
     #[serde(default="default_mimetype")]
@@ -155,7 +155,7 @@ i.icon-zip {
 impl FileServer {
     pub fn new(root: String, prefix: String) -> Self {
         let mut config = Self {
-            root,
+            root: None,
             prefix,
             hide: vec![],
             default_mimetype: default_mimetype(),
@@ -165,13 +165,11 @@ impl FileServer {
             disable_compress: false,
             browse: true,
         };
+        config.fix_default();
         config
     }
 
-    pub fn pre_deal_request(&mut self) {
-        if self.root.is_empty() {
-            self.root = CURRENT_DIR.clone();
-        }
+    pub fn fix_default(&mut self) {
         if self.prefix.ends_with("/") {
             self.prefix = self.prefix.strip_suffix("/").unwrap().to_string();
         }
@@ -179,6 +177,7 @@ impl FileServer {
 
     pub fn set_prefix(&mut self, prefix: String) {
         self.prefix = prefix;
+        self.fix_default();
     }
 
     pub fn set_browse(&mut self, browse: bool) {
@@ -208,18 +207,18 @@ impl FileServer {
     }
 
     pub async fn deal_request(
-        &mut self,
+        &self,
         req: Request<RecvStream>,
     ) -> ProtResult<Response<RecvStream>> {
-        self.pre_deal_request();
         let path = req.path().clone();
         // 无效前缀，无法处理
         if !path.starts_with(&self.prefix) {
             return Ok(self.ret_error_msg("unknow path"));
         }
-        let root_path = Path::new(&self.root);
+        let root = self.root.clone().unwrap_or(CURRENT_DIR.clone());
+        let root_path = Path::new(&root);
         let href = "/".to_string() + path.strip_prefix(&self.prefix).unwrap();
-        let real_path = self.root.clone() + &href;
+        let real_path = root.clone() + &href;
         let mut real_path = Path::new(&real_path).to_owned();
         // 必须保证不会跑出root设置的目录之外，如故意访问`../`之类的
         if !real_path.starts_with(root_path) || self.is_hide_path(root_path.as_ref()) {

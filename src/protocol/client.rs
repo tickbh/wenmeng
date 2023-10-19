@@ -56,6 +56,10 @@ impl Builder {
         self.inner
     }
 
+    pub async fn connect_by_stream(self, stream: TcpStream) -> ProtResult<Client<TcpStream>> {
+        Ok(Client::<TcpStream>::new(self.inner?, stream))
+    }
+
     pub async fn connect<T>(self, url: T) -> ProtResult<Client<TcpStream>>
     where
         T: TryInto<Url>,
@@ -67,6 +71,63 @@ impl Builder {
         } else {
             let tcp = TcpStream::connect(url.ok().unwrap().get_connect_url().unwrap()).await?;
             Ok(Client::<TcpStream>::new(self.inner?, tcp))
+        }
+    }
+
+    pub async fn connect_tls_by_stream<T>(
+        self,
+        stream: TcpStream,
+        url: T,
+    ) -> ProtResult<Client<TlsStream<TcpStream>>>
+    where
+        T: TryInto<Url>,
+    {
+        let mut option = self.inner?;
+        let url = TryInto::<Url>::try_into(url);
+        if url.is_err() {
+            return Err(ProtError::Extension("unknown connection url"));
+        } else {
+            let url = url.ok().unwrap();
+            let connect = url.get_connect_url();
+            let domain = url.domain;
+            if domain.is_none() || connect.is_none() {
+                return Err(ProtError::Extension("unknown connection domain"));
+            }
+            println!("domain = {:?}", domain);
+            println!("connect = {:?}", connect);
+            let mut root_store = RootCertStore::empty();
+            root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
+                rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                    ta.subject,
+                    ta.spki,
+                    ta.name_constraints,
+                )
+            }));
+            let mut config = ClientConfig::builder()
+                .with_safe_defaults()
+                .with_root_certificates(root_store)
+                .with_no_client_auth();
+            config.alpn_protocols = option.get_alpn_protocol();
+            let tls_client = Arc::new(config);
+            let connector = TlsConnector::from(tls_client);
+
+            // 这里的域名只为认证设置
+            let domain = rustls::ServerName::try_from(&*domain.unwrap())
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
+
+            let outbound = connector.connect(domain, stream).await?;
+            let aa = outbound.get_ref().1.alpn_protocol();
+            if aa.is_none() {
+                return Err(ProtError::Extension("not support protocol"));
+            }
+
+            if aa == Some(&ClientOption::H2_PROTOCOL) {
+                option.http2_only = true;
+            }
+
+            println!("aaaaaaaaaaa == {:?}", aa);
+            println!("aaaaaaaaaaa == {:?}", String::from_utf8_lossy(aa.unwrap()));
+            Ok(Client::new(option, outbound))
         }
     }
 
