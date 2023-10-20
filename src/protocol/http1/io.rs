@@ -254,6 +254,7 @@ where
 
                     if self.inner.req_status.is_read_finish {
                         self.inner.req_status.clear_read();
+                        self.send_stream.set_end_headers(false);
                     }
                     // 如果还有数据可能是keep-alive继续读取头信息
                     if self.send_stream.read_buf.is_empty() && !self.inner.req_status.is_read_header_end {
@@ -312,6 +313,7 @@ where
                 if recv.is_end() {
                     println!("read end !!!!!!!!!!!!!!");
                     self.inner.req_status.clear_read();
+                    self.send_stream.set_end_headers(false);
                 }
                 self.inner.read_sender = sender;
                 return Poll::Ready(Some(Ok(request.into(recv).0)));

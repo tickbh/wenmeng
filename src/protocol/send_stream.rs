@@ -65,6 +65,7 @@ pub struct SendStream {
     now_compress_method: i8,
     is_chunked: bool,
     is_end: bool,
+    is_end_headers: bool,
     left_read_body_len: usize,
     left_chunk_len: usize,
     cache_buf: Vec<u8>,
@@ -81,6 +82,7 @@ impl SendStream {
             origin_compress_method: Consts::COMPRESS_METHOD_NONE,
             now_compress_method: Consts::COMPRESS_METHOD_NONE,
             is_end: true,
+            is_end_headers: false,
             is_chunked: false,
             left_read_body_len: 0,
             left_chunk_len: 0,
@@ -96,6 +98,7 @@ impl SendStream {
     }
 
     pub fn set_new_body(&mut self) {
+        self.is_end_headers = true;
         self.is_end = false;
         self.is_chunked = false;
         self.left_read_body_len = 0;
@@ -110,6 +113,11 @@ impl SendStream {
 
     pub fn set_chunked(&mut self, chunked: bool) {
         self.is_chunked = chunked;
+    }
+
+    
+    pub fn set_end_headers(&mut self, is_end_headers: bool) {
+        self.is_end_headers = is_end_headers;
     }
 
     
@@ -229,6 +237,10 @@ impl SendStream {
     }
 
     pub fn process_data(&mut self) -> ProtResult<()> {
+        // 头部数据不做处理
+        if !self.is_end_headers {
+            return Ok(())
+        }
         loop {
             if self.is_chunked {
                 if self.is_end {
