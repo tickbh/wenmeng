@@ -115,10 +115,6 @@ impl Control {
         let vals = self.request_queue.drain(..).collect::<Vec<SendRequest>>();
         for mut l in vals {
             let (isend, vec) = l.encode_frames(cx);
-
-            for v in &vec {
-                println!("vec = {:?}", v);
-            }
             self.send_frames.send_frames(l.stream_id, vec)?;
             if !isend {
                 self.request_queue.push(l);

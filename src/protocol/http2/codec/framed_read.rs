@@ -66,7 +66,6 @@ where
     pub fn set_cache_buf(&mut self, read_buf: BinaryMut) {
         self.inner.read_buffer_mut().put_slice(read_buf.chunk());
     }
-
 }
 
 impl<T> AsyncRead for FramedRead<T>
@@ -99,6 +98,7 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
         loop {
+            use bytes::Buf;
             let bytes = match ready!(Pin::new(&mut self.inner).poll_next(cx)) {
                 Some(Ok(bytes)) => bytes,
                 Some(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
@@ -111,9 +111,11 @@ where
                 ref mut partial,
                 ..
             } = *self;
+
+            println!("chunk = {:?}", bytes.chunk());
             
             if let Some(frame) = decode_frame(decoder, max_header_list_size, partial, bytes)? {
-                println!("read frame = {:?}", frame);
+                log::trace!("HTTP2:收到帧数据: {:?}", frame);
                 return Poll::Ready(Some(Ok(frame)));
             }
         }

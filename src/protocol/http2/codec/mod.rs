@@ -91,7 +91,7 @@ where
     }
 
     pub fn send_frame(&mut self, frame: Frame) -> ProtResult<usize> {
-        println!("send frame = {:?}", frame);
+        log::trace!("HTTP2:发送帧数据: {:?}", frame);
         let mut encoder = Encoder::new_index(self.header_index.clone(), self.max_send_frame_size);
         let usize = frame.encode(self.framed_write().get_bytes(), &mut encoder)?;
         Ok(usize)
