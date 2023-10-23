@@ -65,7 +65,6 @@ impl Builder {
         T: TryInto<Url>,
     {
         let url = TryInto::<Url>::try_into(url);
-        println!("url = {:?}", url.as_ref().ok());
         if url.is_err() {
             return Err(ProtError::Extension("unknown connection url"));
         } else {
@@ -346,7 +345,6 @@ where
                     r
                 }
                 req = req_receiver(&mut self.req_receiver) => {
-                    println!("cccc");
                     if let Some(req) = req {
                         self.send_req(req).await?;
                     } else {
@@ -401,9 +399,9 @@ where
         self.rebuild_request(&mut req);
         let (r, _s) = self.split()?;
         tokio::spawn(async move {
-            // let _ = self.operate(req).await;
-            let e = self.inner_operate(req).await;
-            println!("errr = {:?}", e);
+            if let Err(e) = self.inner_operate(req).await {
+                println!("http数据请求时发生错误: {:?}", e);
+            }
         });
         Ok(r)
     }
@@ -415,9 +413,9 @@ where
         self.rebuild_request(&mut req);
         let (r, s) = self.split()?;
         tokio::spawn(async move {
-            // let _ = self.operate(req).await;
-            let e = self.inner_operate(req).await;
-            println!("errr = {:?}", e);
+            if let Err(e) = self.inner_operate(req).await {
+                println!("http数据请求时发生错误: {:?}", e);
+            }
         });
         Ok((r, s))
     }

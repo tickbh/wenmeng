@@ -171,10 +171,8 @@ where
             return Poll::Ready(Ok(0));
         }
 
-        println!("aaaaaaaaaaaaaaa {:?}", std::time::Instant::now());
         match ready!(Pin::new(&mut self.io).poll_write(cx, &self.write_buf.chunk()))? {
             n => {
-                println!("bbbbbbbbbbbbbbbbbb = {} {:?}", n, std::time::Instant::now());
                 self.write_buf.advance(n);
                 if self.write_buf.is_empty() {
                     return Poll::Ready(Ok(n));
@@ -311,7 +309,6 @@ where
                 let (recv, sender) =
                     Self::build_recv_stream(&mut self.inner.res_status, &mut self.send_stream)?;
                 if recv.is_end() {
-                    println!("read end !!!!!!!!!!!!!!");
                     self.inner.req_status.clear_read();
                     self.send_stream.set_end_headers(false);
                 }
@@ -387,7 +384,6 @@ where
         match ready!(self.poll_read_all(cx)?) {
             // 收到新的消息头, 解析包体消息
             n @ _ => {
-                println!("read size = {}", n);
                 if n == 0 {
                     self.inner.is_delay_close = true;
                 }
@@ -448,11 +444,9 @@ where
                         self.inner.res_status.is_chunked = true;
                     }
                 }
-                println!("body len = {:?}", self.inner.res_status.left_read_body_len);
                 let (recv, sender) =
                     Self::build_recv_stream(&mut self.inner.res_status, &mut self.send_stream)?;
                 if recv.is_end() {
-                    println!("read end !!!!!!!!!!!!!!");
                     self.inner.res_status.clear_read();
                 }
                 self.inner.read_sender = sender;
