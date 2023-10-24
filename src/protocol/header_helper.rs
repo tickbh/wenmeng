@@ -157,14 +157,14 @@ impl HeaderHelper {
         let compress = Self::get_compress_method(headers);
         let compress = body.add_compress_method(compress);
 
-        let is_chunked = headers.is_chunked();
-        body.set_chunked(is_chunked);
-        let header_body_len = headers.get_body_len();
         if version.is_http2() {
             headers.remove(&HeaderName::TRANSFER_ENCODING);
             headers.remove(&HeaderName::CONNECTION);
             headers.remove(&"Keep-Alive");
         }
+        let is_chunked = headers.is_chunked();
+        body.set_chunked(is_chunked);
+        let header_body_len = headers.get_body_len();
         if compress == Consts::COMPRESS_METHOD_NONE {
             if !is_chunked && header_body_len == 0 && body.is_end() {
                 body.process_data(None)?;

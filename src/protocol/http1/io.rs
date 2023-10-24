@@ -325,42 +325,23 @@ where
         } else {
             &mut self.inner.res_status
         };
-        if status.is_chunked {
-            if let Some(sender) = &self.inner.read_sender {
-                loop {
-                    match sender.try_reserve() {
-                        Ok(p) => {
-                            let mut read_data = BinaryMut::new();
-                            match self.send_stream.read_data(&mut read_data)? {
-                                0 => return Ok(false),
-                                _ => {
-                                    p.send((self.send_stream.is_end(), read_data.freeze()));
-                                    status.is_read_finish = self.send_stream.is_end();
-                                }
+        if let Some(sender) = &self.inner.read_sender {
+            loop {
+                match sender.try_reserve() {
+                    Ok(p) => {
+                        let mut read_data = BinaryMut::new();
+                        match self.send_stream.read_data(&mut read_data)? {
+                            0 => return Ok(false),
+                            _ => {
+                                p.send((self.send_stream.is_end(), read_data.freeze()));
+                                status.is_read_finish = self.send_stream.is_end();
                             }
                         }
-                        Err(_) => return Err(ProtError::Extension("sender error")),
                     }
+                    Err(_) => return Err(ProtError::Extension("sender error")),
                 }
             }
-        } else {
-            if let Some(sender) = self.inner.read_sender.take() {
-                if let Ok(p) = sender.try_reserve() {
-                    let binary = Binary::from(self.send_stream.read_buf.chunk().to_vec());
-                    let is_end = if is_req {
-                        Self::receive_body_len(status, binary.len())
-                    } else {
-                        Self::receive_body_len(status, binary.len())
-                    };
-                    p.send((is_end, binary));
-                    self.send_stream.read_buf.advance_all();
-                    self.send_stream.read_buf.clear();
-                    status.is_read_finish = is_end;
-                }
-                self.inner.read_sender = Some(sender);
-            }
-        };
-
+        }
         if self.inner.is_active_close() && self.write_buf.is_empty() {
             println!("ddddd");
             return Ok(true);
