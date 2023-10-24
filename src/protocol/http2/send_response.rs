@@ -4,7 +4,7 @@ use webparse::http::http2::frame::PushPromise;
 
 use std::task::Context;
 use tokio::sync::mpsc::{Sender};
-use webparse::{BinaryMut, Buf, HeaderMap, HeaderValue};
+use webparse::{BinaryMut, Buf, HeaderMap, HeaderValue, HeaderName};
 use webparse::{
     http::http2::{
         frame::{
@@ -49,13 +49,20 @@ impl SendResponse {
         }
     }
 
-    pub fn encode_headers(response: & Response<RecvStream>) -> HeaderMap {
+    pub fn encode_headers(response: & Response<RecvStream>) -> (HeaderMap, bool) {
         let mut headers = HeaderMap::new();
+        let mut is_end = false;
         headers.insert(":status", HeaderValue::from_static(response.status().as_str()));
         for h in response.headers().iter() {
+            // if h.0 != HeaderName::TRANSFER_ENCODING {
+            //     headers.insert(h.0.clone(), h.1.clone());
+            // }
             headers.insert(h.0.clone(), h.1.clone());
+            if h.0 == HeaderName::CONTENT_LENGTH && TryInto::<isize>::try_into(&h.1).unwrap_or(0) == 0{
+                is_end = true;
+            }
         }
-        headers
+        (headers, is_end)
     }
 
     pub fn encode_frames(&mut self, cx: &mut Context) -> (bool, Vec<Frame<Binary>>) {
@@ -63,16 +70,23 @@ impl SendResponse {
         if !self.encode_header {
             if let Some(push_id) = &self.push_id {
                 let header = FrameHeader::new(Kind::PushPromise, Flag::end_headers(), self.stream_id);
-                let fields = Self::encode_headers(&self.response);
+                let (fields, is_end) = Self::encode_headers(&self.response);
+                
                 let mut push = PushPromise::new(header, push_id.clone(), fields);
+                if is_end {
+                    push.flags_mut().set_end_stream();
+                }
                 push.set_status(self.response.status());
                 result.push(Frame::PushPromise(push));
                 self.stream_id = push_id.clone();
                 self.encode_header = true;
             } else {
                 let header = FrameHeader::new(Kind::Headers, Flag::end_headers(), self.stream_id);
-                let fields = Self::encode_headers(&self.response);
+                let (fields, is_end) = Self::encode_headers(&self.response);
                 let mut header = Headers::new(header, fields);
+                if is_end {
+                    header.flags_mut().set_end_stream();
+                }
                 header.set_status(self.response.status());
                 result.push(Frame::Headers(header));
                 self.encode_header = true;

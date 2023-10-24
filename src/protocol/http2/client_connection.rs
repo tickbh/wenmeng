@@ -10,7 +10,7 @@ use tokio::{
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
-    Binary, BinaryMut, Request, Response, Serialize, http2::frame::Settings,
+    Binary, BinaryMut, Request, Response, Serialize, http2::frame::Settings, Version,
 };
 
 use crate::{
@@ -119,7 +119,7 @@ where
         match f(r.into_type::<Req>()).await? {
             Some(res) => {
                 let mut res = res.into_type();
-                HeaderHelper::process_response_header(&mut res)?;
+                HeaderHelper::process_response_header(Version::Http2, &mut res)?;
                 self.send_response(
                     res,
                     stream_id.unwrap_or(StreamIdentifier::client_first()),

@@ -61,7 +61,7 @@ where
             inner,
             header_index: Arc::new(RwLock::new(HeaderIndex::new())),
             header_table_size: DEFAULT_SETTINGS_HEADER_TABLE_SIZE,
-            max_send_frame_size: MAX_MAX_FRAME_SIZE as usize,
+            max_send_frame_size: DEFAULT_MAX_FRAME_SIZE as usize,
         }
     }
 
@@ -99,6 +99,10 @@ where
 
     pub fn set_send_header_table_size(&mut self, size: usize) {
         self.header_table_size = size;
+        if let Ok(mut header) = self.header_index.write() {
+            header.set_max_table_size(size);
+        }
+
     }
     
     pub fn set_max_send_frame_size(&mut self, size: usize) {

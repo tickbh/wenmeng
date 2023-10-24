@@ -56,7 +56,6 @@ impl StateSettings {
         let mut is_wait = true;
         match &self.state {
             LocalState::Send(settings) => {
-                println!("send settings");
                 codec.send_frame(Frame::Settings(settings.clone()))?;
                 self.state = LocalState::WaitAck(settings.clone());
             }
@@ -64,12 +63,10 @@ impl StateSettings {
             LocalState::Done => is_wait = false,
         };
 
-        println!("send aself.remote = {:?}", self.remote);
         if let Some(settings) = &self.remote {
             if !codec.poll_ready(cx)?.is_ready() {
                 return Poll::Pending;
             }
-            println!("send ack!!!!!!!!! settings");
             let frame = Settings::ack();
             codec.send_frame(Frame::Settings(frame))?;
 

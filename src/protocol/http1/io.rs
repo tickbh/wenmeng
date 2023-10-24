@@ -10,7 +10,7 @@ use tokio::{
 
 use crate::{ProtError, ProtResult, RecvStream, HeaderHelper, SendStream};
 use webparse::{
-    http::http2, Binary, BinaryMut, Buf, BufMut, Request, Response,
+    http::http2, Binary, BinaryMut, Buf, BufMut, Request, Response, Version,
 };
 
 pub struct IoBuffer<T> {
@@ -120,7 +120,7 @@ where
         if let Some(res) = self.inner.res.front_mut() {
             if !self.inner.res_status.is_send_header {
                 self.inner.res_status.is_chunked = res.headers().is_chunked();
-                HeaderHelper::process_response_header(res)?;
+                HeaderHelper::process_response_header(Version::Http11, res)?;
                 res.encode_header(&mut self.write_buf)?;
                 self.inner.res_status.is_send_header = true;
             }

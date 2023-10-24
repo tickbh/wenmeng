@@ -16,12 +16,12 @@ use tokio::{
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
-    Binary, BinaryMut, Request, Response, Serialize,
+    Binary, BinaryMut, Request, Response, Serialize, Version,
 };
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, Initiator, RecvStream, HttpHelper,
+    Builder, Initiator, RecvStream, HttpHelper, HeaderHelper,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -228,9 +228,10 @@ where
 
     pub async fn send_response(
         &mut self,
-        res: Response<RecvStream>,
+        mut res: Response<RecvStream>,
         stream_id: StreamIdentifier,
     ) -> ProtResult<()> {
+        HeaderHelper::process_response_header(Version::Http2, &mut res)?;
         self.inner.control.send_response(res, stream_id).await
     }
 }
