@@ -19,16 +19,31 @@ where
     addr: Option<SocketAddr>,
 }
 
+impl<T> Server<T, ()>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
+    pub fn new(io: T, addr: Option<SocketAddr>) -> Self {
+        Self {
+            http1: Some(ServerH1Connection::new(io)),
+            http2: None,
+            data: Arc::new(Mutex::new(())),
+            addr,
+        }
+    }
+}
+
 impl<T, D> Server<T, D>
 where
     T: AsyncRead + AsyncWrite + Unpin,
     D: std::marker::Send + 'static
 {
-    pub fn new(io: T, addr: Option<SocketAddr>, data: D) -> Self {
+    
+    pub fn new_data(io: T, addr: Option<SocketAddr>, data: Arc<Mutex<D>>) -> Self {
         Self {
             http1: Some(ServerH1Connection::new(io)),
             http2: None,
-            data: Arc::new(Mutex::new(data)),
+            data,
             addr,
         }
     }
