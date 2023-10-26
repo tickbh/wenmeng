@@ -59,9 +59,6 @@ impl SendRequest {
                 headers.insert(h.0.clone(), h.1.clone());
             }
         }
-        for h in headers.iter() {
-            println!("{}: {}", h.0, h.1);
-        }
         headers
     }
 

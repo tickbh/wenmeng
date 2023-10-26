@@ -13,7 +13,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     loop {
         let (stream, addr) = server.accept().await?;
         tokio::spawn(async move {
-            let mut server = Server::new(stream, Some(addr), ());
+            let mut server = Server::new(stream, Some(addr));
             async fn operate(req: Request<RecvStream>) -> ProtResult<Response<String>> {
                 let response = Response::builder()
                     .version(req.version().clone())

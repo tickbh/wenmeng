@@ -108,7 +108,6 @@ impl HeaderHelper {
         if value.as_bytes()[0] == b'$' {
             if request.is_some() {
                 if let Some(convert) = request.as_mut().unwrap().headers_mut().system_get(&value) {
-                    println!("get {} convert {}", value, convert);
                     return convert.to_string();
                 } else {
                     match &*value {
@@ -116,7 +115,6 @@ impl HeaderHelper {
                             return request.as_ref().unwrap().get_host().unwrap_or(String::new());
                         }
                         "$url" => {
-                            println!("get {} convert {}", value, format!("{}", request.as_ref().unwrap().url()));
                             return format!("{}", request.as_ref().unwrap().url());
                         }
                         _ => {
@@ -126,7 +124,6 @@ impl HeaderHelper {
                 }
             } else {
                 if let Some(convert) = response.as_mut().unwrap().headers_mut().system_get(&value) {
-                    println!("get {} convert {}", value, convert);
                     return convert.to_string();
                 } else {
                     match &*value {

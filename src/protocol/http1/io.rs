@@ -242,11 +242,7 @@ where
                 return Poll::Ready(None);
             }
             // 收到新的消息头, 解析包体消息
-            n @ _ => {
-                if self.inner.req_status.is_read_header_end {
-                    println!("xxxxxxxxxxx");
-                }
-                println!("poll request read = {:?} header = {:?}", n, self.inner.req_status.is_read_header_end);
+            _n @ _ => {
                 if self.inner.req_status.is_read_header_end {
                     self.do_deal_body(true)?;
 
@@ -290,7 +286,6 @@ where
                 self.inner.req_status.is_send_body = false;
                 self.inner.req_status.is_send_finish = false;
                 self.inner.req_status.is_read_header_end = true;
-                println!("poll request read... header = {}", self.inner.req_status.is_read_header_end);
                 self.inner.is_keep_alive = request.is_keep_alive();
                 let body_len = request.get_body_len();
                 self.inner.req_status.left_read_body_len = if body_len < 0 {
@@ -304,7 +299,6 @@ where
                         self.inner.req_status.is_chunked = true;
                     }
                 }
-                println!("body len = {:?}", self.inner.req_status.left_read_body_len);
 
                 let (recv, sender) =
                     Self::build_recv_stream(&mut self.inner.res_status, &mut self.send_stream)?;
@@ -343,10 +337,8 @@ where
             }
         }
         if self.inner.is_active_close() && self.write_buf.is_empty() {
-            println!("ddddd");
             return Ok(true);
         }
-        println!("aaa");
         if self.inner.is_delay_close {
             return Ok(true);
         } else {

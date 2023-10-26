@@ -5,7 +5,7 @@ use std::{
 
 use futures_core::{Stream};
 use tokio::{io::{AsyncRead, AsyncWrite}};
-use webparse::{Binary, Request, Response, http2::{HTTP2_MAGIC, frame::Settings}, Buf};
+use webparse::{Binary, Request, Response, http2::{HTTP2_MAGIC, frame::Settings}};
 
 use crate::{ProtResult, RecvStream, http2::ClientH2Connection};
 
@@ -41,8 +41,6 @@ where
     pub fn into_h2(self, settings: Settings) -> ClientH2Connection<T> {
         let (io, read_buf, write_buf) = self.io.into();
         let mut connect = crate::http2::Builder::new().client_connection(io);
-
-        println!("read buf == {:?}", read_buf.remaining());
         connect.set_cache_buf(read_buf, write_buf);
         connect.set_handshake_status(Binary::from_static(HTTP2_MAGIC));
         connect.set_setting_status(settings, false);

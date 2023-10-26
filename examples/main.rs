@@ -211,7 +211,7 @@ async fn operate(mut req: Request<RecvStream>) -> ProtResult<Response<RecvStream
 async fn process(stream: TcpStream, addr: SocketAddr) -> Result<(), Box<dyn Error>> {
     // let mut connect = StateHandshake::handshake(stream).await.unwrap();
     // let mut connect = dmeng::Builder::new().connection(stream);
-    let mut server = Server::new(stream, Some(addr), ());
+    let mut server = Server::new(stream, Some(addr));
     let ret = server.incoming(operate).await;
     println!("end!!!!!!?????????????????? {:?}", ret);
     Ok(())

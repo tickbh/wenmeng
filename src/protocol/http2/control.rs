@@ -230,7 +230,6 @@ impl Control {
         ready!(self.handshake.poll_handle(cx, codec))?;
         loop {
             let is_wait = ready!(self.setting.poll_handle(cx, codec, &mut self.config))?;
-            println!("is wait = {}", is_wait);
             // 写入如果pending不直接pending, 等尝试读pending则返回
             match self.poll_write(cx, codec, is_wait) {
                 Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e))),
@@ -242,9 +241,6 @@ impl Control {
                         Frame::Settings(settings) => {
                             let _finish = self.setting
                                 .recv_setting(codec, settings.clone(), &mut self.config)?;
-                            // if finish {
-                            //     codec.send_frame(Frame::WindowUpdate(WindowUpdate::new(0.into(), 33333)))?;
-                            // }
                         }
                         Frame::Data(_) => {
                             let _ = self.recv_frame(frame)?;
@@ -417,7 +413,6 @@ impl Control {
 
     pub async fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()>
     {
-        println!("send request ==== {:?}", req);
         let is_end = req.body().is_end();
         let next_id = self.next_stream_id();
         self.request_queue.push(SendRequest::new(next_id, req, is_end));
