@@ -3,7 +3,7 @@ use crate::{plugins::calc_file_size, ProtResult};
 use lazy_static::lazy_static;
 use serde::{Serialize, Deserialize};
 use std::{collections::HashMap, io};
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use tokio::fs::File;
 use webparse::{BinaryMut, Buf, HeaderName, Request, Response};
 
@@ -153,7 +153,7 @@ i.icon-zip {
 "#;
 
 impl FileServer {
-    pub fn new(root: String, prefix: String) -> Self {
+    pub fn new(_root: String, prefix: String) -> Self {
         let mut config = Self {
             root: None,
             prefix,

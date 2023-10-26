@@ -13,7 +13,7 @@ use tokio_util::codec::length_delimited;
 use webparse::BinaryMut;
 use webparse::http::http2::encoder::Encoder;
 use webparse::http::http2::frame::Frame;
-use webparse::http::http2::{HeaderIndex, DEFAULT_MAX_FRAME_SIZE, DEFAULT_SETTINGS_HEADER_TABLE_SIZE, MAX_MAX_FRAME_SIZE};
+use webparse::http::http2::{HeaderIndex, DEFAULT_MAX_FRAME_SIZE, DEFAULT_SETTINGS_HEADER_TABLE_SIZE};
 
 use crate::ProtResult;
 
