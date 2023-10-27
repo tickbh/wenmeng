@@ -1,6 +1,6 @@
 [package]
 name = "wenmeng"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 authors = [ "tickbh <tickdream125@hotmail.com>" ]
 description = "a http server for rust"
@@ -34,7 +34,7 @@ serde_yaml = "0.9"
 flate2 = "1.0"
 brotli = "3.4.0"
 
-# webparse="0.1.6"
+webparse="0.1.7"
 toml="0.8.2"
 # async-compression = {version="0.4.3", features=["all"]}
 
@@ -45,5 +45,5 @@ serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 
-[dependencies.webparse]
-path="../webparse"
+# [dependencies.webparse]
+# path="../webparse"

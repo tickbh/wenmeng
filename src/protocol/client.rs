@@ -335,7 +335,6 @@ where
                 None
             }
         }
-
         loop {
             let v = tokio::select! {
                 r = http1_wait(&mut self.http1) => {
@@ -351,6 +350,10 @@ where
                         self.req_receiver = None;
                     }
                     continue;
+                }
+                () = self.sender.closed() => {
+                    log::trace!("接收方被断开, 此时关闭Client");
+                    return Ok(());
                 }
             };
             if v.is_none() {
@@ -447,3 +450,13 @@ where
         }
     }
 }
+
+
+// impl<T> Drop for Client<T>
+// where
+//     T: AsyncRead + AsyncWrite + Unpin + Send + 'static, {
+//         fn drop(&mut self) {
+//             println!("drop client!!!!!!!");
+//             // drop(self.)
+//         }
+//     }
