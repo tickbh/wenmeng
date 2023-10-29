@@ -81,6 +81,24 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug example 'udp'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=udp",
+                    "--package=wenmeng"
+                ],
+                "filter": {
+                    "name": "echo",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug unit tests in example 'echo'",
             "cargo": {
                 "args": [

@@ -7,9 +7,8 @@ async fn main() -> io::Result<()> {
     let mut buf = [0; 1024];
     loop {
         let (len, addr) = sock.recv_from(&mut buf).await?;
-        println!("{:?} bytes received from {:?}", len, addr);
-
-        let len = sock.send_to(&buf[..len], addr).await?;
-        println!("{:?} bytes sent", len);
+        let mut vec = "from server: ".as_bytes().to_vec();
+        vec.extend(&buf[..len]);
+        let _ = sock.send_to(&vec, addr).await?;
     }
 }
