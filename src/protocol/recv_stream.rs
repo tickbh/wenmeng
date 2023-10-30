@@ -1,10 +1,10 @@
-use brotli::CompressorWriter;
+use brotli::{CompressorWriter, Decompressor};
 use flate2::{
     write::{DeflateEncoder, GzEncoder},
-    Compression,
+    Compression, read::{GzDecoder, DeflateDecoder},
 };
 
-use std::fmt::Debug;
+use std::{fmt::Debug, io};
 use std::{
     fmt::Display,
     io::{Read, Write},
@@ -16,9 +16,23 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, ReadBuf},
     sync::mpsc::Receiver,
 };
-use webparse::{Binary, BinaryMut, Buf, BufMut, Helper, Serialize, WebResult};
+use webparse::{Binary, BinaryMut, Buf, BufMut, Helper, Serialize, WebResult, WebError};
 
-use crate::Consts;
+use crate::{Consts, ProtResult};
+
+
+fn read_all_data<R: Read>(read_buf: &mut BinaryMut, mut read: R) -> webparse::WebResult<usize> {
+    let mut cache_buf = vec![0u8; 4096];
+    let mut size = 0;
+    loop {
+        let s = read.read(&mut cache_buf)?;
+        size += s;
+        read_buf.put_slice(&cache_buf[..s]);
+        if s < cache_buf.len() {
+            return Ok(size)
+        }
+    }
+}
 
 #[derive(Debug)]
 struct InnerReceiver {
@@ -36,8 +50,7 @@ impl InnerReceiver {
     }
 
     pub fn new_receiver(receiver: Receiver<(bool, Binary)>) -> Self {
-        let mut vec = Vec::with_capacity(20480);
-        vec.resize(20480, 0);
+        let vec = vec![0u8; 4096];
         Self {
             receiver: Some(receiver),
             file: None,
@@ -46,8 +59,7 @@ impl InnerReceiver {
     }
 
     pub fn new_file(file: File) -> Self {
-        let mut vec = Vec::with_capacity(20480);
-        vec.resize(20480, 0);
+        let vec = vec![0u8; 409600];
         Self {
             receiver: None,
             file: Some(file),
@@ -58,40 +70,6 @@ impl InnerReceiver {
     pub fn is_none(&self) -> bool {
         self.receiver.is_none() && self.file.is_none()
     }
-
-    // pub fn try_recv(&mut self) -> Option<(bool, Binary)> {
-    //     if let Some(receiver) = &mut self.receiver {
-    //         match receiver.try_recv() {
-    //             Ok(v) => return Some(v),
-    //             Err(TryRecvError::Disconnected) => {
-    //                 return Some((true, Binary::new()));
-    //             }
-    //             Err(TryRecvError::Empty) => {
-    //                 return None
-    //             }
-    //         }
-    //     }
-
-    //     if let Some(file) = &mut self.file {
-    //         let size = poll_fn(|cx| {
-    //             let mut buf = ReadBuf::new(&mut self.cache_buf);
-    //             Pin::new(file).poll_read(cx, &mut buf)
-    //         });
-
-    //         // file.
-    //         match file.read(&mut self.cache_buf).await {
-    //             Ok(n) => {
-    //                 if n < self.cache_buf.len() {
-    //                     return Some((true, Binary::from(self.cache_buf[..n].to_vec())))
-    //                 } else {
-    //                     return Some((false, Binary::from(self.cache_buf[..n].to_vec())))
-    //                 }
-    //             },
-    //             Err(_) => return None,
-    //         };
-    //     }
-    //     None
-    // }
 
     pub async fn recv(&mut self) -> Option<(bool, Binary)> {
         if let Some(receiver) = &mut self.receiver {
@@ -119,11 +97,16 @@ impl InnerReceiver {
         }
 
         if let Some(file) = &mut self.file {
+            println!("file name = {:?}", file);
             let size = {
                 let mut buf = ReadBuf::new(&mut self.cache_buf);
                 match ready!(Pin::new(file).poll_read(cx, &mut buf)) {
                     Ok(_) => buf.filled().len(),
-                    Err(_) => return Poll::Ready(None),
+                    Err(e) => { 
+                        log::trace!("读取文件时出错:{:?}", e);
+                        return Poll::Ready(None);
+                    }
+                    
                 }
             };
             let is_end = size < self.cache_buf.len();
@@ -183,15 +166,62 @@ impl InnerCompress {
     }
 }
 
+
+struct InnerDecompress {
+    reader_gz: Option<GzDecoder<BinaryMut>>,
+    reader_br: Option<Decompressor<BinaryMut>>,
+    reader_de: Option<DeflateDecoder<BinaryMut>>,
+}
+
+impl Debug for InnerDecompress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InnerDecompress")
+            .field("reader_gz", &self.reader_gz)
+            .field("reader_de", &self.reader_de)
+            .finish()
+    }
+}
+
+
+impl InnerDecompress {
+    pub fn new() -> Self {
+        Self {
+            reader_gz: None,
+            reader_br: None,
+            reader_de: None,
+        }
+    }
+
+    pub fn open_reader_gz(&mut self, bin: BinaryMut) {
+        if self.reader_gz.is_none() {
+            self.reader_gz = Some(GzDecoder::new(bin));
+        }
+    }
+
+    pub fn open_reader_de(&mut self, bin: BinaryMut) {
+        if self.reader_de.is_none() {
+            self.reader_de = Some(DeflateDecoder::new(
+                bin,
+            ));
+        }
+    }
+
+    pub fn open_reader_br(&mut self, bin: BinaryMut) {
+        if self.reader_br.is_none() {
+            self.reader_br = Some(Decompressor::new(bin, 4096));
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct RecvStream {
     receiver: InnerReceiver,
-    binary: Option<Binary>,
-    binary_mut: Option<BinaryMut>,
+    read_buf: Option<BinaryMut>,
     cache_body_data: BinaryMut,
     origin_compress_method: i8,
     now_compress_method: i8,
     compress: InnerCompress,
+    decompress: InnerDecompress,
     is_chunked: bool,
     is_end: bool,
     is_process_end: bool,
@@ -201,12 +231,12 @@ impl Default for RecvStream {
     fn default() -> Self {
         Self {
             receiver: InnerReceiver::new(),
-            binary: Default::default(),
-            binary_mut: Default::default(),
+            read_buf: Default::default(),
             cache_body_data: BinaryMut::new(),
             origin_compress_method: Consts::COMPRESS_METHOD_NONE,
             now_compress_method: Consts::COMPRESS_METHOD_NONE,
             compress: InnerCompress::new(),
+            decompress: InnerDecompress::new(),
             is_chunked: false,
             is_end: true,
             is_process_end: false,
@@ -221,7 +251,7 @@ impl RecvStream {
 
     pub fn only(binary: Binary) -> RecvStream {
         RecvStream {
-            binary: Some(binary),
+            read_buf: Some(BinaryMut::from(binary)),
             ..Default::default()
         }
     }
@@ -229,7 +259,7 @@ impl RecvStream {
     pub fn new(receiver: Receiver<(bool, Binary)>, binary: BinaryMut, is_end: bool) -> RecvStream {
         RecvStream {
             receiver: InnerReceiver::new_receiver(receiver),
-            binary_mut: Some(binary),
+            read_buf: Some(binary),
             is_end,
             ..Default::default()
         }
@@ -238,7 +268,7 @@ impl RecvStream {
     pub fn new_file(file: File, binary: BinaryMut, is_end: bool) -> RecvStream {
         RecvStream {
             receiver: InnerReceiver::new_file(file),
-            binary_mut: Some(binary),
+            read_buf: Some(binary),
             is_end,
             ..Default::default()
         }
@@ -246,21 +276,18 @@ impl RecvStream {
 
     pub fn binary(&mut self) -> Binary {
         let mut buffer = BinaryMut::new();
-        if let Some(bin) = self.binary.take() {
-            buffer.put_slice(bin.chunk());
-        }
-        if let Some(bin) = self.binary_mut.take() {
+        if let Some(bin) = self.read_buf.take() {
             buffer.put_slice(bin.chunk());
         }
         buffer.freeze()
     }
 
     pub fn get_now_compress(&self) -> i8 {
-        if self.origin_compress_method > 0 {
-            return self.origin_compress_method
-        } else {
-            self.origin_compress_method + self.now_compress_method
+        // 输入输出同一种编码, 不做任何处理
+        if self.origin_compress_method == self.now_compress_method {
+            return 0;
         }
+        self.now_compress_method
     }
 
     pub fn set_compress_gzip(&mut self) {
@@ -279,21 +306,21 @@ impl RecvStream {
     }
 
     pub fn set_compress_origin_gzip(&mut self) {
-        self.origin_compress_method = Consts::COMPRESS_METHOD_ORIGIN_GZIP;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_GZIP;
         self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_compress_origin_deflate(&mut self) {
-        self.origin_compress_method = Consts::COMPRESS_METHOD_ORIGIN_DEFLATE;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_DEFLATE;
         self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
     pub fn set_compress_origin_brotli(&mut self) {
-        self.origin_compress_method = Consts::COMPRESS_METHOD_ORIGIN_BROTLI;
+        self.origin_compress_method = Consts::COMPRESS_METHOD_BROTLI;
         self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
-    pub fn set_compress_method(&mut self, method: i8) {
+    pub fn set_origin_compress_method(&mut self, method: i8) {
         self.origin_compress_method = method;
         self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
@@ -312,10 +339,10 @@ impl RecvStream {
     }
 
     pub fn cache_buffer(&mut self, buf: &[u8]) -> usize {
-        if self.binary_mut.is_none() {
-            self.binary_mut = Some(BinaryMut::new());
+        if self.read_buf.is_none() {
+            self.read_buf = Some(BinaryMut::new());
         }
-        self.binary_mut.as_mut().unwrap().put_slice(buf);
+        self.read_buf.as_mut().unwrap().put_slice(buf);
         buf.len()
     }
 
@@ -329,10 +356,7 @@ impl RecvStream {
 
     pub fn read_now(&mut self) -> Binary {
         let mut buffer = BinaryMut::new();
-        if let Some(bin) = self.binary.take() {
-            buffer.put_slice(bin.chunk());
-        }
-        if let Some(bin) = self.binary_mut.take() {
+        if let Some(bin) = self.read_buf.take() {
             buffer.put_slice(bin.chunk());
         }
         return buffer.freeze();
@@ -340,10 +364,7 @@ impl RecvStream {
 
     pub fn origin_len(&self) -> usize {
         let mut size = 0;
-        if let Some(bin) = &self.binary {
-            size += bin.remaining();
-        }
-        if let Some(bin) = &self.binary_mut {
+        if let Some(bin) = &self.read_buf {
             size += bin.remaining();
         }
         return size;
@@ -351,10 +372,7 @@ impl RecvStream {
 
     pub fn copy_now(&self) -> Binary {
         let mut buffer = BinaryMut::new();
-        if let Some(bin) = &self.binary {
-            buffer.put_slice(bin.chunk());
-        }
-        if let Some(bin) = &self.binary_mut {
+        if let Some(bin) = &self.read_buf {
             buffer.put_slice(bin.chunk());
         }
         return buffer.freeze();
@@ -395,7 +413,7 @@ impl RecvStream {
         }
     }
 
-    fn inner_encode_data<B: webparse::Buf + webparse::BufMut>(
+    fn inner_encode_write_data<B: webparse::Buf + webparse::BufMut>(
         buffer: &mut B,
         data: &[u8],
         is_chunked: bool,
@@ -407,7 +425,7 @@ impl RecvStream {
         }
     }
 
-    fn encode_data(&mut self, data: &[u8]) -> std::io::Result<usize> {
+    fn encode_write_data(&mut self, data: &[u8]) -> std::io::Result<usize> {
         match self.get_now_compress() {
             Consts::COMPRESS_METHOD_GZIP => {
                 // 数据结束，需要主动调用结束以导出全部结果
@@ -416,7 +434,7 @@ impl RecvStream {
                     let gz = self.compress.write_gz.take().unwrap();
                     let value = gz.finish().unwrap();
                     if value.remaining() > 0 {
-                        Self::inner_encode_data(
+                        Self::inner_encode_write_data(
                             &mut self.cache_body_data,
                             &value,
                             self.is_chunked,
@@ -433,7 +451,7 @@ impl RecvStream {
                     gz.write_all(data).unwrap();
                     // 每次写入，在尝试读取出数据
                     if gz.get_mut().remaining() > 0 {
-                        let s = Self::inner_encode_data(
+                        let s = Self::inner_encode_write_data(
                             &mut self.cache_body_data,
                             &gz.get_mut().chunk(),
                             self.is_chunked,
@@ -452,7 +470,7 @@ impl RecvStream {
                     let de = self.compress.write_de.take().unwrap();
                     let value = de.finish().unwrap();
                     if value.remaining() > 0 {
-                        Self::inner_encode_data(
+                        Self::inner_encode_write_data(
                             &mut self.cache_body_data,
                             &value,
                             self.is_chunked,
@@ -469,7 +487,7 @@ impl RecvStream {
                     de.write_all(data).unwrap();
                     // 每次写入，在尝试读取出数据
                     if de.get_mut().remaining() > 0 {
-                        let s = Self::inner_encode_data(
+                        let s = Self::inner_encode_write_data(
                             &mut self.cache_body_data,
                             &de.get_mut().chunk(),
                             self.is_chunked,
@@ -489,7 +507,7 @@ impl RecvStream {
                     de.flush()?;
                     let value = de.into_inner();
                     if value.remaining() > 0 {
-                        Self::inner_encode_data(
+                        Self::inner_encode_write_data(
                             &mut self.cache_body_data,
                             &value,
                             self.is_chunked,
@@ -506,7 +524,7 @@ impl RecvStream {
                     de.write_all(data).unwrap();
                     // 每次写入，在尝试读取出数据
                     if de.get_mut().remaining() > 0 {
-                        let s = Self::inner_encode_data(
+                        let s = Self::inner_encode_write_data(
                             &mut self.cache_body_data,
                             &de.get_mut().chunk(),
                             self.is_chunked,
@@ -518,11 +536,11 @@ impl RecvStream {
                     }
                 }
             }
-            _ => Self::inner_encode_data(&mut self.cache_body_data, data, self.is_chunked),
+            _ => Self::inner_encode_write_data(&mut self.cache_body_data, data, self.is_chunked),
         }
     }
 
-    pub fn poll_encode<B: webparse::Buf + webparse::BufMut>(
+    pub fn poll_encode_write<B: webparse::Buf + webparse::BufMut>(
         &mut self,
         cx: &mut Context<'_>,
         buffer: &mut B,
@@ -558,19 +576,69 @@ impl RecvStream {
         return Poll::Ready(Ok(has_change));
     }
 
-    pub fn process_data(&mut self, mut cx: Option<&mut Context<'_>>) -> std::io::Result<usize> {
+    /// 返回true表示需要等待, 否则继续执行
+    fn inner_decode_data(&mut self) -> webparse::WebResult<bool> {
+        // 无数据
+        if self.read_buf.is_none() {
+            return Ok(true)
+        }
+        // 原始的压缩方式不为空, 表示数据可能需要处理
+        if self.origin_compress_method != Consts::COMPRESS_METHOD_NONE {
+            // 数据方式与原有的一模一样, 不做处理
+            if self.origin_compress_method == self.now_compress_method {
+                return Ok(false)
+            }
+            // 数据结束前不做解压缩操作, 后续也不可读
+            if self.is_end {
+                return Ok(true)
+            }
+            let _size = match self.origin_compress_method {
+                Consts::COMPRESS_METHOD_GZIP => {
+                    self.decompress.open_reader_gz(self.read_buf.clone().unwrap());
+                    let gz = self.decompress.reader_gz.as_mut().unwrap();
+                    let mut read_buf = BinaryMut::new();
+                    let s = read_all_data(&mut read_buf, gz)?;
+                    self.read_buf = Some(read_buf);
+                    s
+                },
+                Consts::COMPRESS_METHOD_DEFLATE => {
+                    self.decompress.open_reader_de(self.read_buf.clone().unwrap());
+                    let de = self.decompress.reader_de.as_mut().unwrap();
+                    let mut read_buf = BinaryMut::new();
+                    let s = read_all_data(&mut read_buf, de)?;
+                    self.read_buf = Some(read_buf);
+                    s
+                },
+                Consts::COMPRESS_METHOD_BROTLI => {
+                    self.decompress.open_reader_br(self.read_buf.clone().unwrap());
+                    let br = self.decompress.reader_br.as_mut().unwrap();
+                    let mut read_buf = BinaryMut::new();
+                    let s = read_all_data(&mut read_buf, br)?;
+                    self.read_buf = Some(read_buf);
+                    s
+                },
+                _ => {
+                    return Err(WebError::Extension("未知的压缩格式"));
+                }
+            };
+            self.origin_compress_method = Consts::COMPRESS_METHOD_NONE;
+        }
+
+        Ok(false)
+    }
+
+    pub fn process_data(&mut self, mut cx: Option<&mut Context<'_>>) -> webparse::WebResult<usize> {
         if self.is_process_end {
             return Ok(0);
         }
-        let mut size = 0;
-        if let Some(bin) = self.binary.take() {
-            if bin.chunk().len() > 0 {
-                size += self.encode_data(bin.chunk())?;
-            }
+        if self.inner_decode_data()? {
+            return Ok(0);
         }
-        if let Some(bin) = self.binary_mut.take() {
+
+        let mut size = 0;
+        if let Some(bin) = self.read_buf.take() {
             if bin.chunk().len() > 0 {
-                size += self.encode_data(bin.chunk())?;
+                size += self.encode_write_data(bin.chunk())?;
             }
         }
         let mut has_encode_end = false;
@@ -578,10 +646,11 @@ impl RecvStream {
             loop {
                 match self.receiver.poll_recv(cx.as_mut().unwrap()) {
                     Poll::Pending => {
+                        println!("fuck!!!!!!!!!!!!!!!");
                         break;
                     }
                     Poll::Ready(Some((is_end, bin))) => {
-                        size += self.encode_data(bin.chunk())?;
+                        size += self.encode_write_data(bin.chunk())?;
                         self.is_end = is_end;
                         if bin.remaining() == 0 {
                             has_encode_end = is_end;
@@ -595,7 +664,7 @@ impl RecvStream {
             }
         }
         if !has_encode_end && self.is_end {
-            self.encode_data(&[])?;
+            self.encode_write_data(&[])?;
         }
         self.is_process_end = has_encode_end || self.is_end;
         Ok(size)
@@ -626,7 +695,7 @@ impl AsyncRead for RecvStream {
             true => {}
             false => return Poll::Pending,
         };
-        self.process_data(Some(cx))?;
+        self.process_data(Some(cx)).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "process data error"))?;
         let len = std::cmp::min(self.cache_body_data.remaining(), buf.remaining());
         buf.put_slice(&self.cache_body_data.chunk()[..len]);
         self.cache_body_data.advance(len);
@@ -640,10 +709,7 @@ impl Serialize for RecvStream {
         buffer: &mut B,
     ) -> webparse::WebResult<usize> {
         let mut size = 0;
-        if let Some(bin) = self.binary.take() {
-            size += buffer.put_slice(bin.chunk());
-        }
-        if let Some(bin) = self.binary_mut.take() {
+        if let Some(bin) = self.read_buf.take() {
             size += buffer.put_slice(bin.chunk());
         }
         // if !self.is_end {

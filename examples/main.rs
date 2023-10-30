@@ -23,7 +23,7 @@ use std::{
     io::{Read}, net::SocketAddr,
 };
 use tokio::{
-    net::{TcpListener, TcpStream}, io::AsyncReadExt,
+    net::{TcpListener, TcpStream}, io::AsyncReadExt, fs::File,
 };
 
 use wenmeng::{self, ProtResult, RecvStream, Server, FileServer};
@@ -34,25 +34,6 @@ trait Xx {
     // async fn xx();
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let addr = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "0.0.0.0:8080".to_string());
-    let server = TcpListener::bind(&addr).await?;
-    println!("Listening on: {}", addr);
-    let _gz = GzBuilder::new();
-    loop {
-        let (stream, addr) = server.accept().await?;
-        println!("recv = {:?}", stream);
-        tokio::spawn(async move {
-            if let Err(e) = process(stream, addr).await {
-                println!("failed to process connection; error = {}", e);
-            }
-            println!("aaaaaaaaaaaaaaaaaaaa");
-        });
-    }
-}
 
 async fn operate(mut req: Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
     let mut builder = Response::builder().version(req.version().clone());
@@ -102,9 +83,13 @@ async fn operate(mut req: Request<RecvStream>) -> ProtResult<Response<RecvStream
         }
     };
 
-    let mut file_server = FileServer::new("".to_string(), "/root".to_string());
+    let mut file = File::open("E:/1/ssl.log").await.unwrap();
+    let mut buf = vec![0u8; 4096];
+    file.read(&mut buf).await;
+
+    let mut file_server = FileServer::new("e:/1".to_string(), "/root".to_string());
     file_server.set_browse(true);
-    file_server.set_disable_compress(true);
+    // file_server.set_disable_compress(true);
     file_server.hide.push("src".to_string());
     file_server.precompressed.push("gzip".to_string());
     file_server.deal_request(req).await
@@ -215,4 +200,41 @@ async fn process(stream: TcpStream, addr: SocketAddr) -> Result<(), Box<dyn Erro
     let ret = server.incoming(operate).await;
     println!("end!!!!!!?????????????????? {:?}", ret);
     Ok(())
+}
+
+// #[tokio::main]
+async fn run_main() -> Result<(), Box<dyn Error>> {
+    let addr = env::args()
+        .nth(1)
+        .unwrap_or_else(|| "0.0.0.0:8080".to_string());
+    let server = TcpListener::bind(&addr).await?;
+    println!("Listening on: {}", addr);
+    let _gz = GzBuilder::new();
+    loop {
+        let (stream, addr) = server.accept().await?;
+        println!("recv = {:?}", stream);
+        tokio::spawn(async move {
+            if let Err(e) = process(stream, addr).await {
+                println!("failed to process connection; error = {}", e);
+            }
+            println!("aaaaaaaaaaaaaaaaaaaa");
+        });
+    }
+}
+
+fn main() {
+    use tokio::runtime::Builder;
+    let runtime = Builder::new_multi_thread()
+        .enable_io()
+        .worker_threads(4)
+        .enable_time()
+        .thread_name("wmproxy")
+        .thread_stack_size(10 * 1024 * 1024 * 1024)
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        if let Err(e) = run_main().await {
+            println!("运行wmproxy发生错误:{:?}", e);
+        }
+    })
 }

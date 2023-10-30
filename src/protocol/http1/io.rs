@@ -127,7 +127,7 @@ where
 
             if !res.body().is_end() || !self.inner.res_status.is_send_body {
                 self.inner.res_status.is_send_body = true;
-                let _ = res.body_mut().poll_encode(
+                let _ = res.body_mut().poll_encode_write(
                     cx,
                     &mut self.write_buf,
                 );
@@ -152,7 +152,7 @@ where
 
             if !req.body().is_end() || !self.inner.req_status.is_send_body {
                 self.inner.req_status.is_send_body = true;
-                let _ = req.body_mut().poll_encode(
+                let _ = req.body_mut().poll_encode_write(
                     cx,
                     &mut self.write_buf,
                 );
@@ -279,8 +279,6 @@ where
                 }
                 self.send_stream.set_new_body();
                 let method = HeaderHelper::get_compress_method(request.headers());
-                self.send_stream.add_compress_method(method);
-                // self.send_stream.add_compress_method()
 
                 self.send_stream.read_buf.advance(size);
                 self.inner.req_status.is_send_body = false;
@@ -300,8 +298,9 @@ where
                     }
                 }
 
-                let (recv, sender) =
+                let (mut recv, sender) =
                     Self::build_recv_stream(&mut self.inner.res_status, &mut self.send_stream)?;
+                recv.set_origin_compress_method(method);
                 if recv.is_end() {
                     self.inner.req_status.clear_read();
                     self.send_stream.set_end_headers(false);
@@ -398,7 +397,6 @@ where
 
                 self.send_stream.set_new_body();
                 let method = HeaderHelper::get_compress_method(response.headers());
-                self.send_stream.add_compress_method(method);
 
                 self.send_stream.read_buf.advance(size);
                 self.inner.res_status.is_send_body = false;
@@ -417,8 +415,9 @@ where
                         self.inner.res_status.is_chunked = true;
                     }
                 }
-                let (recv, sender) =
+                let (mut recv, sender) =
                     Self::build_recv_stream(&mut self.inner.res_status, &mut self.send_stream)?;
+                recv.set_origin_compress_method(method);
                 if recv.is_end() {
                     self.inner.res_status.clear_read();
                 }

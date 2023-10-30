@@ -153,9 +153,9 @@ i.icon-zip {
 "#;
 
 impl FileServer {
-    pub fn new(_root: String, prefix: String) -> Self {
+    pub fn new(root: String, prefix: String) -> Self {
         let mut config = Self {
-            root: None,
+            root: Some(root),
             prefix,
             hide: vec![],
             default_mimetype: default_mimetype(),
