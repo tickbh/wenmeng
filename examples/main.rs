@@ -23,7 +23,7 @@ use std::{
     io::{Read}, net::SocketAddr,
 };
 use tokio::{
-    net::{TcpListener, TcpStream}, io::AsyncReadExt, fs::File,
+    net::{TcpListener, TcpStream}, io::AsyncReadExt,
 };
 
 use wenmeng::{self, ProtResult, RecvStream, Server, FileServer};
@@ -83,11 +83,7 @@ async fn operate(mut req: Request<RecvStream>) -> ProtResult<Response<RecvStream
         }
     };
 
-    let mut file = File::open("E:/1/ssl.log").await.unwrap();
-    let mut buf = vec![0u8; 4096];
-    file.read(&mut buf).await;
-
-    let mut file_server = FileServer::new("e:/1".to_string(), "/root".to_string());
+    let mut file_server = FileServer::new("".to_string(), "/root".to_string());
     file_server.set_browse(true);
     // file_server.set_disable_compress(true);
     file_server.hide.push("src".to_string());
@@ -198,7 +194,6 @@ async fn process(stream: TcpStream, addr: SocketAddr) -> Result<(), Box<dyn Erro
     // let mut connect = dmeng::Builder::new().connection(stream);
     let mut server = Server::new(stream, Some(addr));
     let ret = server.incoming(operate).await;
-    println!("end!!!!!!?????????????????? {:?}", ret);
     Ok(())
 }
 
@@ -212,12 +207,10 @@ async fn run_main() -> Result<(), Box<dyn Error>> {
     let _gz = GzBuilder::new();
     loop {
         let (stream, addr) = server.accept().await?;
-        println!("recv = {:?}", stream);
         tokio::spawn(async move {
             if let Err(e) = process(stream, addr).await {
                 println!("failed to process connection; error = {}", e);
             }
-            println!("aaaaaaaaaaaaaaaaaaaa");
         });
     }
 }

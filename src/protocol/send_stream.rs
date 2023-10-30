@@ -1,12 +1,12 @@
-use brotli::{Decompressor};
-use flate2::{read::{MultiGzDecoder, DeflateDecoder}};
+
+
 use futures_core::Stream;
 use std::{fmt::Debug};
 use std::io::Read;
 use tokio::sync::mpsc::{Sender};
 use webparse::{Binary, BinaryMut, Serialize, Buf, Helper, HttpError, WebError};
 
-use crate::{ProtResult, Consts};
+use crate::{ProtResult};
 
 #[derive(Debug)]
 pub struct SendStream {

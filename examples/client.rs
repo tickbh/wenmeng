@@ -4,7 +4,7 @@ use wenmeng::{Client, ProtResult};
 async fn test_http2() -> ProtResult<()> {
     // let url = "http://nghttp2.org/";
 
-    let url = "http://localhost:8080/";
+    let url = "http://localhost:82/root/target/rid_maps.log";
     let req = Request::builder().method("GET").url(url).body("").unwrap();
 
     println!("url = {:?}", req.get_connect_url());
@@ -16,7 +16,7 @@ async fn test_http2() -> ProtResult<()> {
     let (mut recv, _sender) = client.send2(req.into_type()).await?;
     let mut res = recv.recv().await.unwrap();
     res.body_mut().wait_all().await;
-    println!("res = {}", res);
+    // println!("res = {}", res);
 
     // let req = Request::builder()
     //     .method("GET")
@@ -25,7 +25,7 @@ async fn test_http2() -> ProtResult<()> {
     //     .unwrap();
     // sender.send(req.into_type()).await?;
     // let res = recv.recv().await.unwrap();
-    println!("res = {}", res);
+    println!("res = {}", res.body().origin_len());
     Ok(())
 }
 

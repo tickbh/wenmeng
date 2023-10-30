@@ -44,19 +44,21 @@ impl InnerStream {
             self.end_stream = true;
         }
         if let Some(sender) = &self.sender {
-            match frame {
-                Frame::Data(d) => {
-                    self.recv_len += d.payload().remaining();
-                    if let Err(_e) = sender.try_send((d.is_end_stream(), d.into_payload())) {
+            if let Ok(p) = sender.try_reserve() {
+                match frame {
+                    Frame::Data(d) => {
+                        self.recv_len += d.payload().remaining();
+                        p.send((d.is_end_stream(), d.into_payload()));
+                        if self.recv_len > self.content_len {
+                            return Err(ProtError::Extension("content len must not more"));
+                        }
+                    }
+                    _ => {
                         return Err(ProtError::Extension("must be data frame"));
                     }
-                    if self.recv_len > self.content_len {
-                        return Err(ProtError::Extension("content len must not more"));
-                    }
                 }
-                _ => {
-                    return Err(ProtError::Extension("must be data frame"));
-                }
+            } else {
+                self.frames.push(frame);
             }
         } else {
             self.frames.push(frame);

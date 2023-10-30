@@ -18,7 +18,7 @@ use tokio::{
 };
 use webparse::{Binary, BinaryMut, Buf, BufMut, Helper, Serialize, WebResult, WebError};
 
-use crate::{Consts, ProtResult};
+use crate::Consts;
 
 
 fn read_all_data<R: Read>(read_buf: &mut BinaryMut, mut read: R) -> webparse::WebResult<usize> {
@@ -92,23 +92,30 @@ impl InnerReceiver {
     }
 
     fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<(bool, Binary)>> {
+        println!("do !!!!!!!!!!!!! poll_recv!!!!!!!!!!!!!!!!!");
         if let Some(receiver) = &mut self.receiver {
+            println!("do receiver !!!!!!!!!!!!!!!!!!!! poll_recv!!!!!!!!!!!!!!!!!");
             return receiver.poll_recv(cx);
         }
 
         if let Some(file) = &mut self.file {
-            println!("file name = {:?}", file);
             let size = {
+                println!("start file read!!!!!!!!");
                 let mut buf = ReadBuf::new(&mut self.cache_buf);
-                match ready!(Pin::new(file).poll_read(cx, &mut buf)) {
-                    Ok(_) => buf.filled().len(),
-                    Err(e) => { 
+                match Pin::new(file).poll_read(cx, &mut buf) {
+                    Poll::Pending => {
+                        println!("read file is pending!!!");
+                        return Poll::Pending;
+                    }
+                    Poll::Ready(Ok(_)) => buf.filled().len(),
+                    Poll::Ready(Err(e)) => { 
                         log::trace!("读取文件时出错:{:?}", e);
                         return Poll::Ready(None);
                     }
                     
                 }
             };
+            println!("do file read!!!!!!!! {:?}", size);
             let is_end = size < self.cache_buf.len();
             return Poll::Ready(Some((
                 is_end,
@@ -589,7 +596,7 @@ impl RecvStream {
                 return Ok(false)
             }
             // 数据结束前不做解压缩操作, 后续也不可读
-            if self.is_end {
+            if !self.is_end {
                 return Ok(true)
             }
             let _size = match self.origin_compress_method {
@@ -631,30 +638,18 @@ impl RecvStream {
         if self.is_process_end {
             return Ok(0);
         }
-        if self.inner_decode_data()? {
-            return Ok(0);
-        }
-
         let mut size = 0;
-        if let Some(bin) = self.read_buf.take() {
-            if bin.chunk().len() > 0 {
-                size += self.encode_write_data(bin.chunk())?;
-            }
-        }
-        let mut has_encode_end = false;
+        
         if !self.is_end && cx.is_some() {
             loop {
                 match self.receiver.poll_recv(cx.as_mut().unwrap()) {
                     Poll::Pending => {
-                        println!("fuck!!!!!!!!!!!!!!!");
                         break;
                     }
                     Poll::Ready(Some((is_end, bin))) => {
-                        size += self.encode_write_data(bin.chunk())?;
+                        println!("read file size = {:?} is_end = {:?}", bin.remaining(), is_end);
+                        size += self.cache_buffer(bin.chunk());
                         self.is_end = is_end;
-                        if bin.remaining() == 0 {
-                            has_encode_end = is_end;
-                        }
                     }
                     Poll::Ready(None) => {
                         self.is_end = true;
@@ -663,10 +658,21 @@ impl RecvStream {
                 }
             }
         }
-        if !has_encode_end && self.is_end {
+        
+        if self.inner_decode_data()? {
+            return Ok(0);
+        }
+        
+        if let Some(bin) = self.read_buf.take() {
+            println!("read encode size {:?}", bin.chunk().len());
+            if bin.chunk().len() > 0 {
+                self.encode_write_data(bin.chunk())?;
+            }
+        }
+        if self.is_end {
             self.encode_write_data(&[])?;
         }
-        self.is_process_end = has_encode_end || self.is_end;
+        self.is_process_end = self.is_end;
         Ok(size)
     }
 

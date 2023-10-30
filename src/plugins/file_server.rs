@@ -154,8 +154,9 @@ i.icon-zip {
 
 impl FileServer {
     pub fn new(root: String, prefix: String) -> Self {
+        
         let mut config = Self {
-            root: Some(root),
+            root: if root.len() > 0 { Some(root) } else { None },
             prefix,
             hide: vec![],
             default_mimetype: default_mimetype(),
@@ -354,7 +355,7 @@ impl FileServer {
                             _ => unreachable!(),
                         }
                         let builder = Response::builder().version(req.version().clone());
-                        let response = builder
+                        let mut response = builder
                             .header(HeaderName::CONTENT_ENCODING, pre.to_string())
                             .header(
                                 HeaderName::CONTENT_TYPE,
@@ -363,6 +364,9 @@ impl FileServer {
                             .header(HeaderName::TRANSFER_ENCODING, "chunked")
                             .body(recv)
                             .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
+                        if self.disable_compress {
+                            response.headers_mut().insert(HeaderName::CONTENT_ENCODING, "");
+                        }
                         return Ok(response);
                     }
                 }
