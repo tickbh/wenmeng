@@ -3,8 +3,9 @@ use flate2::{
     write::{DeflateEncoder, GzEncoder},
     Compression, read::{GzDecoder, DeflateDecoder},
 };
+use tokio_util::sync::PollSemaphore;
 
-use std::{fmt::Debug, io};
+use std::{fmt::Debug, io, sync::Arc};
 use std::{
     fmt::Display,
     io::{Read, Write},
@@ -14,7 +15,7 @@ use std::{
 use tokio::{
     fs::File,
     io::{AsyncRead, AsyncReadExt, ReadBuf},
-    sync::mpsc::Receiver,
+    sync::{mpsc::Receiver, Notify, OwnedSemaphorePermit, Semaphore},
 };
 use webparse::{Binary, BinaryMut, Buf, BufMut, Helper, Serialize, WebResult, WebError};
 
@@ -39,6 +40,7 @@ struct InnerReceiver {
     receiver: Option<Receiver<(bool, Binary)>>,
     file: Option<File>,
     cache_buf: Vec<u8>,
+    data_size: u64,
 }
 impl InnerReceiver {
     pub fn new() -> Self {
@@ -46,6 +48,7 @@ impl InnerReceiver {
             receiver: None,
             file: None,
             cache_buf: vec![],
+            data_size: u64::MAX,
         }
     }
 
@@ -55,15 +58,17 @@ impl InnerReceiver {
             receiver: Some(receiver),
             file: None,
             cache_buf: vec,
+            data_size: u64::MAX,
         }
     }
-
-    pub fn new_file(file: File) -> Self {
-        let vec = vec![0u8; 409600];
+    
+    pub fn new_file(file: File, data_size: u64) -> Self {
+        let vec = vec![0u8; 4096];
         Self {
             receiver: None,
             file: Some(file),
             cache_buf: vec,
+            data_size,
         }
     }
 
@@ -111,7 +116,8 @@ impl InnerReceiver {
                     
                 }
             };
-            let is_end = size < self.cache_buf.len();
+            self.data_size -= std::cmp::min(self.data_size, size as u64);
+            let is_end = size < self.cache_buf.len() || self.data_size <= 0;
             return Poll::Ready(Some((
                 is_end,
                 Binary::from(self.cache_buf[..size].to_vec()),
@@ -218,6 +224,8 @@ impl InnerDecompress {
 #[derive(Debug)]
 pub struct RecvStream {
     receiver: InnerReceiver,
+    sem: PollSemaphore,
+    permit: Option<OwnedSemaphorePermit>,
     read_buf: Option<BinaryMut>,
     cache_body_data: BinaryMut,
     origin_compress_method: i8,
@@ -227,14 +235,18 @@ pub struct RecvStream {
     is_chunked: bool,
     is_end: bool,
     is_process_end: bool,
+    max_read_buf: usize,
 }
 
 impl Default for RecvStream {
     fn default() -> Self {
         Self {
             receiver: InnerReceiver::new(),
+            sem: PollSemaphore::new(Arc::new(Semaphore::new(10))),
+            permit: None,
             read_buf: Default::default(),
             cache_body_data: BinaryMut::new(),
+            
             origin_compress_method: Consts::COMPRESS_METHOD_NONE,
             now_compress_method: Consts::COMPRESS_METHOD_NONE,
             compress: InnerCompress::new(),
@@ -242,6 +254,10 @@ impl Default for RecvStream {
             is_chunked: false,
             is_end: true,
             is_process_end: false,
+
+            // 10M, 默认包体的最大大小为10M
+            // max_read_buf: 10_485_760,
+            max_read_buf: 10_48,
         }
     }
 }
@@ -267,11 +283,10 @@ impl RecvStream {
         }
     }
 
-    pub fn new_file(file: File, binary: BinaryMut, is_end: bool) -> RecvStream {
+    pub fn new_file(file: File, data_size: u64) -> RecvStream {
         RecvStream {
-            receiver: InnerReceiver::new_file(file),
-            read_buf: Some(binary),
-            is_end,
+            receiver: InnerReceiver::new_file(file, data_size),
+            is_end: false,
             ..Default::default()
         }
     }
@@ -280,6 +295,8 @@ impl RecvStream {
         let mut buffer = BinaryMut::new();
         if let Some(bin) = self.read_buf.take() {
             buffer.put_slice(bin.chunk());
+            
+            self.nofity_some_read();
         }
         buffer.freeze()
     }
@@ -290,6 +307,21 @@ impl RecvStream {
             return 0;
         }
         self.now_compress_method
+    }
+
+    pub fn check_over_limit(&mut self) {
+        if self.read_buf.is_some() && self.read_buf.as_mut().unwrap().remaining() >= self.max_read_buf {
+            self.permit.take();
+        }
+    }
+
+    pub fn nofity_some_read(&mut self) {
+        if self.permit.is_some() {
+            return;
+        }
+        if self.sem.available_permits() == 0 {
+            self.sem.add_permits(1);
+        }
     }
 
     pub fn set_compress_gzip(&mut self) {
@@ -360,6 +392,8 @@ impl RecvStream {
         let mut buffer = BinaryMut::new();
         if let Some(bin) = self.read_buf.take() {
             buffer.put_slice(bin.chunk());
+            
+            self.nofity_some_read();
         }
         return buffer.freeze();
     }
@@ -547,15 +581,33 @@ impl RecvStream {
         cx: &mut Context<'_>,
         buffer: &mut B,
     ) -> Poll<webparse::WebResult<usize>> {
-        self.process_data(Some(cx))?;
+        ready!(self.process_data(Some(cx)))?;
         let s = self.read_data(buffer)?;
         Poll::Ready(Ok(s))
+    }
+
+    fn inner_poll_sem_ready(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        if self.permit.is_some() {
+            return Poll::Ready(Ok(()))
+        }
+        match self.sem.poll_acquire(cx) {
+            Poll::Pending => {
+                log::trace!("数据超过了限制的大小,等待缓冲区的读取才能继续!");
+                Poll::Pending
+            },
+            Poll::Ready(None) => unreachable!("who closed it?"),
+            Poll::Ready(Some(x)) => {
+                self.permit.replace(x);
+                Poll::Ready(Ok(()))
+            }
+        }
     }
 
     fn inner_poll_read(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<bool>> {
         if self.is_end {
             return Poll::Ready(Ok(false));
         }
+        ready!(self.inner_poll_sem_ready(cx))?;
         let mut has_change = false;
         loop {
             match self.receiver.poll_recv(cx) {
@@ -574,6 +626,9 @@ impl RecvStream {
                 }
                 Poll::Pending => break,
             }
+        }
+        if has_change {
+            self.check_over_limit();
         }
         return Poll::Ready(Ok(has_change));
     }
@@ -624,56 +679,43 @@ impl RecvStream {
                 }
             };
             self.origin_compress_method = Consts::COMPRESS_METHOD_NONE;
+            self.nofity_some_read();
         }
 
         Ok(false)
     }
 
-    pub fn process_data(&mut self, mut cx: Option<&mut Context<'_>>) -> webparse::WebResult<usize> {
+    pub fn process_data(&mut self, cx: Option<&mut Context<'_>>) -> Poll<webparse::WebResult<usize> > {
         if self.is_process_end {
-            return Ok(0);
+            return Poll::Ready(Ok(0));
         }
-        let mut size = 0;
-        
-        if !self.is_end && cx.is_some() {
-            loop {
-                match self.receiver.poll_recv(cx.as_mut().unwrap()) {
-                    Poll::Pending => {
-                        break;
-                    }
-                    Poll::Ready(Some((is_end, bin))) => {
-                        size += self.cache_buffer(bin.chunk());
-                        self.is_end = is_end;
-                    }
-                    Poll::Ready(None) => {
-                        self.is_end = true;
-                        break;
-                    }
-                }
-            }
+
+        if let Some(cx) = cx {
+            ready!(self.inner_poll_read(cx)?);
         }
-        
+
         if self.inner_decode_data()? {
-            return Ok(0);
+            return Poll::Ready(Ok(0));
         }
         
         if let Some(bin) = self.read_buf.take() {
             if bin.chunk().len() > 0 {
                 self.encode_write_data(bin.chunk())?;
             }
+            self.nofity_some_read();
         }
         if self.is_end {
             self.encode_write_data(&[])?;
         }
         self.is_process_end = self.is_end;
-        Ok(size)
+        Poll::Ready(Ok(0))
     }
 
     pub fn read_data<B: webparse::Buf + webparse::BufMut>(
         &mut self,
         read_data: &mut B,
     ) -> WebResult<usize> {
-        self.process_data(None)?;
+        let _ = self.process_data(None)?;
 
         let mut size = 0;
         if self.cache_body_data.remaining() > 0 {
@@ -690,10 +732,11 @@ impl AsyncRead for RecvStream {
         cx: &mut Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
-        match ready!(self.inner_poll_read(cx)?) {
-            true => {}
-            false => return Poll::Pending,
-        };
+        
+        // match ready!(self.inner_poll_read(cx)?) {
+        //     true => {}
+        //     false => return Poll::Pending,
+        // };
         self.process_data(Some(cx)).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "process data error"))?;
         let len = std::cmp::min(self.cache_body_data.remaining(), buf.remaining());
         buf.put_slice(&self.cache_body_data.chunk()[..len]);
@@ -710,6 +753,7 @@ impl Serialize for RecvStream {
         let mut size = 0;
         if let Some(bin) = self.read_buf.take() {
             size += buffer.put_slice(bin.chunk());
+            self.nofity_some_read();
         }
         // if !self.is_end {
         //     loop {

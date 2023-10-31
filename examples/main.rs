@@ -216,6 +216,7 @@ async fn run_main() -> Result<(), Box<dyn Error>> {
 }
 
 fn main() {
+    env_logger::init();
     use tokio::runtime::Builder;
     let runtime = Builder::new_multi_thread()
         .enable_io()

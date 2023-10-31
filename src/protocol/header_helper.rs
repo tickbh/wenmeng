@@ -164,7 +164,7 @@ impl HeaderHelper {
         let header_body_len = headers.get_body_len();
         if compress == Consts::COMPRESS_METHOD_NONE {
             if !is_chunked && header_body_len == 0 && body.is_end() {
-                body.process_data(None)?;
+                let _ = body.process_data(None)?;
                 let len = body.body_len();
                 headers.insert(HeaderName::CONTENT_LENGTH, len);
             }
@@ -179,7 +179,7 @@ impl HeaderHelper {
                     }
                 } else {
                     if !is_chunked {
-                        body.process_data(None)?;
+                        let _ = body.process_data(None)?;
                         let len = body.body_len();
                         headers.insert(HeaderName::CONTENT_LENGTH, len);
                     }

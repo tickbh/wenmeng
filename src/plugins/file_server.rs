@@ -348,7 +348,8 @@ impl FileServer {
                     if new.exists() {
                         println!("convert to new file {}", new.to_string_lossy());
                         let file = File::open(new).await?;
-                        let mut recv = RecvStream::new_file(file, BinaryMut::new(), false);
+                        let data_size = file.metadata().await?.len();
+                        let mut recv = RecvStream::new_file(file, data_size);
                         match &**pre {
                             "gzip" => recv.set_compress_origin_gzip(),
                             "br" => recv.set_compress_brotli(),
@@ -377,7 +378,8 @@ impl FileServer {
             }
 
             let file = File::open(real_path).await?;
-            let recv = RecvStream::new_file(file, BinaryMut::new(), false);
+            let data_size = file.metadata().await?.len();
+            let recv = RecvStream::new_file(file, data_size);
             let builder = Response::builder().version(req.version().clone());
             let mut response = builder
                 .header(

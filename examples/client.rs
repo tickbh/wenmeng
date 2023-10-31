@@ -8,7 +8,7 @@ async fn test_http2() -> ProtResult<()> {
 
     println!("aaaaaaaaaaaaaa");
     // let url = "http://localhost:82/root/target/rid_maps.log";
-    let url = "http://localhost:82/root/target/";
+    let url = "http://localhost:8080/root/target/";
     // let mut vecs = vec![];
     // tokio::time::sleep(Duration::from_secs(100000)).await;
     let req = Request::builder().method("GET").url(url).body("").unwrap();
