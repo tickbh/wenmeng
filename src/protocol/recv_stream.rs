@@ -92,19 +92,15 @@ impl InnerReceiver {
     }
 
     fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<(bool, Binary)>> {
-        println!("do !!!!!!!!!!!!! poll_recv!!!!!!!!!!!!!!!!!");
         if let Some(receiver) = &mut self.receiver {
-            println!("do receiver !!!!!!!!!!!!!!!!!!!! poll_recv!!!!!!!!!!!!!!!!!");
             return receiver.poll_recv(cx);
         }
 
         if let Some(file) = &mut self.file {
             let size = {
-                println!("start file read!!!!!!!!");
                 let mut buf = ReadBuf::new(&mut self.cache_buf);
                 match Pin::new(file).poll_read(cx, &mut buf) {
                     Poll::Pending => {
-                        println!("read file is pending!!!");
                         return Poll::Pending;
                     }
                     Poll::Ready(Ok(_)) => buf.filled().len(),
@@ -115,7 +111,6 @@ impl InnerReceiver {
                     
                 }
             };
-            println!("do file read!!!!!!!! {:?}", size);
             let is_end = size < self.cache_buf.len();
             return Poll::Ready(Some((
                 is_end,
@@ -647,7 +642,6 @@ impl RecvStream {
                         break;
                     }
                     Poll::Ready(Some((is_end, bin))) => {
-                        println!("read file size = {:?} is_end = {:?}", bin.remaining(), is_end);
                         size += self.cache_buffer(bin.chunk());
                         self.is_end = is_end;
                     }
@@ -664,7 +658,6 @@ impl RecvStream {
         }
         
         if let Some(bin) = self.read_buf.take() {
-            println!("read encode size {:?}", bin.chunk().len());
             if bin.chunk().len() > 0 {
                 self.encode_write_data(bin.chunk())?;
             }

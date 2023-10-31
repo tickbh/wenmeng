@@ -411,7 +411,7 @@ impl Control {
     }
 
 
-    pub async fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()>
+    pub fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()>
     {
         let is_end = req.body().is_end();
         let next_id = self.next_stream_id();

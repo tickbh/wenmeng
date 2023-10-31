@@ -77,11 +77,11 @@ where
         self.io.send_response(res).await
     }
 
-    pub async fn send_request(&mut self, mut req: Request<RecvStream>) -> ProtResult<()> {
+    pub fn send_request(&mut self, mut req: Request<RecvStream>) -> ProtResult<()> {
         if let Some(s) = req.extensions_mut().remove::<Settings>() {
             self.settings = Some(s);
         }
-        self.io.send_request(req).await
+        self.io.send_request(req)
     }
 }
 

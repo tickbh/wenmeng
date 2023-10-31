@@ -223,11 +223,11 @@ where
         self.inner.control.send_response(res, stream_id).await
     }
 
-    pub async fn send_request(
+    pub fn send_request(
         &mut self,
-        res: Request<RecvStream>,
+        req: Request<RecvStream>,
     ) -> ProtResult<()> {
-        self.inner.control.send_request(res).await
+        self.inner.control.send_request(req)
     }
 }
 

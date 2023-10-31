@@ -5,7 +5,7 @@ use webparse::{
         http2::frame::{Frame, Reason, StreamIdentifier},
         request, response,
     },
-    Binary, BinaryMut, Request, Buf, Response,
+    Binary, BinaryMut, Request, Buf, Response, Version,
 };
 
 use crate::{ProtError, ProtResult};
@@ -43,26 +43,26 @@ impl InnerStream {
         if frame.is_end_stream() {
             self.end_stream = true;
         }
-        if let Some(sender) = &self.sender {
-            if let Ok(p) = sender.try_reserve() {
-                match frame {
-                    Frame::Data(d) => {
-                        self.recv_len += d.payload().remaining();
-                        p.send((d.is_end_stream(), d.into_payload()));
-                        if self.recv_len > self.content_len {
-                            return Err(ProtError::Extension("content len must not more"));
+        if frame.is_data() {
+            if let Some(sender) = &self.sender {
+                if let Ok(p) = sender.try_reserve() {
+                    match frame {
+                        Frame::Data(d) => {
+                            self.recv_len += d.payload().remaining();
+                            p.send((d.is_end_stream(), d.into_payload()));
+                            if self.recv_len > self.content_len {
+                                return Err(ProtError::Extension("content len must not more"));
+                            }
+                        }
+                        _ => {
+                            return Err(ProtError::Extension("must be data frame"));
                         }
                     }
-                    _ => {
-                        return Err(ProtError::Extension("must be data frame"));
-                    }
+                    return Ok(());
                 }
-            } else {
-                self.frames.push(frame);
             }
-        } else {
-            self.frames.push(frame);
         }
+        self.frames.push(frame);
         Ok(())
     }
 
@@ -115,7 +115,7 @@ impl InnerStream {
 
     pub fn build_response(&mut self) -> ProtResult<Response<RecvStream>> {
         let now_frames = self.take();
-        let mut builder = response::Response::builder();
+        let mut builder = response::Response::builder().version(Version::Http2);
         let mut is_nobody = false;
         let mut is_end_stream = false;
         let mut binary = BinaryMut::new();

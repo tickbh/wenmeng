@@ -57,6 +57,7 @@
                     "kind": "example"
                 }
             },
+            "env": {"RUST_BACKTRACE": "full", "RUST_LOG": "trace"},
             "args": [],
             "cwd": "${workspaceFolder}"
         },

@@ -460,7 +460,7 @@ where
         Ok(())
     }
 
-    pub async fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
+    pub fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
         self.check_finish_status();
         self.inner.req.push_back(req);
         self.inner.req_status.is_send_finish = false;

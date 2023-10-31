@@ -284,11 +284,11 @@ where
         Ok((self.receiver.take().unwrap(), sender))
     }
 
-    async fn send_req(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
+    fn send_req(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
         if let Some(h) = &mut self.http1 {
-            h.send_request(req).await?;
+            h.send_request(req)?;
         } else if let Some(h) = &mut self.http2 {
-            h.send_request(req).await?;
+            h.send_request(req)?;
         }
         Ok(())
     }
@@ -345,7 +345,7 @@ where
                 }
                 req = req_receiver(&mut self.req_receiver) => {
                     if let Some(req) = req {
-                        self.send_req(req).await?;
+                        self.send_req(req)?;
                     } else {
                         self.req_receiver = None;
                     }
@@ -379,7 +379,7 @@ where
     }
 
     async fn inner_operate(mut self, req: Request<RecvStream>) -> ProtResult<()> {
-        self.send_req(req).await?;
+        self.send_req(req)?;
         self.wait_operate().await
     }
 
