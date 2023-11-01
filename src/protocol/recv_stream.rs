@@ -5,7 +5,7 @@ use flate2::{
 };
 use tokio_util::sync::PollSemaphore;
 
-use std::{fmt::Debug, io, sync::Arc};
+use std::{fmt::Debug, io::{self, Error}, sync::Arc};
 use std::{
     fmt::Display,
     io::{Read, Write},
@@ -24,7 +24,7 @@ use crate::Consts;
 use super::layer::RateLimitLayer;
 
 
-fn read_all_data<R: Read>(read_buf: &mut BinaryMut, mut read: R) -> webparse::WebResult<usize> {
+fn read_all_data<R: Read>(read_buf: &mut BinaryMut, mut read: R) -> io::Result<usize> {
     let mut cache_buf = vec![0u8; 4096];
     let mut size = 0;
     loop {
@@ -203,23 +203,23 @@ impl InnerDecompress {
         }
     }
 
-    pub fn open_reader_gz(&mut self, bin: BinaryMut) {
+    pub fn open_reader_gz(&mut self) {
         if self.reader_gz.is_none() {
-            self.reader_gz = Some(GzDecoder::new(bin));
+            self.reader_gz = Some(GzDecoder::new(BinaryMut::new()));
         }
     }
 
-    pub fn open_reader_de(&mut self, bin: BinaryMut) {
+    pub fn open_reader_de(&mut self) {
         if self.reader_de.is_none() {
             self.reader_de = Some(DeflateDecoder::new(
-                bin,
+                BinaryMut::new(),
             ));
         }
     }
 
-    pub fn open_reader_br(&mut self, bin: BinaryMut) {
+    pub fn open_reader_br(&mut self) {
         if self.reader_br.is_none() {
-            self.reader_br = Some(Decompressor::new(bin, 4096));
+            self.reader_br = Some(Decompressor::new(BinaryMut::new(), 4096));
         }
     }
 }
@@ -304,7 +304,7 @@ impl RecvStream {
         if let Some(bin) = self.read_buf.take() {
             buffer.put_slice(bin.chunk());
             
-            self.nofity_some_read();
+            self.notify_some_read();
         }
         buffer.freeze()
     }
@@ -323,7 +323,7 @@ impl RecvStream {
         }
     }
 
-    pub fn nofity_some_read(&mut self) {
+    pub fn notify_some_read(&mut self) {
         if self.permit.is_some() {
             return;
         }
@@ -384,8 +384,7 @@ impl RecvStream {
         if self.read_buf.is_none() {
             self.read_buf = Some(BinaryMut::new());
         }
-        self.read_buf.as_mut().unwrap().put_slice(buf);
-        buf.len()
+        self.decode_read_data(buf).ok().unwrap_or(0)
     }
 
     pub fn is_end(&self) -> bool {
@@ -401,7 +400,7 @@ impl RecvStream {
         if let Some(bin) = self.read_buf.take() {
             buffer.put_slice(bin.chunk());
             
-            self.nofity_some_read();
+            self.notify_some_read();
         }
         return buffer.freeze();
     }
@@ -652,56 +651,100 @@ impl RecvStream {
         return Poll::Ready(Ok(has_change));
     }
 
+    // /// 返回true表示需要等待, 否则继续执行
+    // fn inner_decode_data(&mut self) -> webparse::WebResult<bool> {
+    //     // 无数据
+    //     if self.read_buf.is_none() {
+    //         return Ok(true)
+    //     }
+    //     // 原始的压缩方式不为空, 表示数据可能需要处理
+    //     if self.origin_compress_method != Consts::COMPRESS_METHOD_NONE {
+    //         // 数据方式与原有的一模一样, 不做处理
+    //         if self.origin_compress_method == self.now_compress_method {
+    //             return Ok(false)
+    //         }
+    //         // 数据结束前不做解压缩操作, 后续也不可读
+    //         if !self.is_end {
+    //             return Ok(true)
+    //         }
+    //         let _size = match self.origin_compress_method {
+    //             Consts::COMPRESS_METHOD_GZIP => {
+    //                 self.decompress.open_reader_gz();
+    //                 let gz = self.decompress.reader_gz.as_mut().unwrap();
+    //                 let mut read_buf = BinaryMut::new();
+    //                 let s = read_all_data(&mut read_buf, gz)?;
+    //                 self.read_buf = Some(read_buf);
+    //                 s
+    //             },
+    //             Consts::COMPRESS_METHOD_DEFLATE => {
+    //                 self.decompress.open_reader_de();
+    //                 let de = self.decompress.reader_de.as_mut().unwrap();
+    //                 let mut read_buf = BinaryMut::new();
+    //                 let s = read_all_data(&mut read_buf, de)?;
+    //                 self.read_buf = Some(read_buf);
+    //                 s
+    //             },
+    //             Consts::COMPRESS_METHOD_BROTLI => {
+    //                 self.decompress.open_reader_br();
+    //                 let br = self.decompress.reader_br.as_mut().unwrap();
+    //                 let mut read_buf = BinaryMut::new();
+    //                 let s = read_all_data(&mut read_buf, br)?;
+    //                 self.read_buf = Some(read_buf);
+    //                 s
+    //             },
+    //             _ => {
+    //                 return Err(WebError::Extension("未知的压缩格式"));
+    //             }
+    //         };
+    //         self.origin_compress_method = Consts::COMPRESS_METHOD_NONE;
+    //         self.notify_some_read();
+    //     }
+
+    //     Ok(false)
+    // }
+
     /// 返回true表示需要等待, 否则继续执行
-    fn inner_decode_data(&mut self) -> webparse::WebResult<bool> {
-        // 无数据
+    fn decode_read_data(&mut self, data: &[u8])  -> std::io::Result<usize> {
         if self.read_buf.is_none() {
-            return Ok(true)
+            self.read_buf = Some(BinaryMut::new());
         }
         // 原始的压缩方式不为空, 表示数据可能需要处理
         if self.origin_compress_method != Consts::COMPRESS_METHOD_NONE {
             // 数据方式与原有的一模一样, 不做处理
             if self.origin_compress_method == self.now_compress_method {
-                return Ok(false)
+                return Ok(0)
             }
             // 数据结束前不做解压缩操作, 后续也不可读
-            if !self.is_end {
-                return Ok(true)
-            }
-            let _size = match self.origin_compress_method {
+            let size = match self.origin_compress_method {
                 Consts::COMPRESS_METHOD_GZIP => {
-                    self.decompress.open_reader_gz(self.read_buf.clone().unwrap());
+                    self.decompress.open_reader_gz();
                     let gz = self.decompress.reader_gz.as_mut().unwrap();
-                    let mut read_buf = BinaryMut::new();
-                    let s = read_all_data(&mut read_buf, gz)?;
-                    self.read_buf = Some(read_buf);
+                    gz.write_all(data)?;
+                    let s = read_all_data(self.read_buf.as_mut().unwrap(), gz)?;
                     s
                 },
                 Consts::COMPRESS_METHOD_DEFLATE => {
-                    self.decompress.open_reader_de(self.read_buf.clone().unwrap());
+                    self.decompress.open_reader_de();
                     let de = self.decompress.reader_de.as_mut().unwrap();
-                    let mut read_buf = BinaryMut::new();
-                    let s = read_all_data(&mut read_buf, de)?;
-                    self.read_buf = Some(read_buf);
+                    let s = read_all_data(self.read_buf.as_mut().unwrap(), de)?;
                     s
                 },
                 Consts::COMPRESS_METHOD_BROTLI => {
-                    self.decompress.open_reader_br(self.read_buf.clone().unwrap());
+                    self.decompress.open_reader_br();
                     let br = self.decompress.reader_br.as_mut().unwrap();
-                    let mut read_buf = BinaryMut::new();
-                    let s = read_all_data(&mut read_buf, br)?;
-                    self.read_buf = Some(read_buf);
+                    let s = read_all_data(self.read_buf.as_mut().unwrap(), br)?;
                     s
                 },
                 _ => {
-                    return Err(WebError::Extension("未知的压缩格式"));
+                    return Err(Error::new(io::ErrorKind::Interrupted, "未知的压缩格式"));
                 }
             };
             self.origin_compress_method = Consts::COMPRESS_METHOD_NONE;
-            self.nofity_some_read();
+            self.notify_some_read();
+            return Ok(size)
         }
 
-        Ok(false)
+        Ok(0)
     }
 
     pub fn process_data(&mut self, cx: Option<&mut Context<'_>>) -> Poll<webparse::WebResult<usize> > {
@@ -712,16 +755,14 @@ impl RecvStream {
         if let Some(cx) = cx {
             ready!(self.inner_poll_read(cx)?);
         }
-
-        if self.inner_decode_data()? {
-            return Poll::Ready(Ok(0));
-        }
         
-        if let Some(bin) = self.read_buf.take() {
+        if let Some(mut bin) = self.read_buf.take() {
             if bin.chunk().len() > 0 {
                 self.encode_write_data(bin.chunk())?;
             }
-            self.nofity_some_read();
+            bin.advance_all();
+            self.read_buf = Some(bin);
+            self.notify_some_read();
         }
         if self.is_end {
             self.encode_write_data(&[])?;
@@ -768,7 +809,7 @@ impl Serialize for RecvStream {
         let mut size = 0;
         if let Some(bin) = self.read_buf.take() {
             size += buffer.put_slice(bin.chunk());
-            self.nofity_some_read();
+            self.notify_some_read();
         }
         // if !self.is_end {
         //     loop {
