@@ -21,6 +21,8 @@ use webparse::{Binary, BinaryMut, Buf, BufMut, Helper, Serialize, WebResult, Web
 
 use crate::Consts;
 
+use super::layer::RateLimitLayer;
+
 
 fn read_all_data<R: Read>(read_buf: &mut BinaryMut, mut read: R) -> webparse::WebResult<usize> {
     let mut cache_buf = vec![0u8; 4096];
@@ -64,6 +66,7 @@ impl InnerReceiver {
     
     pub fn new_file(file: File, data_size: u64) -> Self {
         let vec = vec![0u8; 4096];
+        println!("file = {:?}, size = {:?}", file, data_size);
         Self {
             receiver: None,
             file: Some(file),
@@ -236,6 +239,7 @@ pub struct RecvStream {
     is_end: bool,
     is_process_end: bool,
     max_read_buf: usize,
+    rate_limit: Option<RateLimitLayer>,
 }
 
 impl Default for RecvStream {
@@ -256,8 +260,8 @@ impl Default for RecvStream {
             is_process_end: false,
 
             // 10M, 默认包体的最大大小为10M
-            // max_read_buf: 10_485_760,
-            max_read_buf: 10_48,
+            max_read_buf: 10_485_760,
+            rate_limit: None,
         }
     }
 }
@@ -289,6 +293,10 @@ impl RecvStream {
             is_end: false,
             ..Default::default()
         }
+    }
+
+    pub fn set_rate_limit(&mut self, rate: RateLimitLayer) {
+        self.rate_limit = Some(rate);
     }
 
     pub fn binary(&mut self) -> Binary {
@@ -610,10 +618,21 @@ impl RecvStream {
         ready!(self.inner_poll_sem_ready(cx))?;
         let mut has_change = false;
         loop {
+            if let Some(rate) = &mut self.rate_limit {
+                match rate.poll_ready(cx) {
+                    Poll::Pending => {
+                        break;
+                    }
+                    Poll::Ready(_) => {}
+                }
+            }
             match self.receiver.poll_recv(cx) {
                 Poll::Ready(Some((is_end, bin))) => {
                     self.is_end = is_end;
                     self.cache_buffer(&bin.chunk());
+                    if let Some(rate) = &mut self.rate_limit {
+                        rate.poll_call(bin.remaining() as u64)?;
+                    }
                     has_change = true;
                     if self.is_end {
                         break;
@@ -733,11 +752,7 @@ impl AsyncRead for RecvStream {
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
         
-        // match ready!(self.inner_poll_read(cx)?) {
-        //     true => {}
-        //     false => return Poll::Pending,
-        // };
-        self.process_data(Some(cx)).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "process data error"))?;
+        ready!(self.process_data(Some(cx)).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "process data error")))?;
         let len = std::cmp::min(self.cache_body_data.remaining(), buf.remaining());
         buf.put_slice(&self.cache_body_data.chunk()[..len]);
         self.cache_body_data.advance(len);
