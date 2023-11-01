@@ -231,7 +231,7 @@ where
         mut res: Response<RecvStream>,
         stream_id: StreamIdentifier,
     ) -> ProtResult<()> {
-        HeaderHelper::process_response_header(Version::Http2, &mut res)?;
+        HeaderHelper::process_response_header(Version::Http2, false, &mut res)?;
         self.inner.control.send_response(res, stream_id).await
     }
 }

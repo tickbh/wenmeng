@@ -150,17 +150,21 @@ impl HeaderHelper {
         return Consts::COMPRESS_METHOD_NONE;
     }
 
-    pub fn process_headers(version: Version, headers: &mut HeaderMap, body: &mut RecvStream) -> ProtResult<()> {
+    pub fn process_headers(version: Version, is_client: bool, headers: &mut HeaderMap, body: &mut RecvStream) -> ProtResult<()> {
         let compress = Self::get_compress_method(headers);
-        let compress = body.add_compress_method(compress);
+        let is_chunked = headers.is_chunked();
+        let compress = if is_client {
+            body.set_origin_compress_method(compress)
+        } else {
+            body.set_chunked(is_chunked);
+            body.add_compress_method(compress)
+        };
 
         if version.is_http2() {
             headers.remove(&HeaderName::TRANSFER_ENCODING);
             headers.remove(&HeaderName::CONNECTION);
             headers.remove(&"Keep-Alive");
         }
-        let is_chunked = headers.is_chunked();
-        body.set_chunked(is_chunked);
         let header_body_len = headers.get_body_len();
         if compress == Consts::COMPRESS_METHOD_NONE {
             if !is_chunked && header_body_len == 0 && body.is_end() {
@@ -189,15 +193,15 @@ impl HeaderHelper {
         Ok(())
     }
 
-    pub fn process_request_header(version: Version, req: &mut Request<RecvStream>) -> ProtResult<()> {
+    pub fn process_request_header(version: Version, is_client: bool, req: &mut Request<RecvStream>) -> ProtResult<()> {
         let (h, b) = req.headers_body_mut();
-        Self::process_headers(version, h, b)?;
+        Self::process_headers(version, is_client, h, b)?;
         Ok(())
     }
 
-    pub fn process_response_header(version: Version, res: &mut Response<RecvStream>) -> ProtResult<()> {
+    pub fn process_response_header(version: Version, is_client: bool, res: &mut Response<RecvStream>) -> ProtResult<()> {
         let (h, b) = res.headers_body_mut();
-        Self::process_headers(version, h, b)?;
+        Self::process_headers(version, is_client, h, b)?;
         Ok(())
     }
 

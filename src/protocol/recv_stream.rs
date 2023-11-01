@@ -362,9 +362,9 @@ impl RecvStream {
         self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
     }
 
-    pub fn set_origin_compress_method(&mut self, method: i8) {
+    pub fn set_origin_compress_method(&mut self, method: i8) -> i8 {
         self.origin_compress_method = method;
-        self.now_compress_method = Consts::COMPRESS_METHOD_NONE;
+        self.origin_compress_method
     }
 
     pub fn add_compress_method(&mut self, method: i8) -> i8 {
@@ -397,10 +397,10 @@ impl RecvStream {
 
     pub fn read_now(&mut self) -> Binary {
         let mut buffer = BinaryMut::new();
-        if let Some(bin) = self.read_buf.take() {
-            buffer.put_slice(bin.chunk());
-            
-            self.notify_some_read();
+        let _ = self.process_data(None);
+        if self.cache_body_data.remaining() > 0 {
+            buffer.put_slice(&self.cache_body_data.chunk());
+            self.cache_body_data.advance_all();
         }
         return buffer.freeze();
     }
@@ -429,8 +429,8 @@ impl RecvStream {
         let mut size = 0;
         if !self.is_end && !self.receiver.is_none() {
             while let Some(v) = self.receiver.recv().await {
-                size += self.cache_buffer(v.1.chunk());
                 self.is_end = v.0;
+                size += self.cache_buffer(v.1.chunk());
                 if self.is_end == true {
                     break;
                 }
@@ -712,6 +712,7 @@ impl RecvStream {
         if self.origin_compress_method != Consts::COMPRESS_METHOD_NONE {
             // 数据方式与原有的一模一样, 不做处理
             if self.origin_compress_method == self.now_compress_method {
+                self.read_buf.as_mut().unwrap().put_slice(data);
                 return Ok(0)
             }
             // 数据结束前不做解压缩操作, 后续也不可读
@@ -743,8 +744,8 @@ impl RecvStream {
             self.notify_some_read();
             return Ok(size)
         }
-
-        Ok(0)
+        self.read_buf.as_mut().unwrap().put_slice(data);
+        Ok(data.len())
     }
 
     pub fn process_data(&mut self, cx: Option<&mut Context<'_>>) -> Poll<webparse::WebResult<usize> > {
@@ -776,7 +777,6 @@ impl RecvStream {
         read_data: &mut B,
     ) -> WebResult<usize> {
         let _ = self.process_data(None)?;
-
         let mut size = 0;
         if self.cache_body_data.remaining() > 0 {
             size += read_data.put_slice(&self.cache_body_data.chunk());

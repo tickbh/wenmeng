@@ -1,6 +1,6 @@
 
 
-use webparse::{Request, Buf};
+use webparse::{Request, Buf, HeaderName};
 use wenmeng::{Client, ProtResult};
 
 async fn test_http2() -> ProtResult<()> {
@@ -8,10 +8,10 @@ async fn test_http2() -> ProtResult<()> {
 
     println!("aaaaaaaaaaaaaa");
     // let url = "http://localhost:82/root/target/rid_maps.log";
-    let url = "http://localhost:8080/root/target/";
+    let url = "http://localhost:8080/root/README.md";
     // let mut vecs = vec![];
     // tokio::time::sleep(Duration::from_secs(100000)).await;
-    let req = Request::builder().method("GET").url(url).body("").unwrap();
+    let req = Request::builder().method("GET").header(HeaderName::ACCEPT_ENCODING, "gzip").url(url).body("").unwrap();
     println!("url = {:?}", req.get_connect_url());
     let client = Client::builder().
         // http2(false)
@@ -22,18 +22,20 @@ async fn test_http2() -> ProtResult<()> {
     let mut res = recv.recv().await.unwrap();
     res.body_mut().wait_all().await;
     println!("res = {} {}", res.status(), res.body_mut().origin_len());
+    let res = res.into_type::<String>();
+    println!("return body = {}", res.body());
 
-    let req = Request::builder()
-        .method("GET")
-        .url(url.to_owned() + "blog/")
-        .body("")
-        .unwrap();
-    println!("url = {:?}", req.url());
-    sender.send(req.into_type()).await.unwrap();
-    let mut res = recv.recv().await.unwrap();
-    res.body_mut().wait_all().await;
-    println!("res = {} {}", res.status(), res.body_mut().origin_len());
-    println!("res = {:?}", res.body_mut().binary().chunk());
+    // let req = Request::builder()
+    //     .method("GET")
+    //     .url(url.to_owned() + "blog/")
+    //     .body("")
+    //     .unwrap();
+    // println!("url = {:?}", req.url());
+    // sender.send(req.into_type()).await.unwrap();
+    // let mut res = recv.recv().await.unwrap();
+    // res.body_mut().wait_all().await;
+    // println!("res = {} {}", res.status(), res.body_mut().origin_len());
+    // println!("res = {:?}", res.body_mut().binary().chunk());
     // tokio::time::sleep(Duration::from_secs(100000)).await;
     Ok(())
 }
