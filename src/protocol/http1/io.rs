@@ -120,7 +120,7 @@ where
         if let Some(res) = self.inner.res.front_mut() {
             if !self.inner.res_status.is_send_header {
                 self.inner.res_status.is_chunked = res.headers().is_chunked();
-                HeaderHelper::process_response_header(Version::Http11, true, res)?;
+                // HeaderHelper::process_response_header(Version::Http11, true, res)?;
                 res.encode_header(&mut self.write_buf)?;
                 self.inner.res_status.is_send_header = true;
             }
@@ -395,8 +395,6 @@ where
                 }
 
                 self.send_stream.set_new_body();
-                let method = HeaderHelper::get_compress_method(response.headers());
-
                 self.send_stream.read_buf.advance(size);
                 self.inner.res_status.is_send_body = false;
                 self.inner.res_status.is_send_finish = false;
@@ -416,7 +414,7 @@ where
                 }
                 let (mut recv, sender) =
                     Self::build_recv_stream(&mut self.inner.res_status, &mut self.send_stream)?;
-                recv.set_origin_compress_method(method);
+                HeaderHelper::process_headers(Version::Http11, true, response.headers_mut(), &mut recv)?;
                 if recv.is_end() {
                     self.inner.res_status.clear_read();
                 }

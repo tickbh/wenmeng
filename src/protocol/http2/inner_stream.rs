@@ -8,7 +8,7 @@ use webparse::{
     Binary, BinaryMut, Request, Buf, Response, Version,
 };
 
-use crate::{ProtError, ProtResult};
+use crate::{ProtError, ProtResult, HeaderHelper};
 
 use crate::RecvStream;
 
@@ -138,13 +138,14 @@ impl InnerStream {
                 }
             }
         }
-        let recv = if is_nobody {
+        let mut recv = if is_nobody {
             RecvStream::empty()
         } else {
             let (sender, receiver) = channel::<(bool, Binary)>(20);
             self.sender = Some(sender);
             RecvStream::new(receiver, binary, is_end_stream)
         };
+        HeaderHelper::process_headers(Version::Http2, true, builder.headers_mut().unwrap(), &mut recv)?;
         self.content_len = builder.get_body_len() as usize;
         if self.content_len == 0 {
             self.content_len = usize::MAX;

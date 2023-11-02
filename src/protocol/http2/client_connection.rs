@@ -119,7 +119,7 @@ where
         match f(r.into_type::<Req>()).await? {
             Some(res) => {
                 let mut res = res.into_type();
-                HeaderHelper::process_response_header(Version::Http2, true, &mut res)?;
+                // HeaderHelper::process_response_header(Version::Http2, true, &mut res)?;
                 self.send_response(
                     res,
                     stream_id.unwrap_or(StreamIdentifier::client_first()),
@@ -248,7 +248,7 @@ where
                             return Poll::Pending;
                         }
                         Poll::Ready(Some(Ok(mut v))) => {
-                            HeaderHelper::process_response_header(Version::Http2, true, &mut v)?;
+                            // HeaderHelper::process_response_header(Version::Http2, true, &mut v)?;
                             return Poll::Ready(Some(Ok(v)));
                         }
                         Poll::Ready(v) => {

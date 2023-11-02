@@ -229,6 +229,7 @@ pub struct RecvStream {
     receiver: InnerReceiver,
     sem: PollSemaphore,
     permit: Option<OwnedSemaphorePermit>,
+    origin_buf: Option<BinaryMut>,
     read_buf: Option<BinaryMut>,
     cache_body_data: BinaryMut,
     origin_compress_method: i8,
@@ -248,6 +249,7 @@ impl Default for RecvStream {
             receiver: InnerReceiver::new(),
             sem: PollSemaphore::new(Arc::new(Semaphore::new(10))),
             permit: None,
+            origin_buf: None,
             read_buf: Default::default(),
             cache_body_data: BinaryMut::new(),
             
@@ -273,7 +275,7 @@ impl RecvStream {
 
     pub fn only(binary: Binary) -> RecvStream {
         RecvStream {
-            read_buf: Some(BinaryMut::from(binary)),
+            origin_buf: Some(BinaryMut::from(binary)),
             ..Default::default()
         }
     }
@@ -281,7 +283,7 @@ impl RecvStream {
     pub fn new(receiver: Receiver<(bool, Binary)>, binary: BinaryMut, is_end: bool) -> RecvStream {
         RecvStream {
             receiver: InnerReceiver::new_receiver(receiver),
-            read_buf: Some(binary),
+            origin_buf: Some(binary),
             is_end,
             ..Default::default()
         }
@@ -751,6 +753,10 @@ impl RecvStream {
     pub fn process_data(&mut self, cx: Option<&mut Context<'_>>) -> Poll<webparse::WebResult<usize> > {
         if self.is_process_end {
             return Poll::Ready(Ok(0));
+        }
+
+        if let Some(origin) = self.origin_buf.take() {
+            self.decode_read_data(origin.chunk())?;
         }
 
         if let Some(cx) = cx {

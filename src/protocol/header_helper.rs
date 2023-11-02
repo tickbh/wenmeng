@@ -152,6 +152,11 @@ impl HeaderHelper {
 
     pub fn process_headers(version: Version, is_client: bool, headers: &mut HeaderMap, body: &mut RecvStream) -> ProtResult<()> {
         let compress = Self::get_compress_method(headers);
+        if version.is_http2() {
+            headers.remove(&HeaderName::TRANSFER_ENCODING);
+            headers.remove(&HeaderName::CONNECTION);
+            headers.remove(&"Keep-Alive");
+        }
         let is_chunked = headers.is_chunked();
         let compress = if is_client {
             body.set_origin_compress_method(compress)
@@ -160,11 +165,6 @@ impl HeaderHelper {
             body.add_compress_method(compress)
         };
 
-        if version.is_http2() {
-            headers.remove(&HeaderName::TRANSFER_ENCODING);
-            headers.remove(&HeaderName::CONNECTION);
-            headers.remove(&"Keep-Alive");
-        }
         let header_body_len = headers.get_body_len();
         if compress == Consts::COMPRESS_METHOD_NONE {
             if !is_chunked && header_body_len == 0 && body.is_end() {
