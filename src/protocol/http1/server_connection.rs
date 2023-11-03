@@ -11,9 +11,9 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::Mutex,
 };
-use webparse::{Binary, BinaryMut, Request, Response, Serialize};
+use webparse::{Binary, BinaryMut, Request, Response, Serialize, Version};
 
-use crate::{ProtResult, RecvStream, ServerH2Connection, HttpHelper};
+use crate::{ProtResult, RecvStream, ServerH2Connection, HttpHelper, HeaderHelper};
 
 use super::IoBuffer;
 
@@ -80,7 +80,8 @@ where
                 ));
             }
         }
-        let res = HttpHelper::handle_request(addr, r, f).await?;
+        let mut res = HttpHelper::handle_request(addr, r, f).await?;
+        HeaderHelper::process_response_header(Version::Http11, false, &mut res)?;
         self.send_response(res).await?;
         return Ok(None);
     }

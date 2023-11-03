@@ -2,7 +2,6 @@ use crate::{RecvStream, RateLimitLayer};
 use crate::{plugins::calc_file_size, ProtResult};
 use lazy_static::lazy_static;
 use serde::{Serialize, Deserialize};
-use std::time::Duration;
 use std::{collections::HashMap, io};
 use std::path::{Path};
 use tokio::fs::File;

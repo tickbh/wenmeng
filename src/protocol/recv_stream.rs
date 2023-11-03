@@ -261,7 +261,7 @@ impl Default for RecvStream {
             is_end: true,
             is_process_end: false,
 
-            // 10M, 默认包体的最大大小为10M
+            // 为了数据安全, 防止一次性全部读到内存, 限定默认大小为10M
             max_read_buf: 10_485_760,
             rate_limit: None,
         }
@@ -301,6 +301,10 @@ impl RecvStream {
         self.rate_limit = Some(rate);
     }
 
+    pub fn set_max_read_buf(&mut self, max_read_buf: usize) {
+        self.max_read_buf = max_read_buf;
+    } 
+
     pub fn binary(&mut self) -> Binary {
         let mut buffer = BinaryMut::new();
         if let Some(bin) = self.read_buf.take() {
@@ -320,7 +324,7 @@ impl RecvStream {
     }
 
     pub fn check_over_limit(&mut self) {
-        if self.read_buf.is_some() && self.read_buf.as_mut().unwrap().remaining() >= self.max_read_buf {
+        if self.read_buf.is_some() && self.read_buf.as_ref().unwrap().remaining() >= self.max_read_buf {
             self.permit.take();
         }
     }
