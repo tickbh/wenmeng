@@ -83,12 +83,12 @@ async fn operate(mut req: Request<RecvStream>) -> ProtResult<Response<RecvStream
         }
     };
 
-    let mut file_server = FileServer::new("".to_string(), "/root".to_string());
-    file_server.set_browse(true);
-    // file_server.set_disable_compress(true);
-    file_server.hide.push("src".to_string());
-    file_server.precompressed.push("gzip".to_string());
-    file_server.deal_request(req).await
+    // let mut file_server = FileServer::new("".to_string(), "/root".to_string());
+    // file_server.set_browse(true);
+    // // file_server.set_disable_compress(true);
+    // file_server.hide.push("src".to_string());
+    // file_server.precompressed.push("gzip".to_string());
+    // file_server.deal_request(req).await
 
     // let file = File::open("README.md").await?;
     // let length = file.metadata().await?.len();
