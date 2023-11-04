@@ -66,7 +66,6 @@ impl InnerReceiver {
     
     pub fn new_file(file: File, data_size: u64) -> Self {
         let vec = vec![0u8; 4096];
-        println!("file = {:?}, size = {:?}", file, data_size);
         Self {
             receiver: None,
             file: Some(file),
@@ -315,6 +314,11 @@ impl RecvStream {
         buffer.freeze()
     }
 
+
+    pub fn get_origin_compress(&self) -> i8 {
+        self.origin_compress_method
+    }
+
     pub fn get_now_compress(&self) -> i8 {
         // 输入输出同一种编码, 不做任何处理
         if self.origin_compress_method == self.now_compress_method {
@@ -432,6 +436,7 @@ impl RecvStream {
     }
 
     pub async fn wait_all(&mut self) -> Option<usize> {
+        let _ = self.process_data(None);
         let mut size = 0;
         if !self.is_end && !self.receiver.is_none() {
             while let Some(v) = self.receiver.recv().await {
@@ -446,6 +451,8 @@ impl RecvStream {
     }
 
     pub async fn read_all(&mut self, buffer: &mut BinaryMut) -> Option<usize> {
+        let _ = self.process_data(None);
+
         if !self.is_end && !self.receiver.is_none() {
             while let Some(v) = self.receiver.recv().await {
                 self.cache_buffer(v.1.chunk());
@@ -746,7 +753,9 @@ impl RecvStream {
                     return Err(Error::new(io::ErrorKind::Interrupted, "未知的压缩格式"));
                 }
             };
-            self.origin_compress_method = Consts::COMPRESS_METHOD_NONE;
+            if self.is_end {
+                self.origin_compress_method = Consts::COMPRESS_METHOD_NONE;
+            }
             self.notify_some_read();
             return Ok(size)
         }
@@ -760,7 +769,7 @@ impl RecvStream {
         }
 
         if let Some(origin) = self.origin_buf.take() {
-            self.decode_read_data(origin.chunk())?;
+            let _ = self.decode_read_data(origin.chunk())?;
         }
 
         if let Some(cx) = cx {

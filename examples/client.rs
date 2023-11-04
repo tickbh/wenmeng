@@ -28,9 +28,13 @@ async fn test_http2() -> ProtResult<()> {
     println!("bbbbbbbbbbbb");
     let mut res = recv.recv().await.unwrap();
     res.body_mut().wait_all().await;
-    println!("res = {} {}", res.status(), res.body_mut().origin_len());
+    println!("res = {} {} compress  = {}", res.status(), res.body_mut().origin_len(), res.body_mut().get_origin_compress());
     let res = res.into_type::<String>();
-    println!("return body = {}", res.body());
+    println!("return body = {}", 
+    unsafe {
+        res.body().as_str().get_unchecked(0..10)
+    }
+    );
 
     // let req = Request::builder()
     //     .method("GET")

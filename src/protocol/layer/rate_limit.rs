@@ -4,9 +4,13 @@ use tokio::time::{Duration, Instant, Sleep};
 
 #[derive(Debug)]
 pub struct RateLimitLayer {
+    /// 周期内可以通行的数据
     nums: u64,
+    /// 每个周期的时间
     per: Duration,
+    /// 当前周期下，还剩下可通行的数据
     left_nums: u64,
+    /// 下一个时间重新计算的日期
     util: Instant,
     sleep: Pin<Box<Sleep>>,
 }

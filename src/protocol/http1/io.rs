@@ -414,6 +414,7 @@ where
                 }
                 let (mut recv, sender) =
                     Self::build_recv_stream(&mut self.inner.res_status, &mut self.send_stream)?;
+
                 HeaderHelper::process_headers(Version::Http11, true, response.headers_mut(), &mut recv)?;
                 if recv.is_end() {
                     self.inner.res_status.clear_read();
