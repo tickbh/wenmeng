@@ -14,19 +14,19 @@
 #![warn(rust_2018_idioms)]
 
 use flate2::GzBuilder;
-use webparse::{BinaryMut, Request, Response};
+use webparse::{BinaryMut, Request, Response, HeaderName};
 #[macro_use]
 extern crate serde_derive;
 use std::{
     env,
     error::Error,
-    io::{Read}, net::SocketAddr,
+    io::{Read, self}, net::SocketAddr,
 };
 use tokio::{
-    net::{TcpListener, TcpStream}, io::AsyncReadExt,
+    net::{TcpListener, TcpStream}, io::AsyncReadExt, fs::File,
 };
 
-use wenmeng::{self, ProtResult, RecvStream, Server, FileServer};
+use wenmeng::{self, ProtResult, RecvStream, Server};
 
 // use async_compression::tokio::{write::GzipEncoder};
 
@@ -90,18 +90,18 @@ async fn operate(mut req: Request<RecvStream>) -> ProtResult<Response<RecvStream
     // file_server.precompressed.push("gzip".to_string());
     // file_server.deal_request(req).await
 
-    // let file = File::open("README.md").await?;
-    // let length = file.metadata().await?.len();
-    // // let recv = RecvStream::new_file(file, BinaryMut::from(body.into_bytes().to_vec()), false);
-    // let mut recv = RecvStream::new_file(file, BinaryMut::new(), false);
-    // // recv.set_compress_origin_gzip();
-    // let response = builder
-    //     // .header("Content-Length", length as usize)
-    //     .header(HeaderName::CONTENT_ENCODING, "gzip")
-    //     .header(HeaderName::TRANSFER_ENCODING, "chunked")
-    //     .body(recv)
-    //     .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
-    // Ok(Some(response))
+    let file = File::open("README.md").await?;
+    let length = file.metadata().await?.len();
+    // let recv = RecvStream::new_file(file, BinaryMut::from(body.into_bytes().to_vec()), false);
+    let mut recv = RecvStream::new_file(file, length);
+    // recv.set_compress_origin_gzip();
+    let response = builder
+        // .header("Content-Length", length as usize)
+        .header(HeaderName::CONTENT_ENCODING, "gzip")
+        .header(HeaderName::TRANSFER_ENCODING, "chunked")
+        .body(recv)
+        .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
+    Ok(response)
 
     // let (sender, receiver) = channel(10);
     // let recv = RecvStream::new(receiver, BinaryMut::from(body.into_bytes().to_vec()), false);
