@@ -1,6 +1,6 @@
 
 
-use std::time::Instant;
+use std::time::{Instant, Duration};
 
 use webparse::{Request, Buf, HeaderName};
 use wenmeng::{Client, ProtResult};
@@ -11,13 +11,15 @@ async fn test_http2() -> ProtResult<()> {
     println!("aaaaaaaaaaaaaa");
     // let url = "http://localhost:82/root/target/rid_maps.log";
     let url = "http://127.0.0.1:82/root/README.md";
+    let url = "http://www.baidu.com";
     // let mut vecs = vec![];
     // tokio::time::sleep(Duration::from_secs(100000)).await;
     let req = Request::builder().method("GET").header(HeaderName::ACCEPT_ENCODING, "gzip").url(url).body("").unwrap();
     println!("url = {:?} now = {:?}", req.get_connect_url(), Instant::now());
-    let client = Client::builder().
-        // http2(false)
-        http2_only(true)
+    let client = Client::builder()
+        // .http2(false)
+        // .http2_only(true)
+        .connect_timeout(Duration::new(1, 10))
         .connect(url).await.unwrap();
 
     println!("aaaaaaa now = {:?}", Instant::now());

@@ -1,11 +1,13 @@
 use std::io;
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::http2::{self, ClientH2Connection};
 use crate::{http1::ClientH1Connection, ProtError};
 use crate::{ProtResult, RecvStream};
 use rustls::{ClientConfig, RootCertStore};
+use tokio::net::ToSocketAddrs;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -19,45 +21,70 @@ use webparse::{Binary, Request, Response, Url};
 
 #[derive(Debug)]
 pub struct Builder {
-    inner: ProtResult<ClientOption>,
+    inner: ClientOption,
 }
 
 impl Builder {
     pub fn new() -> Self {
         Self {
-            inner: Ok(ClientOption::default()),
+            inner: ClientOption::default(),
         }
     }
 
-    pub fn http2_only(self, http2: bool) -> Self {
-        self.and_then(move |mut v| {
-            v.http2_only = http2;
-            Ok(v)
-        })
+    pub fn http2_only(mut self, http2_only: bool) -> Self {
+        self.inner.http2_only = http2_only;
+        self
     }
 
-    pub fn http2(self, http2: bool) -> Self {
-        self.and_then(move |mut v| {
-            v.http2 = http2;
-            Ok(v)
-        })
+    pub fn http2(mut self, http2: bool) -> Self {
+        self.inner.http2 = http2;
+        self
     }
 
-    fn and_then<F>(self, func: F) -> Self
-    where
-        F: FnOnce(ClientOption) -> ProtResult<ClientOption>,
-    {
-        Builder {
-            inner: self.inner.and_then(func),
-        }
+    pub fn connect_timeout(mut self, connect_timeout: Duration) -> Self {
+        self.inner.connect_timeout = Some(connect_timeout);
+        self
     }
 
-    pub fn value(self) -> ProtResult<ClientOption> {
+    
+    pub fn read_timeout(mut self, read_timeout: Duration) -> Self {
+        self.inner.read_timeout = Some(read_timeout);
+        self
+    }
+
+    
+    pub fn write_timeout(mut self, write_timeout: Duration) -> Self {
+        self.inner.write_timeout = Some(write_timeout);
+        self
+    }
+
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.inner.timeout = Some(timeout);
+        self
+    }
+
+    pub fn value(self) -> ClientOption {
         self.inner
     }
 
     pub async fn connect_by_stream(self, stream: TcpStream) -> ProtResult<Client<TcpStream>> {
-        Ok(Client::<TcpStream>::new(self.inner?, stream))
+        Ok(Client::<TcpStream>::new(self.inner, stream))
+    }
+
+    async fn inner_connect<A: ToSocketAddrs>(&self, addr: A) -> ProtResult<TcpStream> {
+        if let Some(connect) = &self.inner.connect_timeout {
+            match tokio::time::timeout(*connect, TcpStream::connect(addr)).await {
+                Ok(v) => {
+                    let tcp = v?;
+                    Ok(tcp)
+                }
+                Err(_) => return Err(ProtError::Extension("timeout")),
+            }
+
+        } else {
+            let tcp = TcpStream::connect(addr).await?;
+            Ok(tcp)
+        }
     }
 
     pub async fn connect<T>(self, url: T) -> ProtResult<Client<TcpStream>>
@@ -68,8 +95,8 @@ impl Builder {
         if url.is_err() {
             return Err(ProtError::Extension("unknown connection url"));
         } else {
-            let tcp = TcpStream::connect(url.ok().unwrap().get_connect_url().unwrap()).await?;
-            Ok(Client::<TcpStream>::new(self.inner?, tcp))
+            let tcp = self.inner_connect(url.ok().unwrap().get_connect_url().unwrap()).await?;
+            Ok(Client::<TcpStream>::new(self.inner, tcp))
         }
     }
 
@@ -81,7 +108,7 @@ impl Builder {
     where
         T: TryInto<Url>,
     {
-        let mut option = self.inner?;
+        let mut option = self.inner;
         let url = TryInto::<Url>::try_into(url);
         if url.is_err() {
             return Err(ProtError::Extension("unknown connection url"));
@@ -92,8 +119,6 @@ impl Builder {
             if domain.is_none() || connect.is_none() {
                 return Err(ProtError::Extension("unknown connection domain"));
             }
-            println!("domain = {:?}", domain);
-            println!("connect = {:?}", connect);
             let mut root_store = RootCertStore::empty();
             root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
                 rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
@@ -124,17 +149,14 @@ impl Builder {
                 option.http2_only = true;
             }
 
-            println!("aaaaaaaaaaa == {:?}", aa);
-            println!("aaaaaaaaaaa == {:?}", String::from_utf8_lossy(aa.unwrap()));
             Ok(Client::new(option, outbound))
         }
     }
 
-    pub async fn connect_tls<T>(self, url: T) -> ProtResult<Client<TlsStream<TcpStream>>>
+    pub async fn connect_tls<T>(mut self, url: T) -> ProtResult<Client<TlsStream<TcpStream>>>
     where
         T: TryInto<Url>,
     {
-        let mut option = self.inner?;
         let url = TryInto::<Url>::try_into(url);
         if url.is_err() {
             return Err(ProtError::Extension("unknown connection url"));
@@ -159,11 +181,11 @@ impl Builder {
                 .with_safe_defaults()
                 .with_root_certificates(root_store)
                 .with_no_client_auth();
-            config.alpn_protocols = option.get_alpn_protocol();
+            config.alpn_protocols = self.inner.get_alpn_protocol();
             let tls_client = Arc::new(config);
             let connector = TlsConnector::from(tls_client);
 
-            let stream = TcpStream::connect(&connect.unwrap()).await?;
+            let stream = self.inner_connect(&connect.unwrap()).await?;
             // 这里的域名只为认证设置
             let domain = rustls::ServerName::try_from(&*domain.unwrap())
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
@@ -175,12 +197,10 @@ impl Builder {
             }
 
             if aa == Some(&ClientOption::H2_PROTOCOL) {
-                option.http2_only = true;
+                self.inner.http2_only = true;
             }
 
-            println!("aaaaaaaaaaa == {:?}", aa);
-            println!("aaaaaaaaaaa == {:?}", String::from_utf8_lossy(aa.unwrap()));
-            Ok(Client::new(option, outbound))
+            Ok(Client::new(self.inner, outbound))
         }
     }
 }
@@ -190,6 +210,10 @@ pub struct ClientOption {
     http2_only: bool,
     http2: bool,
     settings: Settings,
+    connect_timeout: Option<Duration>,
+    read_timeout: Option<Duration>,
+    write_timeout: Option<Duration>,
+    timeout: Option<Duration>,
 }
 
 impl ClientOption {
@@ -218,6 +242,10 @@ impl Default for ClientOption {
             http2_only: false,
             http2: true,
             settings: Default::default(),
+            connect_timeout: None,
+            read_timeout: None,
+            write_timeout: None,
+            timeout: None,
         }
     }
 }
