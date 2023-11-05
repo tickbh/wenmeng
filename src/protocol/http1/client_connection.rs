@@ -1,9 +1,9 @@
 use std::{
     pin::Pin,
-    task::{Context, Poll},
+    task::{Context, Poll}, time::{Duration, Instant},
 };
 
-use futures_core::{Stream};
+use futures_core::{Stream, Future};
 use tokio::{io::{AsyncRead, AsyncWrite}};
 use webparse::{Binary, Request, Response, http2::{HTTP2_MAGIC, frame::Settings}};
 
@@ -14,6 +14,10 @@ use super::IoBuffer;
 pub struct ClientH1Connection<T> {
     io: IoBuffer<T>,
     settings: Option<Settings>,
+
+    read_timeout: Option<Duration>,
+    write_timeout: Option<Duration>,
+    timeout: Option<Duration>,
 }
 
 impl<T> ClientH1Connection<T>
@@ -22,9 +26,25 @@ where
 {
     pub fn new(io: T) -> Self {
         ClientH1Connection {
-            io: IoBuffer::new(io),
-            settings: None
+            io: IoBuffer::new(io, false),
+            settings: None,
+
+            read_timeout: None,
+            write_timeout: None,
+            timeout: None,
         }
+    }
+
+    pub fn set_read_timeout(&mut self, read_timeout: Option<Duration>) {
+        self.read_timeout = read_timeout;
+    }
+
+    pub fn set_write_timeout(&mut self, write_timeout: Option<Duration>) {
+        self.write_timeout = write_timeout;
+    }
+
+    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
+        self.timeout = timeout;
     }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
@@ -94,6 +114,37 @@ where
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
+        let now = Instant::now();
+        if !self.io.is_read_end() {
+            if let Some(read) = &self.read_timeout {
+                let next = *self.io.get_ready_time() + *read;
+                if now > next {
+                    return Poll::Ready(Some(Err(crate::ProtError::Extension("read timeout"))));
+                }
+                
+                let _ = Pin::new(&mut Box::pin(tokio::time::sleep_until(next.into()))).poll(cx);
+            }
+        }
+        if !self.io.is_write_end() {
+            if let Some(write) = &self.write_timeout {
+                let next = *self.io.get_ready_time() + *write;
+                if now > next {
+                    return Poll::Ready(Some(Err(crate::ProtError::Extension("write timeout"))));
+                }
+                let _ = Pin::new(&mut Box::pin(tokio::time::sleep_until(next.into()))).poll(cx);
+
+            }
+        }
+
+        if !self.io.is_end() {
+            if let Some(time) = &self.timeout {
+                let next = *self.io.get_ready_time() + *time;
+                if now > next {
+                    return Poll::Ready(Some(Err(crate::ProtError::Extension("timeout"))));
+                }
+                let _ = Pin::new(&mut Box::pin(tokio::time::sleep_until(next.into()))).poll(cx);
+            }
+        }
         Pin::new(&mut self.io).poll_response(cx)
     }
 }

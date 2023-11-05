@@ -1,6 +1,6 @@
 use std::{
     pin::Pin,
-    task::{ready, Context, Poll}, collections::LinkedList,
+    task::{ready, Context, Poll}, collections::LinkedList, time::Instant,
 };
 
 use tokio::{
@@ -15,10 +15,14 @@ use webparse::{
 
 pub struct IoBuffer<T> {
     io: T,
+    is_server: bool,
+
     send_stream: SendStream,
     write_buf: BinaryMut,
 
     inner: ConnectionInfo,
+
+    ready_time: Instant,
 }
 
 struct ConnectionInfo {
@@ -90,9 +94,10 @@ impl<T> IoBuffer<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(io: T) -> Self {
+    pub fn new(io: T, is_server: bool) -> Self {
         Self {
-            io: io,
+            io,
+            is_server,
             send_stream: SendStream::empty(),
             write_buf: BinaryMut::new(),
 
@@ -107,7 +112,13 @@ where
                 req_status: SendStatus::default(),
                 res_status: SendStatus::default(),
             },
+
+            ready_time: Instant::now(),
         }
+    }
+
+    pub fn get_ready_time(&self) -> &Instant {
+        &self.ready_time
     }
 
     pub fn check_finish_status(&mut self) {
@@ -115,6 +126,27 @@ where
             self.set_now_end();
         }
     }
+
+    pub fn is_read_end(&self) -> bool {
+        if self.is_server {
+            self.inner.req_status.is_read_finish
+        } else {
+            self.inner.res_status.is_read_finish
+        }
+    }
+
+    pub fn is_write_end(&self) -> bool {
+        if self.is_server {
+            self.inner.res_status.is_send_finish
+        } else {
+            self.inner.req_status.is_send_finish
+        }
+    }
+
+    pub fn is_end(&self) -> bool {
+        self.is_read_end() && self.is_write_end()
+    }
+
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
         if let Some(res) = self.inner.res.front_mut() {
@@ -461,6 +493,7 @@ where
 
     pub fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
         self.check_finish_status();
+        
         self.inner.req.push_back(req);
         self.inner.req_status.is_send_finish = false;
         Ok(())

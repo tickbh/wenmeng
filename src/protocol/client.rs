@@ -296,8 +296,16 @@ where
                 .unwrap()
                 .set_handshake_status(Binary::from(HTTP2_MAGIC));
         } else {
-            client.http1 = Some(ClientH1Connection::new(stream));
+            client.http1 = Some(client.build_client_h1_connection(stream));
         }
+        client
+    }
+
+    fn build_client_h1_connection(&self, stream: T) -> ClientH1Connection<T> {
+        let mut client = ClientH1Connection::new(stream);
+        client.set_read_timeout(self.option.read_timeout);
+        client.set_write_timeout(self.option.write_timeout);
+        client.set_timeout(self.option.timeout);
         client
     }
 

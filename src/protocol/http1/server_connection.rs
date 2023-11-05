@@ -27,7 +27,7 @@ where
 {
     pub fn new(io: T) -> Self {
         ServerH1Connection {
-            io: IoBuffer::new(io),
+            io: IoBuffer::new(io, true),
         }
     }
 
