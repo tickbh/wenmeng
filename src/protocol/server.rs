@@ -4,7 +4,7 @@ use futures_core::{Future};
 use tokio::{io::{AsyncRead, AsyncWrite}, sync::Mutex};
 use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize};
 
-use crate::{ServerH2Connection, ProtError, ProtResult, RecvStream};
+use crate::{ServerH2Connection, ProtError, ProtResult, RecvStream, TimeoutLayer};
 
 use super::http1::ServerH1Connection;
 
@@ -17,6 +17,8 @@ where
     http2: Option<ServerH2Connection<T>>,
     data: Arc<Mutex<D>>,
     addr: Option<SocketAddr>,
+
+    timeout: Option<TimeoutLayer>,
 }
 
 impl<T> Server<T, ()>
@@ -29,6 +31,8 @@ where
             http2: None,
             data: Arc::new(Mutex::new(())),
             addr,
+
+            timeout: None,
         }
     }
 }
@@ -45,6 +49,7 @@ where
             http2: None,
             data,
             addr,
+            timeout: None,
         }
     }
 
