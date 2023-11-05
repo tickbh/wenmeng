@@ -3,7 +3,7 @@ use std::{
     net::SocketAddr,
     pin::Pin,
     sync::Arc,
-    task::{Context, Poll},
+    task::{Context, Poll}, time::Duration,
 };
 
 use futures_core::{Future, Stream};
@@ -13,12 +13,14 @@ use tokio::{
 };
 use webparse::{Binary, BinaryMut, Request, Response, Serialize, Version};
 
-use crate::{ProtResult, RecvStream, ServerH2Connection, HttpHelper, HeaderHelper};
+use crate::{ProtResult, RecvStream, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer};
 
 use super::IoBuffer;
 
 pub struct ServerH1Connection<T> {
     io: IoBuffer<T>,
+
+    timeout: Option<TimeoutLayer>,
 }
 
 impl<T> ServerH1Connection<T>
@@ -28,7 +30,30 @@ where
     pub fn new(io: T) -> Self {
         ServerH1Connection {
             io: IoBuffer::new(io, true),
+
+            timeout: None,
         }
+    }
+
+    pub fn set_read_timeout(&mut self, read_timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_read_timeout(read_timeout);
+    }
+
+    pub fn set_write_timeout(&mut self, write_timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_write_timeout(write_timeout);
+    }
+
+    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_timeout(timeout);
     }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
@@ -129,6 +154,10 @@ where
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
+        if self.timeout.is_some() {
+            let (ready_time, is_read_end, is_write_end) = (*self.io.get_ready_time(), self.io.is_read_end(), self.io.is_write_end());
+            self.timeout.as_mut().unwrap().poll_ready(cx, ready_time, is_read_end, is_write_end)?;
+        }
         Pin::new(&mut self.io).poll_request(cx)
     }
 }

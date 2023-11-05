@@ -20,8 +20,8 @@ async fn test_http2() -> ProtResult<()> {
         // .http2(false)
         // .http2_only(true)
         .connect_timeout(Duration::new(1, 10))
-        .read_timeout(Duration::new(1, 100))
-        .write_timeout(Duration::new(1, 100))
+        .read_timeout(Duration::new(0, 100))
+        .write_timeout(Duration::new(0, 100))
         .connect(url).await.unwrap();
 
     println!("aaaaaaa now = {:?}", Instant::now());

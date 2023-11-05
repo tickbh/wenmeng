@@ -21,4 +21,4 @@ pub use self::http2::{Builder, ServerH2Connection, StateHandshake, SendControl};
 pub use self::header_helper::HeaderHelper;
 pub use self::consts::Consts;
 pub use self::http_helper::HttpHelper;
-pub use self::layer::RateLimitLayer;
+pub use self::layer::{RateLimitLayer, TimeoutLayer};
