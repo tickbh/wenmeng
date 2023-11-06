@@ -2,7 +2,7 @@ use std::{
     any::{Any},
     net::SocketAddr,
     sync::Arc,
-    task::{ready, Context, Poll},
+    task::{ready, Context, Poll}, time::Duration,
 };
 
 use futures_core::{Future, Stream};
@@ -21,7 +21,7 @@ use webparse::{
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, Initiator, RecvStream, HttpHelper, HeaderHelper,
+    Builder, Initiator, RecvStream, HttpHelper, HeaderHelper, TimeoutLayer,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -29,6 +29,7 @@ use super::{codec::Codec, control::ControlConfig, Control};
 pub struct ServerH2Connection<T> {
     codec: Codec<T>,
     inner: InnerConnection,
+    timeout: Option<TimeoutLayer>,
 }
 
 struct InnerConnection {
@@ -80,8 +81,39 @@ where
                 ),
                 receiver_push: Some(receiver),
             },
+            timeout: None,
         }
     }
+
+    
+    pub fn set_read_timeout(&mut self, read_timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_read_timeout(read_timeout);
+    }
+
+    pub fn set_write_timeout(&mut self, write_timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_write_timeout(write_timeout);
+    }
+
+    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_timeout(timeout);
+    }
+
+    pub fn set_ka_timeout(&mut self, timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_ka_timeout(timeout);
+    }
+
 
     pub fn pull_accept(&mut self, _cx: &mut Context<'_>) -> Poll<Option<ProtResult<()>>> {
         Poll::Pending

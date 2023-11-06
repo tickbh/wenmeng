@@ -10,18 +10,19 @@ async fn test_http2() -> ProtResult<()> {
 
     println!("aaaaaaaaaaaaaa");
     // let url = "http://localhost:82/root/target/rid_maps.log";
-    let url = "http://127.0.0.1:82/root/README.md";
-    let url = "http://www.baidu.com";
+    let url = "http://127.0.0.1:8080/root/README.md";
+    // let url = "http://www.baidu.com";
     // let mut vecs = vec![];
     // tokio::time::sleep(Duration::from_secs(100000)).await;
     let req = Request::builder().method("GET").header(HeaderName::ACCEPT_ENCODING, "gzip").url(url).body("").unwrap();
     println!("url = {:?} now = {:?}", req.get_connect_url(), Instant::now());
     let client = Client::builder()
-        // .http2(false)
+        .http2(false)
         // .http2_only(true)
         .connect_timeout(Duration::new(1, 10))
-        .read_timeout(Duration::new(0, 100))
-        .write_timeout(Duration::new(0, 100))
+        .ka_timeout(Duration::new(1, 10))
+        // .read_timeout(Duration::new(0, 100))
+        // .write_timeout(Duration::new(0, 100))
         .connect(url).await.unwrap();
 
     println!("aaaaaaa now = {:?}", Instant::now());
@@ -45,7 +46,8 @@ async fn test_http2() -> ProtResult<()> {
     //     .unwrap();
     // println!("url = {:?}", req.url());
     // sender.send(req.into_type()).await.unwrap();
-    // let mut res = recv.recv().await.unwrap();
+
+    let mut res = recv.recv().await.unwrap();
     // res.body_mut().wait_all().await;
     // println!("res = {} {}", res.status(), res.body_mut().origin_len());
     // println!("res = {:?}", res.body_mut().binary().chunk());

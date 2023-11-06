@@ -32,6 +32,7 @@ struct ConnectionInfo {
     req: LinkedList<Request<RecvStream>>,
     is_keep_alive: bool,
     is_delay_close: bool,
+    is_idle: bool,
 
     req_status: SendStatus,
     res_status: SendStatus,
@@ -45,8 +46,8 @@ struct SendStatus {
 
     pub is_read_header_end: bool,
     pub is_read_finish: bool,
-    pub left_read_body_len: usize,
     pub is_chunked: bool,
+    pub left_read_body_len: usize,
 }
 
 impl Default for SendStatus {
@@ -108,6 +109,7 @@ where
                 req: LinkedList::new(),
                 is_keep_alive: false,
                 is_delay_close: false,
+                is_idle: true,
 
                 req_status: SendStatus::default(),
                 res_status: SendStatus::default(),
@@ -122,31 +124,30 @@ where
     }
 
     pub fn check_finish_status(&mut self) {
-        if self.inner.req_status.is_send_finish && self.inner.res_status.is_send_finish {
+        if (self.inner.req.is_empty() || self.inner.req_status.is_send_finish) && (self.inner.res.is_empty() || self.inner.res_status.is_send_finish) {
             self.set_now_end();
         }
     }
 
     pub fn is_read_end(&self) -> bool {
         if self.is_server {
-            self.inner.req_status.is_read_finish
+            self.inner.req_status.is_read_finish || self.send_stream.is_end()
         } else {
-            self.inner.res_status.is_read_finish
+            self.inner.res_status.is_read_finish || self.send_stream.is_end()
         }
     }
 
     pub fn is_write_end(&self) -> bool {
         if self.is_server {
-            self.inner.res_status.is_send_finish
+            self.inner.req.is_empty() || self.inner.res_status.is_send_finish
         } else {
-            self.inner.req_status.is_send_finish
+            self.inner.res.is_empty() || self.inner.req_status.is_send_finish
         }
     }
 
-    pub fn is_end(&self) -> bool {
-        self.is_read_end() && self.is_write_end()
+    pub fn is_idle(&self) -> bool {
+        self.inner.is_idle
     }
-
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
         if let Some(res) = self.inner.res.front_mut() {
@@ -173,6 +174,8 @@ where
         if self.inner.res_status.is_send_finish {
             self.inner.res.pop_front();
             self.inner.res_status.clear_write();
+
+            self.check_finish_status();
         }
 
         if let Some(req) = self.inner.req.front_mut() {
@@ -196,6 +199,8 @@ where
         if self.inner.req_status.is_send_finish {
             self.inner.req.pop_front();
             self.inner.req_status.clear_write();
+
+            self.check_finish_status();
         }
 
         if self.write_buf.is_empty() {
@@ -478,6 +483,8 @@ where
     fn set_now_end(&mut self) {
         self.inner.req_status.clear();
         self.inner.res_status.clear();
+        self.ready_time = Instant::now();
+        self.inner.is_idle = true;
     }
 
     pub fn into(self) -> (T, BinaryMut, BinaryMut) {
@@ -487,15 +494,14 @@ where
     pub async fn send_response(&mut self, res: Response<RecvStream>) -> ProtResult<()> {
         self.check_finish_status();
         self.inner.res.push_back(res);
-        self.inner.res_status.is_send_finish = false;
+        self.inner.is_idle = false;
         Ok(())
     }
 
     pub fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
         self.check_finish_status();
-        
         self.inner.req.push_back(req);
-        self.inner.req_status.is_send_finish = false;
+        self.inner.is_idle = false;
         Ok(())
     }
 }

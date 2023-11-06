@@ -30,6 +30,10 @@ where
         }
     }
 
+    pub fn set_timeout_layer(&mut self, timeout_layer: Option<TimeoutLayer>) {
+        self.timeout = timeout_layer;
+    }
+
     pub fn set_read_timeout(&mut self, read_timeout: Option<Duration>) {
         if self.timeout.is_none() {
             self.timeout = Some(TimeoutLayer::new());
@@ -50,6 +54,14 @@ where
         }
         self.timeout.as_mut().unwrap().set_timeout(timeout);
     }
+
+    pub fn set_ka_timeout(&mut self, timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_ka_timeout(timeout);
+    }
+
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
         self.io.poll_write(cx)
@@ -119,8 +131,8 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         if self.timeout.is_some() {
-            let (ready_time, is_read_end, is_write_end) = (*self.io.get_ready_time(), self.io.is_read_end(), self.io.is_write_end());
-            self.timeout.as_mut().unwrap().poll_ready(cx, ready_time, is_read_end, is_write_end)?;
+            let (ready_time, is_read_end, is_write_end, is_idle) = (*self.io.get_ready_time(), self.io.is_read_end(), self.io.is_write_end(), self.io.is_idle());
+            self.timeout.as_mut().unwrap().poll_ready(cx, ready_time, is_read_end, is_write_end, is_idle)?;
         }
         Pin::new(&mut self.io).poll_response(cx)
     }

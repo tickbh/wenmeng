@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use crate::http2::{self, ClientH2Connection};
 use crate::{http1::ClientH1Connection, ProtError};
-use crate::{ProtResult, RecvStream};
+use crate::{ProtResult, RecvStream, TimeoutLayer};
 use rustls::{ClientConfig, RootCertStore};
 use tokio::net::ToSocketAddrs;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -42,24 +42,43 @@ impl Builder {
     }
 
     pub fn connect_timeout(mut self, connect_timeout: Duration) -> Self {
-        self.inner.connect_timeout = Some(connect_timeout);
+        if self.inner.timeout.is_none() {
+            self.inner.timeout = Some(TimeoutLayer::new());
+        }
+        self.inner.timeout.as_mut().unwrap().connect_timeout = Some(connect_timeout);
         self
     }
 
+    pub fn ka_timeout(mut self, ka_timeout: Duration) -> Self {
+        if self.inner.timeout.is_none() {
+            self.inner.timeout = Some(TimeoutLayer::new());
+        }
+        self.inner.timeout.as_mut().unwrap().ka_timeout = Some(ka_timeout);
+        self
+    }
     
     pub fn read_timeout(mut self, read_timeout: Duration) -> Self {
-        self.inner.read_timeout = Some(read_timeout);
+        if self.inner.timeout.is_none() {
+            self.inner.timeout = Some(TimeoutLayer::new());
+        }
+        self.inner.timeout.as_mut().unwrap().read_timeout = Some(read_timeout);
         self
     }
 
     
     pub fn write_timeout(mut self, write_timeout: Duration) -> Self {
-        self.inner.write_timeout = Some(write_timeout);
+        if self.inner.timeout.is_none() {
+            self.inner.timeout = Some(TimeoutLayer::new());
+        }
+        self.inner.timeout.as_mut().unwrap().write_timeout = Some(write_timeout);
         self
     }
 
     pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.inner.timeout = Some(timeout);
+        if self.inner.timeout.is_none() {
+            self.inner.timeout = Some(TimeoutLayer::new());
+        }
+        self.inner.timeout.as_mut().unwrap().timeout = Some(timeout);
         self
     }
 
@@ -72,19 +91,19 @@ impl Builder {
     }
 
     async fn inner_connect<A: ToSocketAddrs>(&self, addr: A) -> ProtResult<TcpStream> {
-        if let Some(connect) = &self.inner.connect_timeout {
-            match tokio::time::timeout(*connect, TcpStream::connect(addr)).await {
-                Ok(v) => {
-                    let tcp = v?;
-                    Ok(tcp)
+        if self.inner.timeout.is_some() {
+            if let Some(connect) = &self.inner.timeout.as_ref().unwrap().connect_timeout {
+                match tokio::time::timeout(*connect, TcpStream::connect(addr)).await {
+                    Ok(v) => {
+                        let tcp = v?;
+                        return Ok(tcp)
+                    }
+                    Err(_) => return Err(ProtError::Extension("timeout")),
                 }
-                Err(_) => return Err(ProtError::Extension("timeout")),
             }
-
-        } else {
-            let tcp = TcpStream::connect(addr).await?;
-            Ok(tcp)
         }
+        let tcp = TcpStream::connect(addr).await?;
+        Ok(tcp)
     }
 
     pub async fn connect<T>(self, url: T) -> ProtResult<Client<TcpStream>>
@@ -210,10 +229,7 @@ pub struct ClientOption {
     http2_only: bool,
     http2: bool,
     settings: Settings,
-    connect_timeout: Option<Duration>,
-    read_timeout: Option<Duration>,
-    write_timeout: Option<Duration>,
-    timeout: Option<Duration>,
+    timeout: Option<TimeoutLayer>,
 }
 
 impl ClientOption {
@@ -242,9 +258,6 @@ impl Default for ClientOption {
             http2_only: false,
             http2: true,
             settings: Default::default(),
-            connect_timeout: None,
-            read_timeout: None,
-            write_timeout: None,
             timeout: None,
         }
     }
@@ -303,9 +316,7 @@ where
 
     fn build_client_h1_connection(&self, stream: T) -> ClientH1Connection<T> {
         let mut client = ClientH1Connection::new(stream);
-        client.set_read_timeout(self.option.read_timeout);
-        client.set_write_timeout(self.option.write_timeout);
-        client.set_timeout(self.option.timeout);
+        client.set_timeout_layer(self.option.timeout.clone());
         client
     }
 

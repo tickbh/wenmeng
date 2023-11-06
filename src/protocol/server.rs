@@ -1,4 +1,4 @@
-use std::{any::{Any, TypeId}, sync::Arc, net::SocketAddr};
+use std::{any::{Any, TypeId}, sync::Arc, net::SocketAddr, time::Duration};
 
 use futures_core::{Future};
 use tokio::{io::{AsyncRead, AsyncWrite}, sync::Mutex};
@@ -50,6 +50,58 @@ where
             data,
             addr,
             timeout: None,
+        }
+    }
+
+    pub fn set_read_timeout(&mut self, read_timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_read_timeout(read_timeout);
+        if let Some(http) = &mut self.http1 {
+            http.set_read_timeout(read_timeout);
+        }
+        if let Some(http) = &mut self.http2 {
+            http.set_read_timeout(read_timeout);
+        }
+    }
+
+    pub fn set_write_timeout(&mut self, write_timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_write_timeout(write_timeout);
+        if let Some(http) = &mut self.http1 {
+            http.set_write_timeout(write_timeout);
+        }
+        if let Some(http) = &mut self.http2 {
+            http.set_write_timeout(write_timeout);
+        }
+    }
+
+    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_timeout(timeout);
+        if let Some(http) = &mut self.http1 {
+            http.set_timeout(timeout);
+        }
+        if let Some(http) = &mut self.http2 {
+            http.set_timeout(timeout);
+        }
+    }
+
+    pub fn set_ka_timeout(&mut self, timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_ka_timeout(timeout);
+        if let Some(http) = &mut self.http1 {
+            http.set_ka_timeout(timeout);
+        }
+        if let Some(http) = &mut self.http2 {
+            http.set_ka_timeout(timeout);
         }
     }
 
@@ -137,7 +189,10 @@ where
                         return Err(ProtError::ServerUpgradeHttp2(b, r));
                     }
                 }
-                Err(e) => return Err(e),
+                Err(e) => {
+                    log::trace!("HTTP服务发生错误:{:?}", e);
+                    return Err(e)
+                }
                 Ok(Some(true)) => return Ok(Some(true)),
             };
         }
