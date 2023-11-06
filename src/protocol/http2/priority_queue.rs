@@ -31,6 +31,10 @@ impl PriorityQueue {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.send_queue.is_empty()
+    }
+
     pub fn priority_recv(&mut self, p: Priority) {
         let (id, depend_id, weight) = p.into();
         self.hash_weight.insert(id, weight);

@@ -79,6 +79,10 @@ where
     pub fn set_cache_buf(&mut self, write_buf: BinaryMut) {
         self.binary.put_slice(write_buf.chunk());
     }
+
+    pub fn is_write_end(&self) -> bool {
+        self.binary.is_empty()
+    }
 }
 
 impl<T: AsyncRead + Unpin> AsyncRead for FramedWrite<T> {

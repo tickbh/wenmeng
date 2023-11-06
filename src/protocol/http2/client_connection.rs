@@ -1,5 +1,5 @@
 use std::{
-    task::{ready, Context, Poll}, any::{Any, TypeId},
+    task::{ready, Context, Poll}, any::{Any, TypeId}, time::Duration,
 };
 
 use futures_core::{Future, Stream};
@@ -15,7 +15,7 @@ use webparse::{
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, Initiator, RecvStream, HeaderHelper,
+    Builder, Initiator, RecvStream, HeaderHelper, TimeoutLayer,
 };
 
 use super::{
@@ -27,6 +27,8 @@ use super::{
 pub struct ClientH2Connection<T> {
     codec: Codec<T>,
     inner: InnerConnection,
+
+    timeout: Option<TimeoutLayer>,
 }
 
 struct InnerConnection {
@@ -71,9 +73,43 @@ where
                     reset_stream_max: builder.reset_stream_max,
                     remote_reset_stream_max: builder.pending_accept_reset_stream_max,
                     settings: builder.settings.clone(),
-                }, sender),
+                }, sender, false),
             },
+            timeout: None,
         }
+    }
+
+    
+    pub fn set_timeout_layer(&mut self, timeout_layer: Option<TimeoutLayer>) {
+        self.timeout = timeout_layer;
+    }
+
+    pub fn set_read_timeout(&mut self, read_timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_read_timeout(read_timeout);
+    }
+
+    pub fn set_write_timeout(&mut self, write_timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_write_timeout(write_timeout);
+    }
+
+    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_timeout(timeout);
+    }
+
+    pub fn set_ka_timeout(&mut self, timeout: Option<Duration>) {
+        if self.timeout.is_none() {
+            self.timeout = Some(TimeoutLayer::new());
+        }
+        self.timeout.as_mut().unwrap().set_ka_timeout(timeout);
     }
 
     pub fn pull_accept(&mut self, _cx: &mut Context<'_>) -> Poll<Option<ProtResult<()>>> {
@@ -92,6 +128,10 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Option<ProtResult<Response<RecvStream>>>> {
+        if self.timeout.is_some() {
+            let (ready_time, is_read_end, is_write_end, is_idle) = (*self.inner.control.get_ready_time(), self.inner.control.is_read_end(), self.inner.control.is_write_end(&self.codec), self.inner.control.is_idle(&self.codec));
+            self.timeout.as_mut().unwrap().poll_ready(cx, ready_time, is_read_end, is_write_end, is_idle)?;
+        }
         self.inner.control.poll_response(cx, &mut self.codec)
     }
 

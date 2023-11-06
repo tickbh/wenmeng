@@ -65,9 +65,14 @@ where
         }
     }
 
+    pub fn is_write_end(&self) -> bool {
+        self.inner.get_ref().is_write_end()
+    }
+
     pub fn get_reader(&mut self) -> &mut FramedRead<FramedWrite<T>> {
         &mut self.inner
     }
+
     pub fn get_mut(&mut self) -> &mut T {
         self.inner.get_mut().get_mut()
     }

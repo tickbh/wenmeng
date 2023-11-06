@@ -98,7 +98,7 @@ impl Builder {
                         let tcp = v?;
                         return Ok(tcp)
                     }
-                    Err(_) => return Err(ProtError::Extension("timeout")),
+                    Err(_) => return Err(ProtError::Extension("connect timeout")),
                 }
             }
         }
@@ -296,18 +296,15 @@ where
             http2: None,
         };
         if client.option.http2_only {
-            let value = http2::Builder::new()
+            let mut value = http2::Builder::new()
                 .initial_window_size(DEFAULT_INITIAL_WINDOW_SIZE)
                 .max_concurrent_streams(100)
                 .max_frame_size(DEFAULT_MAX_FRAME_SIZE)
                 // .set_enable_push(false)
                 .client_connection(stream);
+            value.set_timeout_layer(client.option.timeout.clone());
+            value.set_handshake_status(Binary::from(HTTP2_MAGIC));
             client.http2 = Some(value);
-            client
-                .http2
-                .as_mut()
-                .unwrap()
-                .set_handshake_status(Binary::from(HTTP2_MAGIC));
         } else {
             client.http1 = Some(client.build_client_h1_connection(stream));
         }

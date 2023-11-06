@@ -62,7 +62,6 @@ where
         self.timeout.as_mut().unwrap().set_ka_timeout(timeout);
     }
 
-
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
         self.io.poll_write(cx)
     }
@@ -81,6 +80,7 @@ where
         connect.set_handshake_status(Binary::from_static(HTTP2_MAGIC));
         connect.set_setting_status(settings, false);
         connect.next_stream_id();
+        connect.set_timeout_layer(self.timeout);
         connect
     }
 

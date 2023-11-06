@@ -17,12 +17,12 @@ async fn test_http2() -> ProtResult<()> {
     let req = Request::builder().method("GET").header(HeaderName::ACCEPT_ENCODING, "gzip").url(url).body("").unwrap();
     println!("url = {:?} now = {:?}", req.get_connect_url(), Instant::now());
     let client = Client::builder()
-        .http2(false)
-        // .http2_only(true)
+        // .http2(false)
+        .http2_only(true)
         .connect_timeout(Duration::new(1, 10))
-        .ka_timeout(Duration::new(1, 10))
-        // .read_timeout(Duration::new(0, 100))
-        // .write_timeout(Duration::new(0, 100))
+        .ka_timeout(Duration::new(10, 10))
+        // .read_timeout(Duration::new(0, 1))
+        .write_timeout(Duration::new(0, 1))
         .connect(url).await.unwrap();
 
     println!("aaaaaaa now = {:?}", Instant::now());
