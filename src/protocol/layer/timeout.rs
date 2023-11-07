@@ -56,6 +56,11 @@ impl TimeoutLayer {
             ka_timeout_sleep: None,
         }
     }
+    
+    pub fn set_connect_timeout(&mut self, connect_timeout: Option<Duration>) {
+        self.connect_timeout = connect_timeout;
+    }
+
     pub fn set_read_timeout(&mut self, read_timeout: Option<Duration>) {
         self.read_timeout = read_timeout;
     }

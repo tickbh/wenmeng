@@ -1,17 +1,118 @@
-use std::{any::{Any, TypeId}, sync::Arc, net::SocketAddr, time::Duration};
+use std::{
+    any::{Any, TypeId},
+    net::SocketAddr,
+    sync::Arc,
+    time::Duration,
+};
 
-use futures_core::{Future};
-use tokio::{io::{AsyncRead, AsyncWrite}, sync::Mutex};
+use futures_core::Future;
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    sync::Mutex, net::{TcpListener, TcpStream},
+};
 use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize};
 
-use crate::{ServerH2Connection, ProtError, ProtResult, RecvStream, TimeoutLayer};
+use crate::{ProtError, ProtResult, RecvStream, ServerH2Connection, TimeoutLayer};
 
 use super::http1::ServerH1Connection;
 
-pub struct Server<T, D=()>
+#[derive(Debug)]
+pub struct Builder {
+    inner: ServerOption,
+}
+
+impl Builder {
+    pub fn new() -> Self {
+        Self {
+            inner: ServerOption::default(),
+        }
+    }
+
+    pub fn connect_timeout(mut self, connect_timeout: Duration) -> Self {
+        if self.inner.timeout.is_none() {
+            self.inner.timeout = Some(TimeoutLayer::new());
+        }
+        self.inner.timeout.as_mut().unwrap().connect_timeout = Some(connect_timeout);
+        self
+    }
+
+    pub fn ka_timeout(mut self, ka_timeout: Duration) -> Self {
+        if self.inner.timeout.is_none() {
+            self.inner.timeout = Some(TimeoutLayer::new());
+        }
+        self.inner.timeout.as_mut().unwrap().ka_timeout = Some(ka_timeout);
+        self
+    }
+
+    pub fn read_timeout(mut self, read_timeout: Duration) -> Self {
+        if self.inner.timeout.is_none() {
+            self.inner.timeout = Some(TimeoutLayer::new());
+        }
+        self.inner.timeout.as_mut().unwrap().read_timeout = Some(read_timeout);
+        self
+    }
+
+    pub fn write_timeout(mut self, write_timeout: Duration) -> Self {
+        if self.inner.timeout.is_none() {
+            self.inner.timeout = Some(TimeoutLayer::new());
+        }
+        self.inner.timeout.as_mut().unwrap().write_timeout = Some(write_timeout);
+        self
+    }
+
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        if self.inner.timeout.is_none() {
+            self.inner.timeout = Some(TimeoutLayer::new());
+        }
+        self.inner.timeout.as_mut().unwrap().timeout = Some(timeout);
+        self
+    }
+
+    pub fn timeout_layer(mut self, timeout: Option<TimeoutLayer>) -> Self {
+        self.inner.timeout = timeout;
+        self
+    }
+
+
+    pub fn addr(mut self, addr: SocketAddr) -> Self {
+        self.inner.addr = Some(addr);
+        self
+    }
+
+    pub fn value(self) -> ServerOption {
+        self.inner
+    }
+
+    pub fn stream<T>(self, stream: T) -> Server<T, ()>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
+        let mut server = Server::new(stream, self.inner.addr);
+        server.set_timeout_layer(self.inner.timeout.clone());
+        server
+    }
+
+    pub fn stream_data<T, D>(self, stream: T, data: Arc<Mutex<D>>) -> Server<T, D>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+        D: std::marker::Send + 'static,
+    {
+        let mut server = Server::new_data(stream, self.inner.addr, data);
+        server.set_timeout_layer(self.inner.timeout.clone());
+        server
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ServerOption {
+    addr: Option<SocketAddr>,
+    timeout: Option<TimeoutLayer>,
+}
+
+pub struct Server<T, D = ()>
 where
     T: AsyncRead + AsyncWrite + Unpin,
-    D: std::marker::Send + 'static
+    D: std::marker::Send + 'static,
 {
     http1: Option<ServerH1Connection<T>>,
     http2: Option<ServerH2Connection<T>>,
@@ -19,6 +120,12 @@ where
     addr: Option<SocketAddr>,
 
     timeout: Option<TimeoutLayer>,
+}
+
+impl Server<TcpStream, ()> {
+    pub fn builder() -> Builder {
+        Builder::new()
+    }
 }
 
 impl<T> Server<T, ()>
@@ -40,9 +147,8 @@ where
 impl<T, D> Server<T, D>
 where
     T: AsyncRead + AsyncWrite + Unpin,
-    D: std::marker::Send + 'static
+    D: std::marker::Send + 'static,
 {
-    
     pub fn new_data(io: T, addr: Option<SocketAddr>, data: Arc<Mutex<D>>) -> Self {
         Self {
             http1: Some(ServerH1Connection::new(io)),
@@ -57,11 +163,13 @@ where
         if self.timeout.is_none() {
             self.timeout = Some(TimeoutLayer::new());
         }
-        self.timeout.as_mut().unwrap().set_read_timeout(read_timeout);
+        self.timeout
+            .as_mut()
+            .unwrap()
+            .set_read_timeout(read_timeout);
         if let Some(http) = &mut self.http1 {
             http.set_read_timeout(read_timeout);
-        }
-        if let Some(http) = &mut self.http2 {
+        } else if let Some(http) = &mut self.http2 {
             http.set_read_timeout(read_timeout);
         }
     }
@@ -70,11 +178,13 @@ where
         if self.timeout.is_none() {
             self.timeout = Some(TimeoutLayer::new());
         }
-        self.timeout.as_mut().unwrap().set_write_timeout(write_timeout);
+        self.timeout
+            .as_mut()
+            .unwrap()
+            .set_write_timeout(write_timeout);
         if let Some(http) = &mut self.http1 {
             http.set_write_timeout(write_timeout);
-        }
-        if let Some(http) = &mut self.http2 {
+        } else if let Some(http) = &mut self.http2 {
             http.set_write_timeout(write_timeout);
         }
     }
@@ -86,8 +196,7 @@ where
         self.timeout.as_mut().unwrap().set_timeout(timeout);
         if let Some(http) = &mut self.http1 {
             http.set_timeout(timeout);
-        }
-        if let Some(http) = &mut self.http2 {
+        } else if let Some(http) = &mut self.http2 {
             http.set_timeout(timeout);
         }
     }
@@ -99,9 +208,17 @@ where
         self.timeout.as_mut().unwrap().set_ka_timeout(timeout);
         if let Some(http) = &mut self.http1 {
             http.set_ka_timeout(timeout);
-        }
-        if let Some(http) = &mut self.http2 {
+        } else if let Some(http) = &mut self.http2 {
             http.set_ka_timeout(timeout);
+        }
+    }
+
+    pub fn set_timeout_layer(&mut self, timeout: Option<TimeoutLayer>) {
+        self.timeout = timeout.clone();
+        if let Some(http) = &mut self.http1 {
+            http.set_timeout_layer(timeout);
+        } else if let Some(http) = &mut self.http2 {
+            http.set_timeout_layer(timeout);
         }
     }
 
@@ -142,7 +259,6 @@ where
         }
     }
 
-    
     pub async fn try_wait_req<Req>(r: &mut Request<RecvStream>) -> ProtResult<()>
     where
         Req: From<RecvStream>,
@@ -156,12 +272,12 @@ where
 
     pub async fn incoming<F, Fut, Res, Req>(&mut self, mut f: F) -> ProtResult<Option<bool>>
     where
-    F: FnMut(Request<Req>) -> Fut,
-    Fut: Future<Output = ProtResult<Response<Res>>>,
-    Req: From<RecvStream>,
-    Req: Serialize + Any,
-    RecvStream: From<Res>,
-    Res: Serialize + Any
+        F: FnMut(Request<Req>) -> Fut,
+        Fut: Future<Output = ProtResult<Response<Res>>>,
+        Req: From<RecvStream>,
+        Req: Serialize + Any,
+        RecvStream: From<Res>,
+        Res: Serialize + Any,
     {
         loop {
             let result = if let Some(h1) = &mut self.http1 {
@@ -191,7 +307,7 @@ where
                 }
                 Err(e) => {
                     log::trace!("HTTP服务发生错误:{:?}", e);
-                    return Err(e)
+                    return Err(e);
                 }
                 Ok(Some(true)) => return Ok(Some(true)),
             };

@@ -120,7 +120,6 @@ impl Control {
         } else {
             self.send_frames.is_empty() && codec.is_write_end() && self.request_queue.is_empty()
         }
-        
     }
 
     pub fn is_idle<T>(&self, codec: &Codec<T>) -> bool

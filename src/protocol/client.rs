@@ -268,7 +268,7 @@ where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     option: ClientOption,
-    sender: Sender<Response<RecvStream>>,
+    sender: Sender< Response<RecvStream>>,
     receiver: Option<Receiver<Response<RecvStream>>>,
     req_receiver: Option<Receiver<Request<RecvStream>>>,
     http1: Option<ClientH1Connection<T>>,

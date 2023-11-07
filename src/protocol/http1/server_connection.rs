@@ -63,6 +63,9 @@ where
         self.timeout.as_mut().unwrap().set_ka_timeout(timeout);
     }
 
+    pub fn set_timeout_layer(&mut self, timeout_layer: Option<TimeoutLayer>) {
+        self.timeout = timeout_layer;
+    }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
         self.io.poll_write(cx)
