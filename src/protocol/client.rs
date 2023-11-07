@@ -268,8 +268,8 @@ where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     option: ClientOption,
-    sender: Sender< Response<RecvStream>>,
-    receiver: Option<Receiver<Response<RecvStream>>>,
+    sender: Sender<ProtResult<Response<RecvStream>> >,
+    receiver: Option<Receiver<ProtResult<Response<RecvStream>>>>,
     req_receiver: Option<Receiver<Request<RecvStream>>>,
     http1: Option<ClientH1Connection<T>>,
     http2: Option<ClientH2Connection<T>>,
@@ -319,7 +319,7 @@ where
 
     pub fn split(
         &mut self,
-    ) -> ProtResult<(Receiver<Response<RecvStream>>, Sender<Request<RecvStream>>)> {
+    ) -> ProtResult<(Receiver<ProtResult<Response<RecvStream>>>, Sender<Request<RecvStream>>)> {
         if self.receiver.is_none() {
             return Err(ProtError::Extension("receiver error"));
         }
@@ -405,7 +405,10 @@ where
             }
             let result = v.unwrap();
             match result {
-                Ok(None) => return Ok(()),
+                Ok(None) => {
+                    self.sender.send(Err(ProtError::Extension("close by server"))).await?;
+                    return Ok(())
+                }
                 Err(ProtError::ClientUpgradeHttp2(s)) => {
                     if self.http1.is_some() {
                         self.http2 = Some(self.http1.take().unwrap().into_h2(s));
@@ -414,9 +417,12 @@ where
                         return Err(ProtError::ClientUpgradeHttp2(s));
                     }
                 }
-                Err(e) => return Err(e),
+                Err(e) => {
+                    self.sender.send(Err(e)).await?;
+                    return Ok(())
+                },
                 Ok(Some(r)) => {
-                    self.sender.send(r).await?;
+                    self.sender.send(Ok(r)).await?;
                 }
             };
         }
@@ -442,7 +448,7 @@ where
     pub async fn send(
         mut self,
         mut req: Request<RecvStream>,
-    ) -> ProtResult<Receiver<Response<RecvStream>>> {
+    ) -> ProtResult<Receiver<ProtResult<Response<RecvStream>>>> {
         self.rebuild_request(&mut req);
         let (r, _s) = self.split()?;
         tokio::spawn(async move {
@@ -456,7 +462,7 @@ where
     pub async fn send2(
         mut self,
         mut req: Request<RecvStream>,
-    ) -> ProtResult<(Receiver<Response<RecvStream>>, Sender<Request<RecvStream>>)> {
+    ) -> ProtResult<(Receiver<ProtResult<Response<RecvStream>>>, Sender<Request<RecvStream>>)> {
         self.rebuild_request(&mut req);
         let (r, s) = self.split()?;
         tokio::spawn(async move {
@@ -470,7 +476,7 @@ where
     pub async fn send_now(
         mut self,
         mut req: Request<RecvStream>,
-    ) -> ProtResult<Response<RecvStream>> {
+    ) -> ProtResult<ProtResult<Response<RecvStream>>> {
         self.rebuild_request(&mut req);
         let (mut r, _) = self.split()?;
         // let _ = self.operate(req).await;
@@ -485,7 +491,7 @@ where
     pub async fn recv(&mut self) -> ProtResult<Response<RecvStream>> {
         if let Some(recv) = &mut self.receiver {
             if let Some(res) = recv.recv().await {
-                Ok(res)
+                res
             } else {
                 Err(ProtError::Extension("recv close"))
             }

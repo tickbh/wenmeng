@@ -21,13 +21,15 @@ async fn test_http2() -> ProtResult<()> {
         .http2_only(true)
         .connect_timeout(Duration::new(1, 10))
         .ka_timeout(Duration::new(10, 10))
-        // .read_timeout(Duration::new(0, 1))
+        .read_timeout(Duration::new(0, 1))
         // .write_timeout(Duration::new(0, 1))
         .connect(url).await.unwrap();
 
     let (mut recv, sender) = client.send2(req.into_type()).await?;
 
-    let mut res = recv.recv().await.unwrap();
+    let mut res = recv.recv().await;
+    println!("ret res = {:?}", res);
+    let mut res = res.unwrap()?;
 
     // let mut res = match recv.recv().await {
     //     Some(res) => res,
@@ -79,6 +81,7 @@ async fn test_https2() -> ProtResult<()> {
 
     let mut recv = client.send(req.into_type()).await.unwrap();
     while let Some(mut res) = recv.recv().await {
+        let mut res = res?;
         res.body_mut().wait_all().await;
         println!("res = {}", res);
     }
@@ -89,7 +92,9 @@ async fn test_https2() -> ProtResult<()> {
 
 #[tokio::main]
 async fn main() {
-    test_http2().await;
+    if let Err(e) = test_http2().await {
+        println!("发生错误:{:?}", e);
+    }
     // test_https2().await;
     return;
 }
