@@ -80,6 +80,7 @@ where
         let mut connect = crate::http2::Builder::new().server_connection(io);
         connect.set_cache_buf(read_buf, write_buf);
         connect.set_handshake_status(binary);
+        connect.set_timeout_layer(self.timeout);
         connect
     }
 

@@ -115,7 +115,12 @@ impl Control {
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
-        self.request_queue.is_empty() && self.send_frames.is_empty() && codec.is_write_end()
+        if self.is_server {
+            self.send_frames.is_empty() && codec.is_write_end() && self.response_queue.lock().unwrap().is_empty()
+        } else {
+            self.send_frames.is_empty() && codec.is_write_end() && self.request_queue.is_empty()
+        }
+        
     }
 
     pub fn is_idle<T>(&self, codec: &Codec<T>) -> bool

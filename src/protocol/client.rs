@@ -92,11 +92,11 @@ impl Builder {
 
     async fn inner_connect<A: ToSocketAddrs>(&self, addr: A) -> ProtResult<TcpStream> {
         if self.inner.timeout.is_some() {
+            // 获取是否配置了连接超时, 如果有连接超时那么指定timeout
             if let Some(connect) = &self.inner.timeout.as_ref().unwrap().connect_timeout {
                 match tokio::time::timeout(*connect, TcpStream::connect(addr)).await {
                     Ok(v) => {
-                        let tcp = v?;
-                        return Ok(tcp)
+                        return Ok(v?)
                     }
                     Err(_) => return Err(ProtError::Extension("connect timeout")),
                 }

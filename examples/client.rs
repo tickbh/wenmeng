@@ -22,14 +22,19 @@ async fn test_http2() -> ProtResult<()> {
         .connect_timeout(Duration::new(1, 10))
         .ka_timeout(Duration::new(10, 10))
         // .read_timeout(Duration::new(0, 1))
-        .write_timeout(Duration::new(0, 1))
+        // .write_timeout(Duration::new(0, 1))
         .connect(url).await.unwrap();
 
-    println!("aaaaaaa now = {:?}", Instant::now());
     let (mut recv, sender) = client.send2(req.into_type()).await?;
-    
-    println!("bbbbbbbbbbbb");
+
     let mut res = recv.recv().await.unwrap();
+
+    // let mut res = match recv.recv().await {
+    //     Some(res) => res,
+    //     None => {
+    //         println!("err === {:?}", e);
+    //     }
+    // }
     res.body_mut().wait_all().await;
     println!("res = {} {} compress  = {}", res.status(), res.body_mut().origin_len(), res.body_mut().get_origin_compress());
     let res = res.into_type::<String>();

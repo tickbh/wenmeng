@@ -115,6 +115,9 @@ where
         self.timeout.as_mut().unwrap().set_ka_timeout(timeout);
     }
 
+    pub fn set_timeout_layer(&mut self, timeout_layer: Option<TimeoutLayer>) {
+        self.timeout = timeout_layer;
+    }
 
     pub fn pull_accept(&mut self, _cx: &mut Context<'_>) -> Poll<Option<ProtResult<()>>> {
         Poll::Pending
@@ -124,6 +127,10 @@ where
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
+        if self.timeout.is_some() {
+            let (ready_time, is_read_end, is_write_end, is_idle) = (*self.inner.control.get_ready_time(), self.inner.control.is_read_end(), self.inner.control.is_write_end(&self.codec), self.inner.control.is_idle(&self.codec));
+            self.timeout.as_mut().unwrap().poll_ready(cx, ready_time, is_read_end, is_write_end, is_idle)?;
+        }
         self.inner.control.poll_request(cx, &mut self.codec)
         // loop {
         //     ready!(Pin::new(&mut self.codec).poll_next(cx)?);

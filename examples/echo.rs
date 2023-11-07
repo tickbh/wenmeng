@@ -17,8 +17,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tokio::spawn(async move {
             let mut server = Server::new(stream, Some(addr));
             // server.set_read_timeout(Some(Duration::new(0, 100)));
-            // server.set_write_timeout(Some(Duration::new(0, 100)));
-            // server.set_timeout(Some(Duration::new(0, 100)));
+            server.set_write_timeout(Some(Duration::new(0, 100)));
+            server.set_timeout(Some(Duration::new(0, 100)));
             async fn operate(req: Request<RecvStream>) -> ProtResult<Response<String>> {
                 let response = Response::builder()
                     .version(req.version().clone())
