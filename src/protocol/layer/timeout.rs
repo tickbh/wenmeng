@@ -80,6 +80,7 @@ impl TimeoutLayer {
     pub fn poll_ready(
         &mut self,
         cx: &mut Context<'_>,
+        info: &'static str,
         ready_time: Instant,
         is_read_end: bool,
         is_write_end: bool,
@@ -90,7 +91,7 @@ impl TimeoutLayer {
             if let Some(read) = &self.read_timeout {
                 let next = ready_time + *read;
                 if now >= next {
-                    return Err(crate::ProtError::Extension("read timeout"));
+                    return Err(crate::ProtError::read_timeout(info));
                 }
                 if self.read_timeout_sleep.is_some() {
                     self.read_timeout_sleep.as_mut().unwrap().as_mut().set(tokio::time::sleep_until(next.into()));
@@ -104,7 +105,7 @@ impl TimeoutLayer {
             if let Some(write) = &self.write_timeout {
                 let next = ready_time + *write;
                 if now >= next {
-                    return Err(crate::ProtError::Extension("write timeout"));
+                    return Err(crate::ProtError::write_timeout(info));
                 }
                 if self.write_timeout_sleep.is_some() {
                     self.write_timeout_sleep.as_mut().unwrap().as_mut().set(tokio::time::sleep_until(next.into()));
@@ -119,7 +120,7 @@ impl TimeoutLayer {
             if let Some(time) = &self.timeout {
                 let next = ready_time + *time;
                 if now >= next {
-                    return Err(crate::ProtError::Extension("timeout"));
+                    return Err(crate::ProtError::time_timeout(info));
                 }
                 if self.timeout_sleep.is_some() {
                     self.timeout_sleep.as_mut().unwrap().as_mut().set(tokio::time::sleep_until(next.into()));
@@ -134,7 +135,7 @@ impl TimeoutLayer {
             if let Some(time) = &self.ka_timeout {
                 let next = ready_time + *time;
                 if now >= next {
-                    return Err(crate::ProtError::Extension("keep alive timeout"));
+                    return Err(crate::ProtError::ka_timeout(info));
                 }
                 if self.ka_timeout_sleep.is_some() {
                     self.ka_timeout_sleep.as_mut().unwrap().as_mut().set(tokio::time::sleep_until(next.into()));

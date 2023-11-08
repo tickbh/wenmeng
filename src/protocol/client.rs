@@ -81,6 +81,11 @@ impl Builder {
         self.inner.timeout.as_mut().unwrap().timeout = Some(timeout);
         self
     }
+    
+    pub fn timeout_layer(mut self, timeout: Option<TimeoutLayer>) -> Self {
+        self.inner.timeout = timeout;
+        self
+    }
 
     pub fn value(self) -> ClientOption {
         self.inner
@@ -98,7 +103,7 @@ impl Builder {
                     Ok(v) => {
                         return Ok(v?)
                     }
-                    Err(_) => return Err(ProtError::Extension("connect timeout")),
+                    Err(_) => return Err(ProtError::connect_timeout("client")),
                 }
             }
         }

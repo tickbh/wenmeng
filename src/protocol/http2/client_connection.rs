@@ -1,28 +1,27 @@
 use std::{
-    task::{ready, Context, Poll}, any::{Any, TypeId}, time::Duration,
+    any::{Any, TypeId},
+    task::{ready, Context, Poll},
+    time::Duration,
 };
 
 use futures_core::{Future, Stream};
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::mpsc::{channel},
+    sync::mpsc::channel,
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
-    Binary, BinaryMut, Request, Response, Serialize, http2::frame::Settings, Version,
+    http2::frame::Settings,
+    Binary, BinaryMut, Request, Response, Serialize, Version,
 };
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, Initiator, RecvStream, HeaderHelper, TimeoutLayer,
+    Builder, HeaderHelper, Initiator, RecvStream, TimeoutLayer,
 };
 
-use super::{
-    codec::{Codec},
-    control::ControlConfig,
-    Control,
-};
+use super::{codec::Codec, control::ControlConfig, Control};
 
 pub struct ClientH2Connection<T> {
     codec: Codec<T>,
@@ -35,7 +34,6 @@ struct InnerConnection {
     state: State,
 
     control: Control,
-
 }
 
 #[derive(Debug)]
@@ -64,22 +62,25 @@ where
             codec: Codec::new(io),
             inner: InnerConnection {
                 state: State::Open,
-                control: Control::new(ControlConfig {
-                    next_stream_id: 1.into(),
-                    // Server does not need to locally initiate any streams
-                    initial_max_send_streams: 0,
-                    max_send_buffer_size: builder.max_send_buffer_size,
-                    reset_stream_duration: builder.reset_stream_duration,
-                    reset_stream_max: builder.reset_stream_max,
-                    remote_reset_stream_max: builder.pending_accept_reset_stream_max,
-                    settings: builder.settings.clone(),
-                }, sender, false),
+                control: Control::new(
+                    ControlConfig {
+                        next_stream_id: 1.into(),
+                        // Server does not need to locally initiate any streams
+                        initial_max_send_streams: 0,
+                        max_send_buffer_size: builder.max_send_buffer_size,
+                        reset_stream_duration: builder.reset_stream_duration,
+                        reset_stream_max: builder.reset_stream_max,
+                        remote_reset_stream_max: builder.pending_accept_reset_stream_max,
+                        settings: builder.settings.clone(),
+                    },
+                    sender,
+                    false,
+                ),
             },
             timeout: None,
         }
     }
 
-    
     pub fn set_timeout_layer(&mut self, timeout_layer: Option<TimeoutLayer>) {
         self.timeout = timeout_layer;
     }
@@ -88,14 +89,20 @@ where
         if self.timeout.is_none() {
             self.timeout = Some(TimeoutLayer::new());
         }
-        self.timeout.as_mut().unwrap().set_read_timeout(read_timeout);
+        self.timeout
+            .as_mut()
+            .unwrap()
+            .set_read_timeout(read_timeout);
     }
 
     pub fn set_write_timeout(&mut self, write_timeout: Option<Duration>) {
         if self.timeout.is_none() {
             self.timeout = Some(TimeoutLayer::new());
         }
-        self.timeout.as_mut().unwrap().set_write_timeout(write_timeout);
+        self.timeout
+            .as_mut()
+            .unwrap()
+            .set_write_timeout(write_timeout);
     }
 
     pub fn set_timeout(&mut self, timeout: Option<Duration>) {
@@ -123,14 +130,25 @@ where
         self.inner.control.poll_request(cx, &mut self.codec)
     }
 
-
     pub fn poll_response(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Option<ProtResult<Response<RecvStream>>>> {
         if self.timeout.is_some() {
-            let (ready_time, is_read_end, is_write_end, is_idle) = (*self.inner.control.get_ready_time(), self.inner.control.is_read_end(), self.inner.control.is_write_end(&self.codec), self.inner.control.is_idle(&self.codec));
-            self.timeout.as_mut().unwrap().poll_ready(cx, ready_time, is_read_end, is_write_end, is_idle)?;
+            let (ready_time, is_read_end, is_write_end, is_idle) = (
+                *self.inner.control.get_ready_time(),
+                self.inner.control.is_read_end(),
+                self.inner.control.is_write_end(&self.codec),
+                self.inner.control.is_idle(&self.codec),
+            );
+            self.timeout.as_mut().unwrap().poll_ready(
+                cx,
+                "client",
+                ready_time,
+                is_read_end,
+                is_write_end,
+                is_idle,
+            )?;
         }
         self.inner.control.poll_response(cx, &mut self.codec)
     }
@@ -160,19 +178,15 @@ where
             Some(res) => {
                 let mut res = res.into_type();
                 // HeaderHelper::process_response_header(Version::Http2, true, &mut res)?;
-                self.send_response(
-                    res,
-                    stream_id.unwrap_or(StreamIdentifier::client_first()),
-                )
-                .await?;
+                self.send_response(res, stream_id.unwrap_or(StreamIdentifier::client_first()))
+                    .await?;
             }
             None => (),
         }
         return Ok(None);
     }
 
-    pub async fn incoming(&mut self) -> ProtResult<Option<Response<RecvStream>>>
-    {
+    pub async fn incoming(&mut self) -> ProtResult<Option<Response<RecvStream>>> {
         use futures_util::stream::StreamExt;
         tokio::select! {
             res = self.next() => {
@@ -249,11 +263,10 @@ where
     pub fn set_setting_status(&mut self, setting: Settings, is_done: bool) {
         self.inner.control.set_setting_status(setting, is_done)
     }
-    
+
     pub fn next_stream_id(&mut self) -> StreamIdentifier {
         self.inner.control.next_stream_id()
     }
-
 
     pub async fn send_response(
         &mut self,
@@ -263,10 +276,7 @@ where
         self.inner.control.send_response(res, stream_id).await
     }
 
-    pub fn send_request(
-        &mut self,
-        req: Request<RecvStream>,
-    ) -> ProtResult<()> {
+    pub fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
         self.inner.control.send_request(req)
     }
 }

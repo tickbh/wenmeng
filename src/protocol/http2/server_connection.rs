@@ -1,8 +1,9 @@
 use std::{
-    any::{Any},
+    any::Any,
     net::SocketAddr,
     sync::Arc,
-    task::{ready, Context, Poll}, time::Duration,
+    task::{ready, Context, Poll},
+    time::Duration,
 };
 
 use futures_core::{Future, Stream};
@@ -21,7 +22,7 @@ use webparse::{
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, Initiator, RecvStream, HttpHelper, HeaderHelper, TimeoutLayer,
+    Builder, HeaderHelper, HttpHelper, Initiator, RecvStream, TimeoutLayer,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -86,19 +87,24 @@ where
         }
     }
 
-    
     pub fn set_read_timeout(&mut self, read_timeout: Option<Duration>) {
         if self.timeout.is_none() {
             self.timeout = Some(TimeoutLayer::new());
         }
-        self.timeout.as_mut().unwrap().set_read_timeout(read_timeout);
+        self.timeout
+            .as_mut()
+            .unwrap()
+            .set_read_timeout(read_timeout);
     }
 
     pub fn set_write_timeout(&mut self, write_timeout: Option<Duration>) {
         if self.timeout.is_none() {
             self.timeout = Some(TimeoutLayer::new());
         }
-        self.timeout.as_mut().unwrap().set_write_timeout(write_timeout);
+        self.timeout
+            .as_mut()
+            .unwrap()
+            .set_write_timeout(write_timeout);
     }
 
     pub fn set_timeout(&mut self, timeout: Option<Duration>) {
@@ -128,8 +134,20 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
         if self.timeout.is_some() {
-            let (ready_time, is_read_end, is_write_end, is_idle) = (*self.inner.control.get_ready_time(), self.inner.control.is_read_end(), self.inner.control.is_write_end(&self.codec), self.inner.control.is_idle(&self.codec));
-            self.timeout.as_mut().unwrap().poll_ready(cx, ready_time, is_read_end, is_write_end, is_idle)?;
+            let (ready_time, is_read_end, is_write_end, is_idle) = (
+                *self.inner.control.get_ready_time(),
+                self.inner.control.is_read_end(),
+                self.inner.control.is_write_end(&self.codec),
+                self.inner.control.is_idle(&self.codec),
+            );
+            self.timeout.as_mut().unwrap().poll_ready(
+                cx,
+                "server",
+                ready_time,
+                is_read_end,
+                is_write_end,
+                is_idle,
+            )?;
         }
         self.inner.control.poll_request(cx, &mut self.codec)
         // loop {
@@ -158,11 +176,8 @@ where
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
 
         let res = HttpHelper::handle_request(addr, r, f).await?;
-        self.send_response(
-            res,
-            stream_id.unwrap_or(StreamIdentifier::client_first()),
-        )
-        .await?;
+        self.send_response(res, stream_id.unwrap_or(StreamIdentifier::client_first()))
+            .await?;
         return Ok(None);
     }
 
@@ -179,7 +194,7 @@ where
         Req: Serialize + Any,
         RecvStream: From<Res>,
         Res: Serialize + Any,
-        D: std::marker::Send + 'static
+        D: std::marker::Send + 'static,
     {
         use futures_util::stream::StreamExt;
         let mut receiver = self.inner.receiver_push.take().unwrap();

@@ -132,7 +132,7 @@ where
     ) -> Poll<Option<Self::Item>> {
         if self.timeout.is_some() {
             let (ready_time, is_read_end, is_write_end, is_idle) = (*self.io.get_ready_time(), self.io.is_read_end(), self.io.is_write_end(), self.io.is_idle());
-            self.timeout.as_mut().unwrap().poll_ready(cx, ready_time, is_read_end, is_write_end, is_idle)?;
+            self.timeout.as_mut().unwrap().poll_ready(cx, "client", ready_time, is_read_end, is_write_end, is_idle)?;
         }
         Pin::new(&mut self.io).poll_response(cx)
     }
