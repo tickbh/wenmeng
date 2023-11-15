@@ -137,6 +137,13 @@ impl ProtError {
             _ => (false, false),
         }
     }
+
+    pub fn is_io(&self) -> bool {
+        match self {
+            Self::IoError(_) => true,
+            _ => false,
+        }
+    }
     
     pub fn is_read_timeout(&self) -> (bool, bool) {
         match self {

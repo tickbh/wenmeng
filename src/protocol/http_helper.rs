@@ -44,7 +44,7 @@ impl HttpHelper {
             let _ = r.body_mut().wait_all().await;
         }
         if let Some(addr) = addr {
-            r.headers_mut().system_insert("$client_ip".to_string(), format!("{}", addr));
+            r.headers_mut().system_insert("{client_ip}".to_string(), format!("{}", addr));
         }
         match f(r.into_type::<Req>()).await {
             Ok(res) => {

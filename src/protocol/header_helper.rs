@@ -105,16 +105,16 @@ impl HeaderHelper {
         if value.len() == 0 {
             return value;
         }
-        if value.as_bytes()[0] == b'$' {
+        if value.as_bytes()[0] == b'{' {
             if request.is_some() {
                 if let Some(convert) = request.as_mut().unwrap().headers_mut().system_get(&value) {
                     return convert.to_string();
                 } else {
                     match &*value {
-                        "$host" => {
+                        "{host}" => {
                             return request.as_ref().unwrap().get_host().unwrap_or(String::new());
                         }
-                        "$url" => {
+                        "{url}" => {
                             return format!("{}", request.as_ref().unwrap().url());
                         }
                         _ => {

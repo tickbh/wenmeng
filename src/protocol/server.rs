@@ -306,7 +306,6 @@ where
                     }
                 }
                 Err(e) => {
-                    log::trace!("HTTP服务发生错误:{:?}", e);
                     return Err(e);
                 }
                 Ok(Some(true)) => return Ok(Some(true)),
