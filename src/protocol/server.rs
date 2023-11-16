@@ -120,6 +120,7 @@ where
     addr: Option<SocketAddr>,
 
     timeout: Option<TimeoutLayer>,
+    req_num: usize,
 }
 
 impl Server<TcpStream, ()> {
@@ -140,6 +141,7 @@ where
             addr,
 
             timeout: None,
+            req_num: 0,
         }
     }
 }
@@ -156,6 +158,7 @@ where
             data,
             addr,
             timeout: None,
+            req_num: 0,
         }
     }
 
@@ -220,6 +223,10 @@ where
         } else if let Some(http) = &mut self.http2 {
             http.set_timeout_layer(timeout);
         }
+    }
+
+    pub fn get_req_num(&self) -> usize {
+        self.req_num
     }
 
     pub async fn send_response<R>(
@@ -288,7 +295,10 @@ where
                 Ok(Some(true))
             };
             match result {
-                Ok(None) | Ok(Some(false)) => continue,
+                Ok(None) | Ok(Some(false)) => {
+                    self.req_num = self.req_num.wrapping_add(1);
+                    continue
+                },
                 Err(ProtError::ServerUpgradeHttp2(b, r)) => {
                     if self.http1.is_some() {
                         self.http2 = Some(self.http1.take().unwrap().into_h2(b));
@@ -299,6 +309,8 @@ where
                                 .unwrap()
                                 .handle_request(&self.addr, r, &mut f)
                                 .await?;
+                            
+                            self.req_num = self.req_num.wrapping_add(1);
                         }
                         continue;
                     } else {
