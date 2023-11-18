@@ -186,6 +186,10 @@ impl HeaderHelper {
                         let _ = body.process_data(None)?;
                         let len = body.body_len();
                         headers.insert(HeaderName::CONTENT_LENGTH, len);
+                    } else {
+                        let _ = body.process_data(None)?;
+                        // let len = body.body_len();
+                        // headers.insert(HeaderName::CONTENT_LENGTH, len);
                     }
                 }
             }
