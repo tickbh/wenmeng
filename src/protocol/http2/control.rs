@@ -16,7 +16,7 @@ use webparse::{
     Binary, Request, Response,
 };
 
-use crate::{ProtError, ProtResult, RecvStream};
+use crate::{ProtError, ProtResult, RecvStream, RecvResponse, RecvRequest};
 
 use super::{
     codec::Codec, inner_stream::InnerStream, send_response::SendControl, state::StateHandshake,
@@ -69,7 +69,7 @@ pub struct Control {
 
     config: ControlConfig,
 
-    sender_push: Sender<(StreamIdentifier, Response<RecvStream>)>,
+    sender_push: Sender<(StreamIdentifier, RecvResponse)>,
 
     ready_time: Instant,
 
@@ -79,7 +79,7 @@ pub struct Control {
 impl Control {
     pub fn new(
         config: ControlConfig,
-        sender_push: Sender<(StreamIdentifier, Response<RecvStream>)>,
+        sender_push: Sender<(StreamIdentifier, RecvResponse)>,
         is_server: bool,
     ) -> Self {
         Control {
@@ -189,7 +189,7 @@ impl Control {
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
-    ) -> Poll<Option<ProtResult<Request<RecvStream>>>>
+    ) -> Poll<Option<ProtResult<RecvRequest>>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -263,7 +263,7 @@ impl Control {
         &mut self,
         cx: &mut Context<'_>,
         codec: &mut Codec<T>,
-    ) -> Poll<Option<ProtResult<Response<RecvStream>>>>
+    ) -> Poll<Option<ProtResult<RecvResponse>>>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -339,7 +339,7 @@ impl Control {
         self.finish_streams.insert(stream_id);
     }
 
-    pub fn build_request_frame(&mut self) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
+    pub fn build_request_frame(&mut self) -> Poll<Option<ProtResult<RecvRequest>>> {
         if self.ready_queue.is_empty() {
             return Poll::Ready(None);
         }
@@ -367,7 +367,7 @@ impl Control {
         }
     }
 
-    pub fn build_response_frame(&mut self) -> Poll<Option<ProtResult<Response<RecvStream>>>> {
+    pub fn build_response_frame(&mut self) -> Poll<Option<ProtResult<RecvResponse>>> {
         if self.ready_queue.is_empty() {
             return Poll::Ready(None);
         }
@@ -473,7 +473,7 @@ impl Control {
 
     pub async fn send_response(
         &mut self,
-        res: Response<RecvStream>,
+        res: RecvResponse,
         stream_id: StreamIdentifier,
     ) -> ProtResult<()> {
         self.send_response_may_push(res, stream_id, None).await
@@ -481,7 +481,7 @@ impl Control {
 
     pub async fn send_response_may_push(
         &mut self,
-        res: Response<RecvStream>,
+        res: RecvResponse,
         stream_id: StreamIdentifier,
         push: Option<StreamIdentifier>,
     ) -> ProtResult<()> {
@@ -492,7 +492,7 @@ impl Control {
         Ok(())
     }
 
-    pub fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
+    pub fn send_request(&mut self, req: RecvRequest) -> ProtResult<()> {
         let is_end = req.body().is_end();
         let next_id = self.next_stream_id();
         self.request_queue

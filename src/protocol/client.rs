@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use crate::http2::{self, ClientH2Connection};
 use crate::{http1::ClientH1Connection, ProtError};
-use crate::{ProtResult, RecvStream, TimeoutLayer};
+use crate::{ProtResult, RecvStream, TimeoutLayer, RecvResponse, RecvRequest};
 use rustls::{ClientConfig, RootCertStore};
 use tokio::net::ToSocketAddrs;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -273,9 +273,9 @@ where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     option: ClientOption,
-    sender: Sender<ProtResult<Response<RecvStream>> >,
-    receiver: Option<Receiver<ProtResult<Response<RecvStream>>>>,
-    req_receiver: Option<Receiver<Request<RecvStream>>>,
+    sender: Sender<ProtResult<RecvResponse> >,
+    receiver: Option<Receiver<ProtResult<RecvResponse>>>,
+    req_receiver: Option<Receiver<RecvRequest>>,
     http1: Option<ClientH1Connection<T>>,
     http2: Option<ClientH2Connection<T>>,
 }
@@ -324,16 +324,16 @@ where
 
     pub fn split(
         &mut self,
-    ) -> ProtResult<(Receiver<ProtResult<Response<RecvStream>>>, Sender<Request<RecvStream>>)> {
+    ) -> ProtResult<(Receiver<ProtResult<RecvResponse>>, Sender<RecvRequest>)> {
         if self.receiver.is_none() {
             return Err(ProtError::Extension("receiver error"));
         }
-        let (sender, receiver) = channel::<Request<RecvStream>>(10);
+        let (sender, receiver) = channel::<RecvRequest>(10);
         self.req_receiver = Some(receiver);
         Ok((self.receiver.take().unwrap(), sender))
     }
 
-    fn send_req(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
+    fn send_req(&mut self, req: RecvRequest) -> ProtResult<()> {
         if let Some(h) = &mut self.http1 {
             h.send_request(req)?;
         } else if let Some(h) = &mut self.http2 {
@@ -345,7 +345,7 @@ where
     pub async fn wait_operate(mut self) -> ProtResult<()> {
         async fn http1_wait<T>(
             connection: &mut Option<ClientH1Connection<T>>,
-        ) -> Option<ProtResult<Option<Response<RecvStream>>>>
+        ) -> Option<ProtResult<Option<RecvResponse>>>
         where
             T: AsyncRead + AsyncWrite + Unpin,
         {
@@ -360,7 +360,7 @@ where
 
         async fn http2_wait<T>(
             connection: &mut Option<ClientH2Connection<T>>,
-        ) -> Option<ProtResult<Option<Response<RecvStream>>>>
+        ) -> Option<ProtResult<Option<RecvResponse>>>
         where
             T: AsyncRead + AsyncWrite + Unpin,
         {
@@ -374,8 +374,8 @@ where
         }
 
         async fn req_receiver(
-            req_receiver: &mut Option<Receiver<Request<RecvStream>>>,
-        ) -> Option<Request<RecvStream>> {
+            req_receiver: &mut Option<Receiver<RecvRequest>>,
+        ) -> Option<RecvRequest> {
             if req_receiver.is_some() {
                 req_receiver.as_mut().unwrap().recv().await
             } else {
@@ -433,12 +433,12 @@ where
         }
     }
 
-    async fn inner_operate(mut self, req: Request<RecvStream>) -> ProtResult<()> {
+    async fn inner_operate(mut self, req: RecvRequest) -> ProtResult<()> {
         self.send_req(req)?;
         self.wait_operate().await
     }
 
-    fn rebuild_request(&mut self, req: &mut Request<RecvStream>) {
+    fn rebuild_request(&mut self, req: &mut RecvRequest) {
         // 支持http2且当前为http1尝试升级
         if self.option.http2 {
             if let Some(_) = &self.http1 {
@@ -452,8 +452,8 @@ where
 
     pub async fn send(
         mut self,
-        mut req: Request<RecvStream>,
-    ) -> ProtResult<Receiver<ProtResult<Response<RecvStream>>>> {
+        mut req: RecvRequest,
+    ) -> ProtResult<Receiver<ProtResult<RecvResponse>>> {
         self.rebuild_request(&mut req);
         let (r, _s) = self.split()?;
         tokio::spawn(async move {
@@ -466,8 +466,8 @@ where
 
     pub async fn send2(
         mut self,
-        mut req: Request<RecvStream>,
-    ) -> ProtResult<(Receiver<ProtResult<Response<RecvStream>>>, Sender<Request<RecvStream>>)> {
+        mut req: RecvRequest,
+    ) -> ProtResult<(Receiver<ProtResult<RecvResponse>>, Sender<RecvRequest>)> {
         self.rebuild_request(&mut req);
         let (r, s) = self.split()?;
         tokio::spawn(async move {
@@ -480,8 +480,8 @@ where
 
     pub async fn send_now(
         mut self,
-        mut req: Request<RecvStream>,
-    ) -> ProtResult<ProtResult<Response<RecvStream>>> {
+        mut req: RecvRequest,
+    ) -> ProtResult<ProtResult<RecvResponse>> {
         self.rebuild_request(&mut req);
         let (mut r, _) = self.split()?;
         // let _ = self.operate(req).await;
@@ -493,7 +493,7 @@ where
         }
     }
 
-    pub async fn recv(&mut self) -> ProtResult<Response<RecvStream>> {
+    pub async fn recv(&mut self) -> ProtResult<RecvResponse> {
         if let Some(recv) = &mut self.receiver {
             if let Some(res) = recv.recv().await {
                 res

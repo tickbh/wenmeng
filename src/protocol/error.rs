@@ -3,7 +3,7 @@ use std::{fmt::{Display, Pointer}, io};
 use tokio::sync::mpsc::error::SendError;
 use webparse::{WebError, Binary, http::http2::frame::Reason, Request, http2::frame::Settings};
 
-use crate::RecvStream;
+use crate::{RecvStream, RecvRequest};
 
 pub type ProtResult<T> = Result<T, ProtError>;
 
@@ -68,7 +68,7 @@ pub enum ProtError {
 
     SendError,
     /// 协议数据升级, 第一参数表示将要写给客户端的消息, 第二参数表示原来未处理的请求
-    ServerUpgradeHttp2(Binary, Option<Request<RecvStream>>),
+    ServerUpgradeHttp2(Binary, Option<RecvRequest>),
     /// 协议数据升级, 第一参数表示将要写给客户端的消息, 第二参数表示原来未处理的请求
     ClientUpgradeHttp2(Settings),
     /// 发生错误或者收到关闭消息将要关闭该链接

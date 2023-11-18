@@ -15,13 +15,13 @@ use webparse::{
     Binary,
 };
 
-use crate::{RecvStream};
+use crate::{RecvStream, RecvRequest};
 
 
 #[derive(Debug)]
 pub struct SendRequest {
     pub stream_id: StreamIdentifier,
-    pub request: Request<RecvStream>,
+    pub request: RecvRequest,
     pub encode_header: bool,
     pub encode_body: bool,
     pub is_end_stream: bool,
@@ -30,7 +30,7 @@ pub struct SendRequest {
 impl SendRequest {
     pub fn new(
         stream_id: StreamIdentifier,
-        request: Request<RecvStream>,
+        request: RecvRequest,
         is_end_stream: bool,
     ) -> Self {
         SendRequest {
@@ -42,7 +42,7 @@ impl SendRequest {
         }
     }
 
-    pub fn encode_headers(request: & Request<RecvStream>) -> HeaderMap {
+    pub fn encode_headers(request: & RecvRequest) -> HeaderMap {
         let mut headers = HeaderMap::new();
         headers.insert(":method", request.method().as_str().to_string());
         headers.insert(":path", request.path().clone());

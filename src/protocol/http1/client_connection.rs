@@ -7,7 +7,7 @@ use futures_core::{Stream, Future};
 use tokio::{io::{AsyncRead, AsyncWrite}};
 use webparse::{Binary, Request, Response, http2::{HTTP2_MAGIC, frame::Settings}};
 
-use crate::{ProtResult, RecvStream, http2::ClientH2Connection, TimeoutLayer};
+use crate::{ProtResult, RecvStream, http2::ClientH2Connection, TimeoutLayer, RecvResponse, RecvRequest};
 
 use super::IoBuffer;
 
@@ -69,7 +69,7 @@ where
     pub fn poll_request(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
+    ) -> Poll<Option<ProtResult<RecvRequest>>> {
         self.io.poll_request(cx)
     }
 
@@ -86,8 +86,8 @@ where
 
     pub async fn handle_response(
         &mut self,
-        r: Response<RecvStream>,
-    ) -> ProtResult<Option<Response<RecvStream>>>
+        r: RecvResponse,
+    ) -> ProtResult<Option<RecvResponse>>
     {
         if r.status() == 101 {
             return Err(crate::ProtError::ClientUpgradeHttp2(self.settings.clone().unwrap_or(Settings::default())))
@@ -95,7 +95,7 @@ where
         return Ok(Some(r));
     }
 
-    pub async fn incoming(&mut self) -> ProtResult<Option<Response<RecvStream>>>
+    pub async fn incoming(&mut self) -> ProtResult<Option<RecvResponse>>
     {
         use futures_util::stream::StreamExt;
         let req = self.next().await;
@@ -109,11 +109,11 @@ where
         };
     }
 
-    pub async fn send_response(&mut self, res: Response<RecvStream>) -> ProtResult<()> {
+    pub async fn send_response(&mut self, res: RecvResponse) -> ProtResult<()> {
         self.io.send_response(res).await
     }
 
-    pub fn send_request(&mut self, mut req: Request<RecvStream>) -> ProtResult<()> {
+    pub fn send_request(&mut self, mut req: RecvRequest) -> ProtResult<()> {
         if let Some(s) = req.extensions_mut().remove::<Settings>() {
             self.settings = Some(s);
         }
@@ -125,7 +125,7 @@ impl<T> Stream for ClientH1Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = ProtResult<Response<RecvStream>>;
+    type Item = ProtResult<RecvResponse>;
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,

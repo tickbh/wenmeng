@@ -15,14 +15,14 @@ use webparse::{
     Binary, Method, Response,
 };
 
-use crate::{ProtResult, RecvStream};
+use crate::{ProtResult, RecvStream, RecvResponse};
 
 
 #[derive(Debug)]
 pub struct SendResponse {
     pub stream_id: StreamIdentifier,
     pub push_id: Option<StreamIdentifier>,
-    pub response: Response<RecvStream>,
+    pub response: RecvResponse,
     pub encode_header: bool,
     pub encode_body: bool,
     pub is_end_stream: bool,
@@ -34,7 +34,7 @@ impl SendResponse {
     pub fn new(
         stream_id: StreamIdentifier,
         push_id: Option<StreamIdentifier>,
-        response: Response<RecvStream>,
+        response: RecvResponse,
         method: Method,
         is_end_stream: bool,
     ) -> Self {
@@ -49,7 +49,7 @@ impl SendResponse {
         }
     }
 
-    pub fn encode_headers(response: & Response<RecvStream>) -> (HeaderMap, bool) {
+    pub fn encode_headers(response: & RecvResponse) -> (HeaderMap, bool) {
         let mut headers = HeaderMap::new();
         let mut is_end = false;
         headers.insert(":status", HeaderValue::from_static(response.status().as_str()));
@@ -118,14 +118,14 @@ impl SendResponse {
 #[derive(Debug, Clone)]
 pub struct SendControl {
     pub stream_id: StreamIdentifier,
-    pub sender: Sender<(StreamIdentifier, Response<RecvStream>)>,
+    pub sender: Sender<(StreamIdentifier, RecvResponse)>,
     pub method: Method,
 }
 
 impl SendControl {
     pub fn new(
         stream_id: StreamIdentifier,
-        sender: Sender<(StreamIdentifier, Response<RecvStream>)>,
+        sender: Sender<(StreamIdentifier, RecvResponse)>,
         method: Method,
     ) -> Self {
         SendControl {
@@ -137,7 +137,7 @@ impl SendControl {
 
     pub async fn send_response(
         &mut self,
-        res: Response<RecvStream>
+        res: RecvResponse
     ) -> ProtResult<()> {
         let _ = self.sender.send((self.stream_id, res)).await;
         Ok(())

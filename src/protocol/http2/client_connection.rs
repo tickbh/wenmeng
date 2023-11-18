@@ -18,7 +18,7 @@ use webparse::{
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, HeaderHelper, Initiator, RecvStream, TimeoutLayer,
+    Builder, HeaderHelper, Initiator, RecvStream, TimeoutLayer, RecvResponse, RecvRequest,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -126,14 +126,14 @@ where
     pub fn poll_request(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
+    ) -> Poll<Option<ProtResult<RecvRequest>>> {
         self.inner.control.poll_request(cx, &mut self.codec)
     }
 
     pub fn poll_response(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtResult<Response<RecvStream>>>> {
+    ) -> Poll<Option<ProtResult<RecvResponse>>> {
         if self.timeout.is_some() {
             let (ready_time, is_read_end, is_write_end, is_idle) = (
                 *self.inner.control.get_ready_time(),
@@ -159,7 +159,7 @@ where
 
     pub async fn handle_request<F, Fut, Res, Req>(
         &mut self,
-        mut r: Request<RecvStream>,
+        mut r: RecvRequest,
         f: &mut F,
     ) -> ProtResult<Option<bool>>
     where
@@ -186,7 +186,7 @@ where
         return Ok(None);
     }
 
-    pub async fn incoming(&mut self) -> ProtResult<Option<Response<RecvStream>>> {
+    pub async fn incoming(&mut self) -> ProtResult<Option<RecvResponse>> {
         use futures_util::stream::StreamExt;
         tokio::select! {
             res = self.next() => {
@@ -203,7 +203,7 @@ where
 
     fn handle_poll_result(
         &mut self,
-        result: Option<ProtResult<Response<RecvStream>>>,
+        result: Option<ProtResult<RecvResponse>>,
     ) -> ProtResult<()> {
         match result {
             // 收到空包, 则关闭连接
@@ -270,13 +270,13 @@ where
 
     pub async fn send_response(
         &mut self,
-        res: Response<RecvStream>,
+        res: RecvResponse,
         stream_id: StreamIdentifier,
     ) -> ProtResult<()> {
         self.inner.control.send_response(res, stream_id).await
     }
 
-    pub fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
+    pub fn send_request(&mut self, req: RecvRequest) -> ProtResult<()> {
         self.inner.control.send_request(req)
     }
 }
@@ -285,7 +285,7 @@ impl<T> Stream for ClientH2Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = ProtResult<Response<RecvStream>>;
+    type Item = ProtResult<RecvResponse>;
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,

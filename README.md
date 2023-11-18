@@ -10,7 +10,7 @@
 use std::{env, error::Error};
 use tokio::net::TcpListener;
 use webparse::{Request, Response};
-use dianmeng::{self, ProtResult, RecvStream, Server};
+use wenmeng::{self, ProtResult, RecvStream, Server, RecvRequest};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let (stream, _) = server.accept().await?;
         tokio::spawn(async move {
             let mut server = Server::new(stream);
-            async fn operate(req: Request<RecvStream>) -> ProtResult<Option<Response<String>>> {
+            async fn operate(req: RecvRequest) -> ProtResult<Option<Response<String>>> {
                 let response = Response::builder()
                     .version(req.version().clone())
                     .body("Hello World".to_string())?;

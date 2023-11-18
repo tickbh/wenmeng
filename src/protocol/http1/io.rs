@@ -8,7 +8,7 @@ use tokio::{
     sync::mpsc::Sender,
 };
 
-use crate::{ProtError, ProtResult, RecvStream, HeaderHelper, SendStream};
+use crate::{ProtError, ProtResult, RecvStream, HeaderHelper, SendStream, RecvResponse, RecvRequest};
 use webparse::{
     http::http2, Binary, BinaryMut, Buf, BufMut, Request, Response, Version,
 };
@@ -28,8 +28,8 @@ pub struct IoBuffer<T> {
 struct ConnectionInfo {
     deal_req: usize,
     read_sender: Option<Sender<(bool, Binary)>>,
-    res: LinkedList<Response<RecvStream>>,
-    req: LinkedList<Request<RecvStream>>,
+    res: LinkedList<RecvResponse>,
+    req: LinkedList<RecvRequest>,
     is_keep_alive: bool,
     is_delay_close: bool,
     is_idle: bool,
@@ -266,7 +266,7 @@ where
     pub fn poll_request(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
+    ) -> Poll<Option<ProtResult<RecvRequest>>> {
         let n = self.poll_write(cx)?;
         if n == Poll::Ready(0) && self.inner.is_active_close() && self.write_buf.is_empty() {
             return Poll::Ready(None);
@@ -384,7 +384,7 @@ where
     pub fn poll_response(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtResult<Response<RecvStream>>>> {
+    ) -> Poll<Option<ProtResult<RecvResponse>>> {
         let _n = self.poll_write(cx)?;
         if self.inner.is_delay_close {
             return Poll::Ready(None);
@@ -491,14 +491,14 @@ where
         (self.io, self.send_stream.read_buf, self.write_buf)
     }
 
-    pub async fn send_response(&mut self, res: Response<RecvStream>) -> ProtResult<()> {
+    pub async fn send_response(&mut self, res: RecvResponse) -> ProtResult<()> {
         self.check_finish_status();
         self.inner.res.push_back(res);
         self.inner.is_idle = false;
         Ok(())
     }
 
-    pub fn send_request(&mut self, req: Request<RecvStream>) -> ProtResult<()> {
+    pub fn send_request(&mut self, req: RecvRequest) -> ProtResult<()> {
         self.check_finish_status();
         self.inner.req.push_back(req);
         self.inner.is_idle = false;

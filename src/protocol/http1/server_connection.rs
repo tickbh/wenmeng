@@ -13,7 +13,7 @@ use tokio::{
 };
 use webparse::{Binary, BinaryMut, Request, Response, Serialize, Version};
 
-use crate::{ProtResult, RecvStream, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer};
+use crate::{ProtResult, RecvStream, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer, RecvResponse, RecvRequest};
 
 use super::IoBuffer;
 
@@ -74,7 +74,7 @@ where
     pub fn poll_request(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
+    ) -> Poll<Option<ProtResult<RecvRequest>>> {
         self.io.poll_request(cx)
     }
 
@@ -87,19 +87,15 @@ where
         connect
     }
 
-    pub async fn handle_request<F, Fut, Res, Req>(
+    pub async fn handle_request<F, Fut>(
         &mut self,
         addr: &Option<SocketAddr>,
-        r: Request<RecvStream>,
+        r: RecvRequest,
         f: &mut F,
     ) -> ProtResult<Option<bool>>
     where
-        F: FnMut(Request<Req>) -> Fut,
-        Fut: Future<Output = ProtResult<Response<Res>>>,
-        Req: From<RecvStream>,
-        Req: Serialize + Any,
-        RecvStream: From<Res>,
-        Res: Serialize + Any,
+        F: FnMut(&mut RecvRequest) -> Fut,
+        Fut: Future<Output = ProtResult<RecvResponse>>,
     {
         if let Some(protocol) = r.headers().get_upgrade_protocol() {
             if protocol == "h2c" {
@@ -123,19 +119,15 @@ where
         return Ok(None);
     }
 
-    pub async fn incoming<F, Fut, Res, Req, D>(
+    pub async fn incoming<F, Fut, D>(
         &mut self,
         f: &mut F,
         addr: &Option<SocketAddr>,
         data: &mut Arc<Mutex<D>>,
     ) -> ProtResult<Option<bool>>
     where
-        F: FnMut(Request<Req>) -> Fut,
-        Fut: Future<Output = ProtResult<Response<Res>>>,
-        Req: From<RecvStream>,
-        Req: Serialize + Any,
-        RecvStream: From<Res>,
-        Res: Serialize + Any,
+        F: FnMut(&mut RecvRequest) -> Fut,
+        Fut: Future<Output = ProtResult<RecvResponse>>,
         D: std::marker::Send + 'static
     {
         use futures_util::stream::StreamExt;
@@ -152,7 +144,7 @@ where
         return Ok(None);
     }
 
-    pub async fn send_response(&mut self, res: Response<RecvStream>) -> ProtResult<()> {
+    pub async fn send_response(&mut self, res: RecvResponse) -> ProtResult<()> {
         self.io.send_response(res).await
     }
 }
@@ -161,7 +153,7 @@ impl<T> Stream for ServerH1Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = ProtResult<Request<RecvStream>>;
+    type Item = ProtResult<RecvRequest>;
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,

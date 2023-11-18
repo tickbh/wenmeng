@@ -4,15 +4,17 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-
-use futures_core::Future;
+use std::future::Future;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::Mutex, net::{TcpListener, TcpStream},
+    net::{TcpListener, TcpStream},
+    sync::Mutex,
 };
 use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize};
 
-use crate::{ProtError, ProtResult, RecvStream, ServerH2Connection, TimeoutLayer};
+use crate::{
+    ProtError, ProtResult, RecvRequest, RecvResponse, RecvStream, ServerH2Connection, TimeoutLayer,
+};
 
 use super::http1::ServerH1Connection;
 
@@ -72,7 +74,6 @@ impl Builder {
         self.inner.timeout = timeout;
         self
     }
-
 
     pub fn addr(mut self, addr: SocketAddr) -> Self {
         self.inner.addr = Some(addr);
@@ -251,7 +252,7 @@ where
         Ok(())
     }
 
-    pub async fn req_into_type<Req>(mut r: Request<RecvStream>) -> Request<Req>
+    pub async fn req_into_type<Req>(mut r: RecvRequest) -> Request<Req>
     where
         Req: From<RecvStream>,
         Req: Serialize + Any,
@@ -266,7 +267,7 @@ where
         }
     }
 
-    pub async fn try_wait_req<Req>(r: &mut Request<RecvStream>) -> ProtResult<()>
+    pub async fn try_wait_req<Req>(r: &mut RecvRequest) -> ProtResult<()>
     where
         Req: From<RecvStream>,
         Req: Serialize,
@@ -277,14 +278,10 @@ where
         Ok(())
     }
 
-    pub async fn incoming<F, Fut, Res, Req>(&mut self, mut f: F) -> ProtResult<Option<bool>>
+    pub async fn incoming<F, Fut>(&mut self, mut f: F) -> ProtResult<Option<bool>>
     where
-        F: FnMut(Request<Req>) -> Fut,
-        Fut: Future<Output = ProtResult<Response<Res>>>,
-        Req: From<RecvStream>,
-        Req: Serialize + Any,
-        RecvStream: From<Res>,
-        Res: Serialize + Any,
+        F: OperateTrait,
+        Fut: Future<Output = ProtResult<RecvResponse>>,
     {
         loop {
             let result = if let Some(h1) = &mut self.http1 {
@@ -297,8 +294,8 @@ where
             match result {
                 Ok(None) | Ok(Some(false)) => {
                     self.req_num = self.req_num.wrapping_add(1);
-                    continue
-                },
+                    continue;
+                }
                 Err(ProtError::ServerUpgradeHttp2(b, r)) => {
                     if self.http1.is_some() {
                         self.http2 = Some(self.http1.take().unwrap().into_h2(b));
@@ -309,7 +306,7 @@ where
                                 .unwrap()
                                 .handle_request(&self.addr, r, &mut f)
                                 .await?;
-                            
+
                             self.req_num = self.req_num.wrapping_add(1);
                         }
                         continue;

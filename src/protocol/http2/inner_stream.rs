@@ -10,7 +10,7 @@ use webparse::{
     Binary, BinaryMut, Buf, Request, Response, Version,
 };
 
-use crate::{HeaderHelper, ProtError, ProtResult};
+use crate::{HeaderHelper, ProtError, ProtResult, RecvResponse, RecvRequest};
 
 use crate::RecvStream;
 
@@ -90,7 +90,7 @@ impl InnerStream {
         return Ok(self.end_stream);
     }
 
-    pub fn build_request(&mut self) -> ProtResult<(bool, Request<RecvStream>)> {
+    pub fn build_request(&mut self) -> ProtResult<(bool, RecvRequest)> {
         let mut builder = request::Request::builder();
         let mut is_nobody = false;
         let mut is_end_stream = false;
@@ -134,7 +134,7 @@ impl InnerStream {
         }
     }
 
-    pub fn build_response(&mut self) -> ProtResult<(bool, Response<RecvStream>)> {
+    pub fn build_response(&mut self) -> ProtResult<(bool, RecvResponse)> {
         let mut builder = response::Response::builder().version(Version::Http2);
         let mut is_nobody = false;
         let mut is_end_stream = false;

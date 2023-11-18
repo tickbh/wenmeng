@@ -1,6 +1,6 @@
 use webparse::{Serialize, Request, Response, HeaderName, HeaderMap, Version};
 
-use crate::{RecvStream, ProtResult, Consts};
+use crate::{RecvStream, ProtResult, Consts, RecvResponse, RecvRequest};
 
 pub struct HeaderHelper;
 
@@ -193,13 +193,13 @@ impl HeaderHelper {
         Ok(())
     }
 
-    pub fn process_request_header(version: Version, is_client: bool, req: &mut Request<RecvStream>) -> ProtResult<()> {
+    pub fn process_request_header(version: Version, is_client: bool, req: &mut RecvRequest) -> ProtResult<()> {
         let (h, b) = req.headers_body_mut();
         Self::process_headers(version, is_client, h, b)?;
         Ok(())
     }
 
-    pub fn process_response_header(version: Version, is_client: bool, res: &mut Response<RecvStream>) -> ProtResult<()> {
+    pub fn process_response_header(version: Version, is_client: bool, res: &mut RecvResponse) -> ProtResult<()> {
         let (h, b) = res.headers_body_mut();
         Self::process_headers(version, is_client, h, b)?;
         Ok(())

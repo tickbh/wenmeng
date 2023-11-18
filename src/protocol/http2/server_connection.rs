@@ -22,7 +22,7 @@ use webparse::{
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, HeaderHelper, HttpHelper, Initiator, RecvStream, TimeoutLayer,
+    Builder, HeaderHelper, HttpHelper, Initiator, RecvStream, TimeoutLayer, RecvResponse, RecvRequest,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -38,7 +38,7 @@ struct InnerConnection {
 
     control: Control,
 
-    receiver_push: Option<Receiver<(StreamIdentifier, Response<RecvStream>)>>,
+    receiver_push: Option<Receiver<(StreamIdentifier, RecvResponse)>>,
 }
 
 #[derive(Debug)]
@@ -132,7 +132,7 @@ where
     pub fn poll_request(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtResult<Request<RecvStream>>>> {
+    ) -> Poll<Option<ProtResult<RecvRequest>>> {
         if self.timeout.is_some() {
             let (ready_time, is_read_end, is_write_end, is_idle) = (
                 *self.inner.control.get_ready_time(),
@@ -159,19 +159,15 @@ where
         self.inner.control.poll_write(cx, &mut self.codec, false)
     }
 
-    pub async fn handle_request<F, Fut, Res, Req>(
+    pub async fn handle_request<F, Fut>(
         &mut self,
         addr: &Option<SocketAddr>,
-        mut r: Request<RecvStream>,
+        mut r: RecvRequest,
         f: &mut F,
     ) -> ProtResult<Option<bool>>
     where
-        F: FnMut(Request<Req>) -> Fut,
-        Fut: Future<Output = ProtResult<Response<Res>>>,
-        Req: From<RecvStream>,
-        Req: Serialize + Any,
-        RecvStream: From<Res>,
-        Res: Serialize + Any,
+        F: FnMut(&mut RecvRequest) -> Fut,
+        Fut: Future<Output = ProtResult<RecvResponse>>,
     {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
 
@@ -181,19 +177,15 @@ where
         return Ok(None);
     }
 
-    pub async fn incoming<F, Fut, Res, Req, D>(
+    pub async fn incoming<F, Fut, D>(
         &mut self,
         f: &mut F,
         addr: &Option<SocketAddr>,
         data: &mut Arc<Mutex<D>>,
     ) -> ProtResult<Option<bool>>
     where
-        F: FnMut(Request<Req>) -> Fut,
-        Fut: Future<Output = ProtResult<Response<Res>>>,
-        Req: From<RecvStream>,
-        Req: Serialize + Any,
-        RecvStream: From<Res>,
-        Res: Serialize + Any,
+        F: FnMut(&mut RecvRequest) -> Fut,
+        Fut: Future<Output = ProtResult<RecvResponse>>,
         D: std::marker::Send + 'static,
     {
         use futures_util::stream::StreamExt;
@@ -224,7 +216,7 @@ where
 
     fn handle_poll_result(
         &mut self,
-        result: Option<ProtResult<Request<RecvStream>>>,
+        result: Option<ProtResult<RecvRequest>>,
     ) -> ProtResult<()> {
         match result {
             // 收到空包, 则关闭连接
@@ -283,7 +275,7 @@ where
 
     pub async fn send_response(
         &mut self,
-        mut res: Response<RecvStream>,
+        mut res: RecvResponse,
         stream_id: StreamIdentifier,
     ) -> ProtResult<()> {
         HeaderHelper::process_response_header(Version::Http2, false, &mut res)?;
@@ -295,7 +287,7 @@ impl<T> Stream for ServerH2Connection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = ProtResult<Request<RecvStream>>;
+    type Item = ProtResult<RecvRequest>;
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,

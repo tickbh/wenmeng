@@ -26,7 +26,7 @@ use tokio::{
     net::{TcpListener, TcpStream}, io::AsyncReadExt, fs::File,
 };
 
-use wenmeng::{self, ProtResult, RecvStream, Server};
+use wenmeng::{self, ProtResult, RecvStream, Server, RecvRequest, RecvResponse};
 
 // use async_compression::tokio::{write::GzipEncoder};
 
@@ -35,7 +35,7 @@ trait Xx {
 }
 
 
-async fn operate(mut req: Request<RecvStream>) -> ProtResult<Response<RecvStream>> {
+async fn operate(mut req: RecvRequest) -> ProtResult<RecvResponse> {
     let mut builder = Response::builder().version(req.version().clone());
     let _body = match &*req.url().path {
         "/plaintext" | "/" => {

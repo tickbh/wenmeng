@@ -1,11 +1,22 @@
 use std::{env, error::Error, time::Duration};
+use async_trait::async_trait;
 use serde::ser;
 use tokio::{net::TcpListener};
 use webparse::{Request, Response};
-use wenmeng::{self, ProtResult, RecvStream, Server};
+use wenmeng::{self, ProtResult, RecvStream, Server, RecvRequest, RecvResponse, OperateTrait};
+
+struct Operate;
+
+#[async_trait]
+impl OperateTrait for Operate {
+    async fn operate(&self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
+        Err(wenmeng::ProtError::Extension(""))
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    
     env_logger::init();
     let addr = env::args()
         .nth(1)
@@ -19,12 +30,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // server.set_read_timeout(Some(Duration::new(0, 100)));
             // server.set_write_timeout(Some(Duration::new(0, 100)));
             // server.set_timeout(Some(Duration::new(0, 100)));
-            async fn operate(req: Request<RecvStream>) -> ProtResult<Response<String>> {
+            async fn operate<'a>(req: &'a mut RecvRequest) -> ProtResult<RecvResponse> {
                 tokio::time::sleep(Duration::new(1, 1)).await;
                 let response = Response::builder()
                     .version(req.version().clone())
                     .body("Hello World\r\n".to_string())?;
-                Ok(response)
+                Ok(response.into_type())
             }
             let e = server.incoming(operate).await;
             println!("close server ==== addr = {:?} e = {:?}", addr, e);

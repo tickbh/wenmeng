@@ -3,30 +3,24 @@ use std::{
     net::SocketAddr,
 };
 
-use futures_core::{Future};
+use futures_core::Future;
 
-use webparse::{Request, Response, Serialize, HeaderName};
+use webparse::{HeaderName, Request, Response, Serialize};
 
-use crate::{ProtResult, RecvStream};
-
+use crate::{ProtResult, RecvRequest, RecvResponse, RecvStream};
 
 pub struct HttpHelper;
 
 impl HttpHelper {
-
-    pub async fn handle_request<F, Fut, Res, Req>(
+    pub async fn handle_request<F, Fut>(
         addr: &Option<SocketAddr>,
-        mut r: Request<RecvStream>,
+        mut r: RecvRequest,
         f: &mut F,
-    ) -> ProtResult<Response<RecvStream>>
+    ) -> ProtResult<RecvResponse>
     where
-        F: FnMut(Request<Req>) -> Fut,
-        Fut: Future<Output = ProtResult<Response<Res>>>,
-        Req: From<RecvStream>,
-        Req: Serialize + Any,
-        RecvStream: From<Res>,
-        Res: Serialize + Any,
-    {   
+        F: FnMut(&mut RecvRequest) -> Fut,
+        Fut: Future<Output = ProtResult<RecvResponse>>,
+    {
         let (mut gzip, mut deflate, mut br) = (false, false, false);
         if let Some(accept) = r.headers().get_option_value(&HeaderName::ACCEPT_ENCODING) {
             if accept.contains("gzip".as_bytes()) {
@@ -39,14 +33,13 @@ impl HttpHelper {
                 br = true;
             }
         }
-        
-        if TypeId::of::<Req>() != TypeId::of::<RecvStream>() {
-            let _ = r.body_mut().wait_all().await;
-        }
+
         if let Some(addr) = addr {
-            r.headers_mut().system_insert("{client_ip}".to_string(), format!("{}", addr));
+            r.headers_mut()
+                .system_insert("{client_ip}".to_string(), format!("{}", addr));
         }
-        match f(r.into_type::<Req>()).await {
+
+        match f(&mut r).await {
             Ok(res) => {
                 let res = res.into_type::<RecvStream>();
                 // 如果外部有设置编码，内部不做改变，如果有body大小值，不做任何改变，因为改变会变更大小值
@@ -60,11 +53,15 @@ impl HttpHelper {
                 //     }
                 // }
                 // HeaderHelper::process_response_header(&mut res)?;
-                return Ok(res)
+                return Ok(res);
             }
             Err(e) => {
                 log::info!("处理数据时出错:{:?}", e);
-                Ok(Response::builder().status(500).body("server inner error").unwrap().into_type())
+                Ok(Response::builder()
+                    .status(500)
+                    .body("server inner error")
+                    .unwrap()
+                    .into_type())
             }
         }
     }
