@@ -13,7 +13,7 @@ use tokio::{
 };
 use webparse::{Binary, BinaryMut, Request, Response, Serialize, Version};
 
-use crate::{ProtResult, RecvStream, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer, RecvResponse, RecvRequest};
+use crate::{ProtResult, RecvStream, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait};
 
 use super::IoBuffer;
 
@@ -87,15 +87,14 @@ where
         connect
     }
 
-    pub async fn handle_request<F, Fut>(
+    pub async fn handle_request<F>(
         &mut self,
         addr: &Option<SocketAddr>,
         r: RecvRequest,
         f: &mut F,
     ) -> ProtResult<Option<bool>>
     where
-        F: FnMut(&mut RecvRequest) -> Fut,
-        Fut: Future<Output = ProtResult<RecvResponse>>,
+        F: OperateTrait,
     {
         if let Some(protocol) = r.headers().get_upgrade_protocol() {
             if protocol == "h2c" {
@@ -119,15 +118,14 @@ where
         return Ok(None);
     }
 
-    pub async fn incoming<F, Fut, D>(
+    pub async fn incoming<F, D>(
         &mut self,
         f: &mut F,
         addr: &Option<SocketAddr>,
         data: &mut Arc<Mutex<D>>,
     ) -> ProtResult<Option<bool>>
     where
-        F: FnMut(&mut RecvRequest) -> Fut,
-        Fut: Future<Output = ProtResult<RecvResponse>>,
+        F: OperateTrait,
         D: std::marker::Send + 'static
     {
         use futures_util::stream::StreamExt;

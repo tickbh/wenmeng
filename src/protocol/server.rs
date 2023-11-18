@@ -13,7 +13,7 @@ use tokio::{
 use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize};
 
 use crate::{
-    ProtError, ProtResult, RecvRequest, RecvResponse, RecvStream, ServerH2Connection, TimeoutLayer,
+    ProtError, ProtResult, RecvRequest, RecvResponse, RecvStream, ServerH2Connection, TimeoutLayer, OperateTrait,
 };
 
 use super::http1::ServerH1Connection;
@@ -278,10 +278,9 @@ where
         Ok(())
     }
 
-    pub async fn incoming<F, Fut>(&mut self, mut f: F) -> ProtResult<Option<bool>>
+    pub async fn incoming<F>(&mut self, mut f: F) -> ProtResult<Option<bool>>
     where
         F: OperateTrait,
-        Fut: Future<Output = ProtResult<RecvResponse>>,
     {
         loop {
             let result = if let Some(h1) = &mut self.http1 {

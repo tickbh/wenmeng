@@ -13,6 +13,7 @@
 
 #![warn(rust_2018_idioms)]
 
+use async_trait::async_trait;
 use flate2::GzBuilder;
 use webparse::{BinaryMut, Request, Response, HeaderName};
 #[macro_use]
@@ -26,7 +27,7 @@ use tokio::{
     net::{TcpListener, TcpStream}, io::AsyncReadExt, fs::File,
 };
 
-use wenmeng::{self, ProtResult, RecvStream, Server, RecvRequest, RecvResponse};
+use wenmeng::{self, ProtResult, RecvStream, Server, RecvRequest, RecvResponse, OperateTrait};
 
 // use async_compression::tokio::{write::GzipEncoder};
 
@@ -34,8 +35,7 @@ trait Xx {
     // async fn xx();
 }
 
-
-async fn operate(mut req: RecvRequest) -> ProtResult<RecvResponse> {
+async fn operate_new(req: &mut RecvRequest) -> ProtResult<RecvResponse> {
     let mut builder = Response::builder().version(req.version().clone());
     let _body = match &*req.url().path {
         "/plaintext" | "/" => {
@@ -189,11 +189,20 @@ async fn operate(mut req: RecvRequest) -> ProtResult<RecvResponse> {
 //     Ok(Some(response))
 // }
 
+struct Operate;
+
+#[async_trait]
+impl OperateTrait for Operate {
+    async fn operate(&self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
+        operate_new(req).await
+    }
+}
+
 async fn process(stream: TcpStream, addr: SocketAddr) -> Result<(), Box<dyn Error>> {
     // let mut connect = StateHandshake::handshake(stream).await.unwrap();
     // let mut connect = dmeng::Builder::new().connection(stream);
     let mut server = Server::new(stream, Some(addr));
-    let _ret = server.incoming(operate).await;
+    let _ret = server.incoming(Operate).await;
     Ok(())
 }
 

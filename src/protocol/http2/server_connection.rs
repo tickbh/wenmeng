@@ -22,7 +22,7 @@ use webparse::{
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, HeaderHelper, HttpHelper, Initiator, RecvStream, TimeoutLayer, RecvResponse, RecvRequest,
+    Builder, HeaderHelper, HttpHelper, Initiator, RecvStream, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -159,15 +159,14 @@ where
         self.inner.control.poll_write(cx, &mut self.codec, false)
     }
 
-    pub async fn handle_request<F, Fut>(
+    pub async fn handle_request<F>(
         &mut self,
         addr: &Option<SocketAddr>,
         mut r: RecvRequest,
         f: &mut F,
     ) -> ProtResult<Option<bool>>
     where
-        F: FnMut(&mut RecvRequest) -> Fut,
-        Fut: Future<Output = ProtResult<RecvResponse>>,
+        F: OperateTrait,
     {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
 
@@ -177,15 +176,14 @@ where
         return Ok(None);
     }
 
-    pub async fn incoming<F, Fut, D>(
+    pub async fn incoming<F, D>(
         &mut self,
         f: &mut F,
         addr: &Option<SocketAddr>,
         data: &mut Arc<Mutex<D>>,
     ) -> ProtResult<Option<bool>>
     where
-        F: FnMut(&mut RecvRequest) -> Fut,
-        Fut: Future<Output = ProtResult<RecvResponse>>,
+        F: OperateTrait,
         D: std::marker::Send + 'static,
     {
         use futures_util::stream::StreamExt;

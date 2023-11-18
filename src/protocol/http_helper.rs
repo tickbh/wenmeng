@@ -7,19 +7,18 @@ use futures_core::Future;
 
 use webparse::{HeaderName, Request, Response, Serialize};
 
-use crate::{ProtResult, RecvRequest, RecvResponse, RecvStream};
+use crate::{ProtResult, RecvRequest, RecvResponse, RecvStream, OperateTrait};
 
 pub struct HttpHelper;
 
 impl HttpHelper {
-    pub async fn handle_request<F, Fut>(
+    pub async fn handle_request<F>(
         addr: &Option<SocketAddr>,
         mut r: RecvRequest,
         f: &mut F,
     ) -> ProtResult<RecvResponse>
     where
-        F: FnMut(&mut RecvRequest) -> Fut,
-        Fut: Future<Output = ProtResult<RecvResponse>>,
+        F: OperateTrait,
     {
         let (mut gzip, mut deflate, mut br) = (false, false, false);
         if let Some(accept) = r.headers().get_option_value(&HeaderName::ACCEPT_ENCODING) {
@@ -39,7 +38,7 @@ impl HttpHelper {
                 .system_insert("{client_ip}".to_string(), format!("{}", addr));
         }
 
-        match f(&mut r).await {
+        match f.operate(&mut r).await {
             Ok(res) => {
                 let res = res.into_type::<RecvStream>();
                 // 如果外部有设置编码，内部不做改变，如果有body大小值，不做任何改变，因为改变会变更大小值
