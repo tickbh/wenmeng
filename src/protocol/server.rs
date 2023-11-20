@@ -308,6 +308,9 @@ where
                     }
                 }
                 Err(e) => {
+                    for i in 0usize .. self.middles.len() {
+                        self.middles[i].process_error(None, &e).await;
+                    }
                     return Err(e);
                 }
                 Ok(Some(true)) => return Ok(Some(true)),

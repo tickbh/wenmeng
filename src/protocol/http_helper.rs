@@ -2,8 +2,6 @@ use std::{
     net::SocketAddr,
 };
 
-
-
 use webparse::{HeaderName, Response};
 
 use crate::{ProtResult, RecvRequest, RecvResponse, RecvStream, OperateTrait, Middleware};
@@ -60,6 +58,9 @@ impl HttpHelper {
             }
             Err(e) => {
                 log::info!("处理数据时出错:{:?}", e);
+                for i in 0usize .. middles.len() {
+                    middles[i].process_error(Some(&mut r), &e).await;
+                }
                 Response::builder()
                     .status(500)
                     .body("server inner error")
@@ -68,10 +69,9 @@ impl HttpHelper {
             }
         };
         
-        for middle in middles.iter_mut() {
-            middle.process_response(&mut r, &mut res).await?;
+        for i in (0usize .. middles.len()).rev() {
+            middles[i].process_response(&mut r, &mut res).await?;
         }
-
         Ok(res)
     }
 }
