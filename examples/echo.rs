@@ -3,18 +3,32 @@ use async_trait::async_trait;
 use serde::ser;
 use tokio::{net::TcpListener};
 use webparse::{Request, Response};
-use wenmeng::{self, ProtResult, RecvStream, Server, RecvRequest, RecvResponse, OperateTrait};
+use wenmeng::{self, ProtResult, RecvStream, Server, RecvRequest, RecvResponse, OperateTrait, Middleware};
 
 struct Operate;
 
 #[async_trait]
 impl OperateTrait for Operate {
-    async fn operate(&self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
+    async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
         tokio::time::sleep(Duration::new(1, 1)).await;
         let response = Response::builder()
             .version(req.version().clone())
             .body("Hello World\r\n".to_string())?;
         Ok(response.into_type())
+    }
+}
+
+struct HelloMiddleware;
+#[async_trait]
+impl Middleware for HelloMiddleware {
+    async fn process_request(&mut self, request: &mut RecvRequest) -> ProtResult<()> {
+        println!("hello request");
+        Ok(())
+    }
+
+    async fn process_response(&mut self, request: &mut RecvRequest, response: &mut RecvResponse) -> ProtResult<()> {
+        println!("hello response");
+        Ok(())
     }
 }
 
@@ -31,6 +45,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let (stream, addr) = server.accept().await?;
         tokio::spawn(async move {
             let mut server = Server::new(stream, Some(addr));
+            server.middle(HelloMiddleware);
             let operate = Operate;
             let e = server.incoming(operate).await;
             println!("close server ==== addr = {:?} e = {:?}", addr, e);

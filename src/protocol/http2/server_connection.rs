@@ -22,7 +22,7 @@ use webparse::{
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, HeaderHelper, HttpHelper, Initiator, RecvStream, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait,
+    Builder, HeaderHelper, HttpHelper, Initiator, RecvStream, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait, Middleware,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -164,27 +164,27 @@ where
         addr: &Option<SocketAddr>,
         mut r: RecvRequest,
         f: &mut F,
+        middles: &mut Vec<Box<dyn Middleware>>
     ) -> ProtResult<Option<bool>>
     where
         F: OperateTrait,
     {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
 
-        let res = HttpHelper::handle_request(addr, r, f).await?;
+        let res = HttpHelper::handle_request(addr, r, f, middles).await?;
         self.send_response(res, stream_id.unwrap_or(StreamIdentifier::client_first()))
             .await?;
         return Ok(None);
     }
 
-    pub async fn incoming<F, D>(
+    pub async fn incoming<F>(
         &mut self,
         f: &mut F,
         addr: &Option<SocketAddr>,
-        data: &mut Arc<Mutex<D>>,
+        middles: &mut Vec<Box<dyn Middleware>>,
     ) -> ProtResult<Option<bool>>
     where
         F: OperateTrait,
-        D: std::marker::Send + 'static,
     {
         use futures_util::stream::StreamExt;
         let mut receiver = self.inner.receiver_push.take().unwrap();
@@ -202,9 +202,8 @@ where
                 match req {
                     None => return Ok(Some(true)),
                     Some(Err(e)) => return Err(e),
-                    Some(Ok(mut r)) => {
-                        r.extensions_mut().insert(data.clone());
-                        self.handle_request(addr, r, f).await?;
+                    Some(Ok(r)) => {
+                        self.handle_request(addr, r, f, middles).await?;
                     }
                 };
             }

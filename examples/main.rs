@@ -193,14 +193,12 @@ struct Operate;
 
 #[async_trait]
 impl OperateTrait for Operate {
-    async fn operate(&self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
+    async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
         operate_new(req).await
     }
 }
 
 async fn process(stream: TcpStream, addr: SocketAddr) -> Result<(), Box<dyn Error>> {
-    // let mut connect = StateHandshake::handshake(stream).await.unwrap();
-    // let mut connect = dmeng::Builder::new().connection(stream);
     let mut server = Server::new(stream, Some(addr));
     let _ret = server.incoming(Operate).await;
     Ok(())

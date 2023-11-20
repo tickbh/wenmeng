@@ -13,7 +13,7 @@ use tokio::{
 };
 use webparse::{Binary, BinaryMut, Request, Response, Serialize, Version};
 
-use crate::{ProtResult, RecvStream, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait};
+use crate::{ProtResult, RecvStream, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait, Middleware};
 
 use super::IoBuffer;
 
@@ -92,6 +92,7 @@ where
         addr: &Option<SocketAddr>,
         r: RecvRequest,
         f: &mut F,
+        middles: &mut Vec<Box<dyn Middleware>>
     ) -> ProtResult<Option<bool>>
     where
         F: OperateTrait,
@@ -112,21 +113,20 @@ where
                 ));
             }
         }
-        let mut res = HttpHelper::handle_request(addr, r, f).await?;
+        let mut res = HttpHelper::handle_request(addr, r, f, middles).await?;
         HeaderHelper::process_response_header(Version::Http11, false, &mut res)?;
         self.send_response(res).await?;
         return Ok(None);
     }
 
-    pub async fn incoming<F, D>(
+    pub async fn incoming<F>(
         &mut self,
         f: &mut F,
         addr: &Option<SocketAddr>,
-        data: &mut Arc<Mutex<D>>,
+        middles: &mut Vec<Box<dyn Middleware>>,
     ) -> ProtResult<Option<bool>>
     where
         F: OperateTrait,
-        D: std::marker::Send + 'static
     {
         use futures_util::stream::StreamExt;
         let req = self.next().await;
@@ -135,8 +135,7 @@ where
             None => return Ok(Some(true)),
             Some(Err(e)) => return Err(e),
             Some(Ok(mut r)) => {
-                r.extensions_mut().insert(data.clone());
-                self.handle_request(addr, r, f).await?;
+                self.handle_request(addr, r, f, middles).await?;
             }
         };
         return Ok(None);

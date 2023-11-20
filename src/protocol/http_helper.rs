@@ -7,7 +7,7 @@ use futures_core::Future;
 
 use webparse::{HeaderName, Request, Response, Serialize};
 
-use crate::{ProtResult, RecvRequest, RecvResponse, RecvStream, OperateTrait};
+use crate::{ProtResult, RecvRequest, RecvResponse, RecvStream, OperateTrait, Middleware};
 
 pub struct HttpHelper;
 
@@ -16,6 +16,7 @@ impl HttpHelper {
         addr: &Option<SocketAddr>,
         mut r: RecvRequest,
         f: &mut F,
+        middles: &mut Vec<Box<dyn Middleware>>
     ) -> ProtResult<RecvResponse>
     where
         F: OperateTrait,
@@ -37,8 +38,12 @@ impl HttpHelper {
             r.headers_mut()
                 .system_insert("{client_ip}".to_string(), format!("{}", addr));
         }
+        
+        for middle in middles.iter_mut() {
+            middle.as_mut().process_request(&mut r).await?;
+        }
 
-        match f.operate(&mut r).await {
+        let mut res = match f.operate(&mut r).await {
             Ok(res) => {
                 let res = res.into_type::<RecvStream>();
                 // 如果外部有设置编码，内部不做改变，如果有body大小值，不做任何改变，因为改变会变更大小值
@@ -52,16 +57,22 @@ impl HttpHelper {
                 //     }
                 // }
                 // HeaderHelper::process_response_header(&mut res)?;
-                return Ok(res);
+                res
             }
             Err(e) => {
                 log::info!("处理数据时出错:{:?}", e);
-                Ok(Response::builder()
+                Response::builder()
                     .status(500)
                     .body("server inner error")
                     .unwrap()
-                    .into_type())
+                    .into_type()
             }
+        };
+        
+        for middle in middles.iter_mut() {
+            middle.process_response(&mut r, &mut res).await?;
         }
+
+        Ok(res)
     }
 }

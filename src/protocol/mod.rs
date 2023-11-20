@@ -10,6 +10,7 @@ mod recv_stream;
 mod send_stream;
 mod consts;
 mod layer;
+mod middle;
 
 pub use self::recv_stream::RecvStream;
 pub use self::send_stream::SendStream;
@@ -22,3 +23,4 @@ pub use self::header_helper::HeaderHelper;
 pub use self::consts::Consts;
 pub use self::http_helper::HttpHelper;
 pub use self::layer::{RateLimitLayer, TimeoutLayer};
+pub use self::middle::Middleware;

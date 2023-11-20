@@ -11,5 +11,5 @@ use async_trait::async_trait;
 
 #[async_trait]
 pub trait OperateTrait {
-    async fn operate(&self, req: &mut RecvRequest) -> ProtResult<RecvResponse>;
+    async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse>;
 }

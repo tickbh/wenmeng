@@ -13,12 +13,11 @@ use tokio::{
 use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize};
 
 use crate::{
-    ProtError, ProtResult, RecvRequest, RecvResponse, RecvStream, ServerH2Connection, TimeoutLayer, OperateTrait,
+    ProtError, ProtResult, RecvRequest, RecvResponse, RecvStream, ServerH2Connection, TimeoutLayer, OperateTrait, Middleware,
 };
 
 use super::http1::ServerH1Connection;
 
-#[derive(Debug)]
 pub struct Builder {
     inner: ServerOption,
 }
@@ -84,7 +83,12 @@ impl Builder {
         self.inner
     }
 
-    pub fn stream<T>(self, stream: T) -> Server<T, ()>
+    pub fn middle<M: Middleware + 'static>(mut self, middle: M) -> Self {
+        self.inner.middles.push(Box::new(middle));
+        self
+    }
+
+    pub fn stream<T>(self, stream: T) -> Server<T>
     where
         T: AsyncRead + AsyncWrite + Unpin,
     {
@@ -92,45 +96,35 @@ impl Builder {
         server.set_timeout_layer(self.inner.timeout.clone());
         server
     }
-
-    pub fn stream_data<T, D>(self, stream: T, data: Arc<Mutex<D>>) -> Server<T, D>
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
-        D: std::marker::Send + 'static,
-    {
-        let mut server = Server::new_data(stream, self.inner.addr, data);
-        server.set_timeout_layer(self.inner.timeout.clone());
-        server
-    }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Default)]
 pub struct ServerOption {
     addr: Option<SocketAddr>,
     timeout: Option<TimeoutLayer>,
+    middles: Vec<Box<dyn Middleware>>,
 }
 
-pub struct Server<T, D = ()>
+pub struct Server<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
-    D: std::marker::Send + 'static,
 {
     http1: Option<ServerH1Connection<T>>,
     http2: Option<ServerH2Connection<T>>,
-    data: Arc<Mutex<D>>,
+    middles: Vec<Box<dyn Middleware>>,
     addr: Option<SocketAddr>,
 
     timeout: Option<TimeoutLayer>,
     req_num: usize,
 }
 
-impl Server<TcpStream, ()> {
+impl Server<TcpStream> {
     pub fn builder() -> Builder {
         Builder::new()
     }
 }
 
-impl<T> Server<T, ()>
+impl<T> Server<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
@@ -138,7 +132,7 @@ where
         Self {
             http1: Some(ServerH1Connection::new(io)),
             http2: None,
-            data: Arc::new(Mutex::new(())),
+            middles: vec![],
             addr,
 
             timeout: None,
@@ -147,17 +141,16 @@ where
     }
 }
 
-impl<T, D> Server<T, D>
+impl<T> Server<T>
 where
-    T: AsyncRead + AsyncWrite + Unpin,
-    D: std::marker::Send + 'static,
+    T: AsyncRead + AsyncWrite + Unpin
 {
-    pub fn new_data(io: T, addr: Option<SocketAddr>, data: Arc<Mutex<D>>) -> Self {
+    pub fn new_data(io: T, addr: Option<SocketAddr>) -> Self {
         Self {
             http1: Some(ServerH1Connection::new(io)),
             http2: None,
-            data,
             addr,
+            middles: vec![],
             timeout: None,
             req_num: 0,
         }
@@ -225,6 +218,10 @@ where
             http.set_timeout_layer(timeout);
         }
     }
+    
+    pub fn middle<M: Middleware + 'static>(&mut self, middle: M) {
+        self.middles.push(Box::new(middle));
+    }
 
     pub fn get_req_num(&self) -> usize {
         self.req_num
@@ -284,9 +281,9 @@ where
     {
         loop {
             let result = if let Some(h1) = &mut self.http1 {
-                h1.incoming(&mut f, &self.addr, &mut self.data).await
+                h1.incoming(&mut f, &self.addr, &mut self.middles).await
             } else if let Some(h2) = &mut self.http2 {
-                h2.incoming(&mut f, &self.addr, &mut self.data).await
+                h2.incoming(&mut f, &self.addr, &mut self.middles).await
             } else {
                 Ok(Some(true))
             };
@@ -298,12 +295,11 @@ where
                 Err(ProtError::ServerUpgradeHttp2(b, r)) => {
                     if self.http1.is_some() {
                         self.http2 = Some(self.http1.take().unwrap().into_h2(b));
-                        if let Some(mut r) = r {
-                            r.extensions_mut().insert(self.data.clone());
+                        if let Some(r) = r {
                             self.http2
                                 .as_mut()
                                 .unwrap()
-                                .handle_request(&self.addr, r, &mut f)
+                                .handle_request(&self.addr, r, &mut f, &mut self.middles)
                                 .await?;
 
                             self.req_num = self.req_num.wrapping_add(1);
