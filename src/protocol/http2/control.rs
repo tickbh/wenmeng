@@ -13,10 +13,10 @@ use tokio::{
 };
 use webparse::{
     http::http2::frame::{Frame, GoAway, Reason, Settings, StreamIdentifier},
-    Binary, Request, Response,
+    Binary, Request,
 };
 
-use crate::{ProtError, ProtResult, RecvStream, RecvResponse, RecvRequest};
+use crate::{ProtError, ProtResult, RecvResponse, RecvRequest};
 
 use super::{
     codec::Codec, inner_stream::InnerStream, send_response::SendControl, state::StateHandshake,

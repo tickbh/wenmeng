@@ -4,7 +4,7 @@
 
 use std::task::Context;
 
-use webparse::{BinaryMut, Buf, Request, HeaderMap};
+use webparse::{BinaryMut, Buf, HeaderMap};
 use webparse::{
     http::http2::{
         frame::{
@@ -15,7 +15,7 @@ use webparse::{
     Binary,
 };
 
-use crate::{RecvStream, RecvRequest};
+use crate::{RecvRequest};
 
 
 #[derive(Debug)]

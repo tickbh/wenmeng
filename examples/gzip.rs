@@ -1,6 +1,6 @@
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::{bufread, Compression};
+use flate2::{Compression};
 use webparse::BinaryMut;
 use std::io;
 use std::io::prelude::*;

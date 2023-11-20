@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use crate::http2::{self, ClientH2Connection};
 use crate::{http1::ClientH1Connection, ProtError};
-use crate::{ProtResult, RecvStream, TimeoutLayer, RecvResponse, RecvRequest};
+use crate::{ProtResult, TimeoutLayer, RecvResponse, RecvRequest};
 use rustls::{ClientConfig, RootCertStore};
 use tokio::net::ToSocketAddrs;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -17,7 +17,7 @@ use tokio_rustls::client::TlsStream;
 use tokio_rustls::TlsConnector;
 use webparse::http2::frame::Settings;
 use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
-use webparse::{Binary, Request, Response, Url};
+use webparse::{Binary, Url};
 
 #[derive(Debug)]
 pub struct Builder {

@@ -12,10 +12,10 @@ use webparse::{
             StreamIdentifier,
         },
     },
-    Binary, Method, Response,
+    Binary, Method,
 };
 
-use crate::{ProtResult, RecvStream, RecvResponse};
+use crate::{ProtResult, RecvResponse};
 
 
 #[derive(Debug)]

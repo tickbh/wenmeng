@@ -13,12 +13,12 @@ use tokio::{
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
     http2::frame::Settings,
-    Binary, BinaryMut, Request, Response, Serialize, Version,
+    Binary, BinaryMut, Request, Response, Serialize,
 };
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, HeaderHelper, Initiator, RecvStream, TimeoutLayer, RecvResponse, RecvRequest,
+    Builder, Initiator, RecvStream, TimeoutLayer, RecvResponse, RecvRequest,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -176,7 +176,7 @@ where
         }
         match f(r.into_type::<Req>()).await? {
             Some(res) => {
-                let mut res = res.into_type();
+                let res = res.into_type();
                 // HeaderHelper::process_response_header(Version::Http2, true, &mut res)?;
                 self.send_response(res, stream_id.unwrap_or(StreamIdentifier::client_first()))
                     .await?;
@@ -297,7 +297,7 @@ where
                         Poll::Pending => {
                             return Poll::Pending;
                         }
-                        Poll::Ready(Some(Ok(mut v))) => {
+                        Poll::Ready(Some(Ok(v))) => {
                             // HeaderHelper::process_response_header(Version::Http2, true, &mut v)?;
                             return Poll::Ready(Some(Ok(v)));
                         }

@@ -1,11 +1,10 @@
 use std::{
-    any::{Any, TypeId},
     net::SocketAddr,
 };
 
-use futures_core::Future;
 
-use webparse::{HeaderName, Request, Response, Serialize};
+
+use webparse::{HeaderName, Response};
 
 use crate::{ProtResult, RecvRequest, RecvResponse, RecvStream, OperateTrait, Middleware};
 

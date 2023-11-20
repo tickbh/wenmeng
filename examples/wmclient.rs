@@ -47,7 +47,7 @@ async fn test_https2() -> ProtResult<()> {
         .unwrap();
 
     let mut recv = client.send(req.into_type()).await.unwrap();
-    while let Some(mut res) = recv.recv().await {
+    while let Some(res) = recv.recv().await {
         let mut res = res?;
         res.body_mut().wait_all().await;
         println!("res = {}", res);

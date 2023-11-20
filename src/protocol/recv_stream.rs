@@ -15,9 +15,9 @@ use std::{
 use tokio::{
     fs::File,
     io::{AsyncRead, AsyncReadExt, ReadBuf},
-    sync::{mpsc::Receiver, Notify, OwnedSemaphorePermit, Semaphore},
+    sync::{mpsc::Receiver, OwnedSemaphorePermit, Semaphore},
 };
-use webparse::{Binary, BinaryMut, Buf, BufMut, Helper, Serialize, WebResult, WebError};
+use webparse::{Binary, BinaryMut, Buf, BufMut, Helper, Serialize, WebResult};
 
 use crate::Consts;
 

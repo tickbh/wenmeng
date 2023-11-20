@@ -2,7 +2,7 @@
 
 use std::time::{Instant, Duration};
 
-use webparse::{Request, Buf, HeaderName};
+use webparse::{Request, HeaderName};
 use wenmeng::{Client, ProtResult};
 
 async fn test_http2() -> ProtResult<()> {
@@ -25,9 +25,9 @@ async fn test_http2() -> ProtResult<()> {
         // .write_timeout(Duration::new(0, 1))
         .connect(url).await.unwrap();
 
-    let (mut recv, sender) = client.send2(req.into_type()).await?;
+    let (mut recv, _sender) = client.send2(req.into_type()).await?;
 
-    let mut res = recv.recv().await;
+    let res = recv.recv().await;
     println!("ret res = {:?}", res);
     let mut res = res.unwrap()?;
 
@@ -54,7 +54,7 @@ async fn test_http2() -> ProtResult<()> {
     // println!("url = {:?}", req.url());
     // sender.send(req.into_type()).await.unwrap();
 
-    let mut res = recv.recv().await.unwrap();
+    let _res = recv.recv().await.unwrap();
     // res.body_mut().wait_all().await;
     // println!("res = {} {}", res.status(), res.body_mut().origin_len());
     // println!("res = {:?}", res.body_mut().binary().chunk());
@@ -80,7 +80,7 @@ async fn test_https2() -> ProtResult<()> {
         .unwrap();
 
     let mut recv = client.send(req.into_type()).await.unwrap();
-    while let Some(mut res) = recv.recv().await {
+    while let Some(res) = recv.recv().await {
         let mut res = res?;
         res.body_mut().wait_all().await;
         println!("res = {}", res);

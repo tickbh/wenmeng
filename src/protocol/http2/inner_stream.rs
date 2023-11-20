@@ -1,13 +1,13 @@
 use std::{task::{Context, Poll}, collections::LinkedList};
 
-use tokio::sync::mpsc::{channel, Sender};
+use tokio::sync::mpsc::{channel};
 use tokio_util::sync::PollSender;
 use webparse::{
     http::{
         http2::frame::{Frame, Reason, StreamIdentifier},
         request, response,
     },
-    Binary, BinaryMut, Buf, Request, Response, Version,
+    Binary, BinaryMut, Buf, Version,
 };
 
 use crate::{HeaderHelper, ProtError, ProtResult, RecvResponse, RecvRequest};

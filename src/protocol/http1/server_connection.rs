@@ -1,19 +1,16 @@
 use std::{
-    any::{Any},
     net::SocketAddr,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll}, time::Duration,
 };
 
-use futures_core::{Future, Stream};
+use futures_core::{Stream};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::Mutex,
 };
-use webparse::{Binary, BinaryMut, Request, Response, Serialize, Version};
+use webparse::{Binary, BinaryMut, Response, Serialize, Version};
 
-use crate::{ProtResult, RecvStream, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait, Middleware};
+use crate::{ProtResult, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait, Middleware};
 
 use super::IoBuffer;
 
@@ -134,7 +131,7 @@ where
         match req {
             None => return Ok(Some(true)),
             Some(Err(e)) => return Err(e),
-            Some(Ok(mut r)) => {
+            Some(Ok(r)) => {
                 self.handle_request(addr, r, f, middles).await?;
             }
         };

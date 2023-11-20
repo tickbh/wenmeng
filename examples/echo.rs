@@ -1,9 +1,9 @@
 use std::{env, error::Error, time::Duration};
 use async_trait::async_trait;
-use serde::ser;
+
 use tokio::{net::TcpListener};
-use webparse::{Request, Response};
-use wenmeng::{self, ProtResult, RecvStream, Server, RecvRequest, RecvResponse, OperateTrait, Middleware};
+use webparse::{Response};
+use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, OperateTrait, Middleware};
 
 struct Operate;
 
@@ -22,12 +22,12 @@ struct HelloMiddleware;
 #[async_trait]
 impl Middleware for HelloMiddleware {
     async fn process_request(&mut self, request: &mut RecvRequest) -> ProtResult<()> {
-        println!("hello request");
+        println!("hello request {}", request.url());
         Ok(())
     }
 
-    async fn process_response(&mut self, request: &mut RecvRequest, response: &mut RecvResponse) -> ProtResult<()> {
-        println!("hello response");
+    async fn process_response(&mut self, _request: &mut RecvRequest, response: &mut RecvResponse) -> ProtResult<()> {
+        println!("hello response {}", response.status());
         Ok(())
     }
 }

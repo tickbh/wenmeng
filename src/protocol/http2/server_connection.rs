@@ -1,28 +1,25 @@
 use std::{
-    any::Any,
     net::SocketAddr,
-    sync::Arc,
     task::{ready, Context, Poll},
     time::Duration,
 };
 
-use futures_core::{Future, Stream};
+use futures_core::{Stream};
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{
         mpsc::{channel, Receiver},
-        Mutex,
     },
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
-    Binary, BinaryMut, Request, Response, Serialize, Version,
+    Binary, BinaryMut, Version,
 };
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, HeaderHelper, HttpHelper, Initiator, RecvStream, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait, Middleware,
+    Builder, HeaderHelper, HttpHelper, Initiator, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait, Middleware,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};

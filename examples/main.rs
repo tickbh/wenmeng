@@ -15,7 +15,7 @@
 
 use async_trait::async_trait;
 use flate2::GzBuilder;
-use webparse::{BinaryMut, Request, Response, HeaderName};
+use webparse::{BinaryMut, Response, HeaderName};
 #[macro_use]
 extern crate serde_derive;
 use std::{
@@ -93,7 +93,7 @@ async fn operate_new(req: &mut RecvRequest) -> ProtResult<RecvResponse> {
     let file = File::open("README.md").await?;
     let length = file.metadata().await?.len();
     // let recv = RecvStream::new_file(file, BinaryMut::from(body.into_bytes().to_vec()), false);
-    let mut recv = RecvStream::new_file(file, length);
+    let recv = RecvStream::new_file(file, length);
     // recv.set_compress_origin_gzip();
     let response = builder
         // .header("Content-Length", length as usize)

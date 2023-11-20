@@ -1,19 +1,17 @@
 use std::{
     any::{Any, TypeId},
     net::SocketAddr,
-    sync::Arc,
     time::Duration,
 };
-use std::future::Future;
+
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::{TcpListener, TcpStream},
-    sync::Mutex,
+    net::{TcpStream},
 };
 use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize};
 
 use crate::{
-    ProtError, ProtResult, RecvRequest, RecvResponse, RecvStream, ServerH2Connection, TimeoutLayer, OperateTrait, Middleware,
+    ProtError, ProtResult, RecvRequest, RecvStream, ServerH2Connection, TimeoutLayer, OperateTrait, Middleware,
 };
 
 use super::http1::ServerH1Connection;

@@ -1,9 +1,9 @@
 use std::{fmt::{Display, Pointer}, io};
 
 use tokio::sync::mpsc::error::SendError;
-use webparse::{WebError, Binary, http::http2::frame::Reason, Request, http2::frame::Settings};
+use webparse::{WebError, Binary, http::http2::frame::Reason, http2::frame::Settings};
 
-use crate::{RecvStream, RecvRequest};
+use crate::{RecvRequest};
 
 pub type ProtResult<T> = Result<T, ProtError>;
 
