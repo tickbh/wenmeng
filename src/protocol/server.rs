@@ -8,7 +8,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpStream},
 };
-use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize};
+use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize, Version};
 
 use crate::{
     ProtError, ProtResult, RecvRequest, RecvStream, ServerH2Connection, TimeoutLayer, OperateTrait, Middleware,

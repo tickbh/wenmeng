@@ -168,7 +168,7 @@ where
     {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
 
-        let res = HttpHelper::handle_request(addr, r, f, middles).await?;
+        let res = HttpHelper::handle_request(Version::Http2, addr, r, f, middles).await?;
         self.send_response(res, stream_id.unwrap_or(StreamIdentifier::client_first()))
             .await?;
         return Ok(None);

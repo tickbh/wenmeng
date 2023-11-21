@@ -9,3 +9,7 @@ pub trait Middleware: Send + Sync {
     async fn process_response(&mut self, request: &mut RecvRequest, response: &mut RecvResponse) -> ProtResult<()>;
     async fn process_error(&mut self, _request: Option<&mut RecvRequest>, _error: &ProtError) {}
 }
+
+mod base;
+
+pub use base::BaseMiddleware;

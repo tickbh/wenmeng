@@ -110,7 +110,7 @@ where
                 ));
             }
         }
-        let mut res = HttpHelper::handle_request(addr, r, f, middles).await?;
+        let mut res = HttpHelper::handle_request(Version::Http11, addr, r, f, middles).await?;
         HeaderHelper::process_response_header(Version::Http11, false, &mut res)?;
         self.send_response(res).await?;
         return Ok(None);
