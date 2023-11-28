@@ -16,9 +16,9 @@ impl BaseMiddleware {
 
 #[async_trait]
 impl Middleware for BaseMiddleware {
-    async fn process_request(&mut self, request: &mut RecvRequest) -> ProtResult<()> {
+    async fn process_request(&mut self, request: &mut RecvRequest) -> ProtResult<Option<RecvResponse>> {
         HeaderHelper::process_request_header(request.version(), self.is_client, request)?;
-        Ok(())
+        Ok(None)
     }
     async fn process_response(
         &mut self,

@@ -21,9 +21,9 @@ impl OperateTrait for Operate {
 struct HelloMiddleware;
 #[async_trait]
 impl Middleware for HelloMiddleware {
-    async fn process_request(&mut self, request: &mut RecvRequest) -> ProtResult<()> {
+    async fn process_request(&mut self, request: &mut RecvRequest) -> ProtResult<Option<RecvResponse>> {
         println!("hello request {}", request.url());
-        Ok(())
+        Ok(None)
     }
 
     async fn process_response(&mut self, _request: &mut RecvRequest, response: &mut RecvResponse) -> ProtResult<()> {
