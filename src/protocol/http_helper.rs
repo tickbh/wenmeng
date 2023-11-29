@@ -34,7 +34,9 @@ impl HttpHelper {
 
         if let Some(addr) = addr {
             r.headers_mut()
-                .system_insert("{client_ip}".to_string(), format!("{}", addr));
+                .system_insert("{client_ip}".to_string(), format!("{}", addr.ip()));
+            r.headers_mut()
+                .system_insert("{client_addr}".to_string(), format!("{}", addr));
         }
         let mut response = None;
 
