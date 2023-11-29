@@ -17,7 +17,7 @@ impl HttpHelper {
         middles: &mut Vec<Box<dyn Middleware>>
     ) -> ProtResult<RecvResponse>
     where
-        F: OperateTrait,
+        F: OperateTrait + Send,
     {
         let (mut gzip, mut deflate, mut br) = (false, false, false);
         if let Some(accept) = r.headers().get_option_value(&HeaderName::ACCEPT_ENCODING) {
@@ -37,6 +37,8 @@ impl HttpHelper {
                 .system_insert("{client_ip}".to_string(), format!("{}", addr));
         }
         let mut response = None;
+
+        f.middle_operate(&mut r, middles).await?;
 
         for middle in middles.iter_mut() {
             if let Some(res) = middle.as_mut().process_request(&mut r).await? {

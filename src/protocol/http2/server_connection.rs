@@ -164,7 +164,7 @@ where
         middles: &mut Vec<Box<dyn Middleware>>
     ) -> ProtResult<Option<bool>>
     where
-        F: OperateTrait,
+        F: OperateTrait + Send,
     {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
 
@@ -181,7 +181,7 @@ where
         middles: &mut Vec<Box<dyn Middleware>>,
     ) -> ProtResult<Option<bool>>
     where
-        F: OperateTrait,
+        F: OperateTrait + Send,
     {
         use futures_util::stream::StreamExt;
         let mut receiver = self.inner.receiver_push.take().unwrap();

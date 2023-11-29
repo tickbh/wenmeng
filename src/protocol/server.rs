@@ -275,7 +275,7 @@ where
 
     pub async fn incoming<F>(&mut self, mut f: F) -> ProtResult<Option<bool>>
     where
-        F: OperateTrait,
+        F: OperateTrait + Send,
     {
         loop {
             let result = if let Some(h1) = &mut self.http1 {

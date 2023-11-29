@@ -92,7 +92,7 @@ where
         middles: &mut Vec<Box<dyn Middleware>>
     ) -> ProtResult<Option<bool>>
     where
-        F: OperateTrait,
+        F: OperateTrait + Send,
     {
         if let Some(protocol) = r.headers().get_upgrade_protocol() {
             if protocol == "h2c" {
@@ -123,7 +123,7 @@ where
         middles: &mut Vec<Box<dyn Middleware>>,
     ) -> ProtResult<Option<bool>>
     where
-        F: OperateTrait,
+        F: OperateTrait + Send,
     {
         use futures_util::stream::StreamExt;
         let req = self.next().await;
