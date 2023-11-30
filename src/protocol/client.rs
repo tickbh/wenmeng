@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use crate::http2::{self, ClientH2Connection};
 use crate::{http1::ClientH1Connection, ProtError};
-use crate::{ProtResult, TimeoutLayer, RecvResponse, RecvRequest};
+use crate::{ProtResult, TimeoutLayer, RecvResponse, RecvRequest, MaybeHttpsStream};
 use rustls::{ClientConfig, RootCertStore};
 use tokio::net::ToSocketAddrs;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -103,8 +103,8 @@ impl Builder {
         self.inner
     }
 
-    pub async fn connect_by_stream(self, stream: TcpStream) -> ProtResult<Client<TcpStream>> {
-        Ok(Client::<TcpStream>::new(self.inner, stream))
+    pub async fn connect_by_stream(self, stream: TcpStream) -> ProtResult<Client> {
+        Ok(Client::new(self.inner, MaybeHttpsStream::Http(stream)))
     }
 
     async fn inner_connect<A: ToSocketAddrs>(&self, addr: A) -> ProtResult<TcpStream> {
@@ -123,16 +123,23 @@ impl Builder {
         Ok(tcp)
     }
 
-    pub async fn connect<T>(self, url: T) -> ProtResult<Client<TcpStream>>
+    pub async fn connect<U>(self, url: U) -> ProtResult<Client>
     where
-        T: TryInto<Url>,
+        U: TryInto<Url>,
     {
         let url = TryInto::<Url>::try_into(url);
         if url.is_err() {
             return Err(ProtError::Extension("unknown connection url"));
         } else {
-            let tcp = self.inner_connect(url.ok().unwrap().get_connect_url().unwrap()).await?;
-            Ok(Client::<TcpStream>::new(self.inner, tcp))
+            let url = url.ok().unwrap();
+            if url.scheme.is_https() {
+                let connect = url.get_connect_url();
+                let stream = self.inner_connect(&connect.unwrap()).await?;
+                self.connect_tls_by_stream(stream, url).await
+            } else {
+                let tcp = self.inner_connect(url.get_connect_url().unwrap()).await?;
+                Ok(Client::new(self.inner, MaybeHttpsStream::Http(tcp)))
+            }
         }
     }
 
@@ -140,7 +147,7 @@ impl Builder {
         self,
         stream: TcpStream,
         url: T,
-    ) -> ProtResult<Client<TlsStream<TcpStream>>>
+    ) -> ProtResult<Client>
     where
         T: TryInto<Url>,
     {
@@ -185,60 +192,10 @@ impl Builder {
                 option.http2_only = true;
             }
 
-            Ok(Client::new(option, outbound))
+            Ok(Client::new(option, MaybeHttpsStream::Https(outbound)))
         }
     }
 
-    pub async fn connect_tls<T>(mut self, url: T) -> ProtResult<Client<TlsStream<TcpStream>>>
-    where
-        T: TryInto<Url>,
-    {
-        let url = TryInto::<Url>::try_into(url);
-        if url.is_err() {
-            return Err(ProtError::Extension("unknown connection url"));
-        } else {
-            let url = url.ok().unwrap();
-            let connect = url.get_connect_url();
-            let domain = url.domain;
-            if domain.is_none() || connect.is_none() {
-                return Err(ProtError::Extension("unknown connection domain"));
-            }
-            println!("domain = {:?}", domain);
-            println!("connect = {:?}", connect);
-            let mut root_store = RootCertStore::empty();
-            root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-                rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-                    ta.subject,
-                    ta.spki,
-                    ta.name_constraints,
-                )
-            }));
-            let mut config = ClientConfig::builder()
-                .with_safe_defaults()
-                .with_root_certificates(root_store)
-                .with_no_client_auth();
-            config.alpn_protocols = self.inner.get_alpn_protocol();
-            let tls_client = Arc::new(config);
-            let connector = TlsConnector::from(tls_client);
-
-            let stream = self.inner_connect(&connect.unwrap()).await?;
-            // 这里的域名只为认证设置
-            let domain = rustls::ServerName::try_from(&*domain.unwrap())
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
-
-            let outbound = connector.connect(domain, stream).await?;
-            let aa = outbound.get_ref().1.alpn_protocol();
-            if aa.is_none() {
-                return Err(ProtError::Extension("not support protocol"));
-            }
-
-            if aa == Some(&ClientOption::H2_PROTOCOL) {
-                self.inner.http2_only = true;
-            }
-
-            Ok(Client::new(self.inner, outbound))
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -280,29 +237,24 @@ impl Default for ClientOption {
     }
 }
 
-pub struct Client<T>
-where
-    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+pub struct Client
 {
     option: ClientOption,
     sender: Sender<ProtResult<RecvResponse> >,
     receiver: Option<Receiver<ProtResult<RecvResponse>>>,
     req_receiver: Option<Receiver<RecvRequest>>,
-    http1: Option<ClientH1Connection<T>>,
-    http2: Option<ClientH2Connection<T>>,
+    http1: Option<ClientH1Connection<MaybeHttpsStream<TcpStream>>>,
+    http2: Option<ClientH2Connection<MaybeHttpsStream<TcpStream>>>,
 }
 
-impl Client<TcpStream> {
+
+impl Client
+{
     pub fn builder() -> Builder {
         Builder::new()
     }
-}
 
-impl<T> Client<T>
-where
-    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    pub fn new(option: ClientOption, stream: T) -> Self {
+    pub fn new(option: ClientOption, stream: MaybeHttpsStream<TcpStream>) -> Self {
         let (sender, receiver) = channel(10);
         let mut client = Self {
             option,
@@ -328,7 +280,7 @@ where
         client
     }
 
-    fn build_client_h1_connection(&self, stream: T) -> ClientH1Connection<T> {
+    fn build_client_h1_connection(&self, stream: MaybeHttpsStream<TcpStream>) -> ClientH1Connection<MaybeHttpsStream<TcpStream>> {
         let mut client = ClientH1Connection::new(stream);
         client.set_timeout_layer(self.option.timeout.clone());
         client

@@ -42,7 +42,7 @@ async fn test_https2() -> ProtResult<()> {
     println!("req = {}", req);
     let client = Client::builder()
         // .http2_only(true)
-        .connect_tls(req.url().clone())
+        .connect(req.url().clone())
         .await
         .unwrap();
 

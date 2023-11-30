@@ -17,6 +17,7 @@ pub mod http2;
 mod error;
 mod header_helper;
 mod http_helper;
+mod stream;
 
 mod recv_stream;
 mod send_stream;
@@ -26,6 +27,7 @@ mod middle;
 
 pub use self::recv_stream::RecvStream;
 pub use self::send_stream::SendStream;
+pub use self::stream::MaybeHttpsStream;
 
 pub use self::client::Client;
 pub use self::server::Server;
