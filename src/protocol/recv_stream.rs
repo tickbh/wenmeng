@@ -36,7 +36,7 @@ use crate::Consts;
 use super::layer::RateLimitLayer;
 
 
-fn read_all_data<R: Read>(read_buf: &mut BinaryMut, mut read: R) -> io::Result<usize> {
+fn read_all_data<R: Read>(read_buf: &mut BinaryMut, read: &mut Box<R>) -> io::Result<usize> {
     let mut cache_buf = vec![0u8; 4096];
     let mut size = 0;
     loop {
@@ -143,9 +143,9 @@ impl InnerReceiver {
 }
 
 struct InnerCompress {
-    write_gz: Option<GzEncoder<BinaryMut>>,
-    write_br: Option<CompressorWriter<BinaryMut>>,
-    write_de: Option<DeflateEncoder<BinaryMut>>,
+    write_gz: Option<Box<GzEncoder<BinaryMut>>>,
+    write_br: Option<Box<CompressorWriter<BinaryMut>>>,
+    write_de: Option<Box<DeflateEncoder<BinaryMut>>>,
 }
 
 impl Debug for InnerCompress {
@@ -168,31 +168,31 @@ impl InnerCompress {
 
     pub fn open_write_gz(&mut self) {
         if self.write_gz.is_none() {
-            self.write_gz = Some(GzEncoder::new(BinaryMut::new(), Compression::default()));
+            self.write_gz = Some(Box::new(GzEncoder::new(BinaryMut::new(), Compression::default())) );
         }
     }
 
     pub fn open_write_de(&mut self) {
         if self.write_de.is_none() {
-            self.write_de = Some(DeflateEncoder::new(
+            self.write_de = Some(Box::new(DeflateEncoder::new(
                 BinaryMut::new(),
                 Compression::default(),
-            ));
+            )));
         }
     }
 
     pub fn open_write_br(&mut self) {
         if self.write_br.is_none() {
-            self.write_br = Some(CompressorWriter::new(BinaryMut::new(), 4096, 11, 22));
+            self.write_br = Some(Box::new(CompressorWriter::new(BinaryMut::new(), 4096, 11, 22)));
         }
     }
 }
 
 
 struct InnerDecompress {
-    reader_gz: Option<GzDecoder<BinaryMut>>,
-    reader_br: Option<Decompressor<BinaryMut>>,
-    reader_de: Option<DeflateDecoder<BinaryMut>>,
+    reader_gz: Option<Box<GzDecoder<BinaryMut>>>,
+    reader_br: Option<Box<Decompressor<BinaryMut>>>,
+    reader_de: Option<Box<DeflateDecoder<BinaryMut>>>,
 }
 
 impl Debug for InnerDecompress {
@@ -216,21 +216,21 @@ impl InnerDecompress {
 
     pub fn open_reader_gz(&mut self) {
         if self.reader_gz.is_none() {
-            self.reader_gz = Some(GzDecoder::new(BinaryMut::new()));
+            self.reader_gz = Some(Box::new(GzDecoder::new(BinaryMut::new())));
         }
     }
 
     pub fn open_reader_de(&mut self) {
         if self.reader_de.is_none() {
-            self.reader_de = Some(DeflateDecoder::new(
+            self.reader_de = Some(Box::new(DeflateDecoder::new(
                 BinaryMut::new(),
-            ));
+            )));
         }
     }
 
     pub fn open_reader_br(&mut self) {
         if self.reader_br.is_none() {
-            self.reader_br = Some(Decompressor::new(BinaryMut::new(), 4096));
+            self.reader_br = Some(Box::new(Decompressor::new(BinaryMut::new(), 4096)));
         }
     }
 }
@@ -282,6 +282,20 @@ impl Default for RecvStream {
 impl RecvStream {
     pub fn empty() -> RecvStream {
         Default::default()
+    }
+
+    pub fn print_debug(&self) {
+        println!("receiver = {:?}", std::mem::size_of_val(&self.receiver));
+        println!("sem = {:?}", std::mem::size_of_val(&self.sem));
+        println!("permit = {:?}", std::mem::size_of_val(&self.permit));
+        println!("origin_buf = {:?}", std::mem::size_of_val(&self.origin_buf));
+        println!("read_buf = {:?}", std::mem::size_of_val(&self.read_buf));
+        println!("cache_body_data = {:?}", std::mem::size_of_val(&self.cache_body_data));
+        println!("origin_compress_method = {:?}", std::mem::size_of_val(&self.origin_compress_method));
+        println!("compress = {:?}", std::mem::size_of_val(&self.compress));
+        println!("decompress = {:?}", std::mem::size_of_val(&self.decompress));
+        println!("is_chunked = {:?}", std::mem::size_of_val(&self.is_chunked));
+        println!("rate_limit = {:?}", std::mem::size_of_val(&self.rate_limit));
     }
 
     pub fn only(binary: Binary) -> RecvStream {

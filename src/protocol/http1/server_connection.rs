@@ -20,6 +20,7 @@ use futures_core::{Stream};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
 };
+use tokio_stream::StreamExt;
 use webparse::{Binary, BinaryMut, Response, Serialize, Version};
 
 use crate::{ProtResult, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait, Middleware};
@@ -108,6 +109,7 @@ where
     {
         if let Some(protocol) = r.headers().get_upgrade_protocol() {
             if protocol == "h2c" {
+                println!("h1 === {}", std::mem::size_of_val(&r));
                 let mut response = Response::builder()
                     .status(101)
                     .header("Connection", "Upgrade")
@@ -137,8 +139,12 @@ where
     where
         F: OperateTrait + Send,
     {
+        println!("11111");
         use futures_util::stream::StreamExt;
-        let req = self.next().await;
+        println!("0000");
+        let x = futures_util::StreamExt::next(self);
+        println!("now incoming next size size = {:?}", std::mem::size_of_val(&x));
+        let req = x.await;
 
         match req {
             None => return Ok(Some(true)),
@@ -147,7 +153,7 @@ where
                 self.handle_request(addr, r, f, middles).await?;
             }
         };
-        return Ok(None);
+        return Ok(Some(true));
     }
 
     pub async fn send_response(&mut self, res: RecvResponse) -> ProtResult<()> {
@@ -164,10 +170,12 @@ where
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
+        println!("h1 io ===1 {}", std::mem::size_of_val(&self.io));
         if self.timeout.is_some() {
             let (ready_time, is_read_end, is_write_end, is_idle) = (*self.io.get_ready_time(), self.io.is_read_end(), self.io.is_write_end(), self.io.is_idle());
             self.timeout.as_mut().unwrap().poll_ready(cx, "server", ready_time, is_read_end, is_write_end, is_idle)?;
         }
+        println!("h1 io ===2 {}", std::mem::size_of_val(&self.io));
         Pin::new(&mut self.io).poll_request(cx)
     }
 }

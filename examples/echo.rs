@@ -1,9 +1,10 @@
 use std::{env, error::Error, time::Duration};
 use async_trait::async_trait;
 
-use tokio::{net::TcpListener};
-use webparse::{Response};
-use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, OperateTrait, Middleware};
+use datasize::data_size;
+use tokio::{net::TcpListener, sync::mpsc::channel};
+use webparse::{Response, http2::frame::Settings};
+use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, OperateTrait, Middleware, http2::{Control, ControlConfig}, RecvStream};
 
 // #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -54,8 +55,32 @@ async fn run_main() -> Result<(), Box<dyn Error>> {
     loop {
         let (stream, addr) = server.accept().await?;
         tokio::spawn(async move {
+            // let (sender, _receiver) = channel(10);
+            // let control = Control::new(
+            //     ControlConfig {
+            //         next_stream_id: 1.into(),
+            //         // Server does not need to locally initiate any streams
+            //         initial_max_send_streams: 0,
+            //         max_send_buffer_size: 0,
+            //         reset_stream_duration: Duration::from_millis(1),
+            //         reset_stream_max: 0,
+            //         remote_reset_stream_max: 0,
+            //         settings: Settings::ack(),
+            //     },
+            //     sender,
+            //     false,
+            // );
+            // let s = std::mem::size_of_val(&control);
+            let recv = RecvStream::empty();
+            println!("recv = {:?}", std::mem::size_of_val(&recv));
+            recv.print_debug();
+            let x = vec![0;1900];
+            // println!("size = {:?}", s);
+            println!("size = {:?}", std::mem::size_of_val(&x));
             let mut server = Server::new(stream, Some(addr));
             server.middle(HelloMiddleware);
+            println!("server size size = {:?}", std::mem::size_of_val(&server));
+            // println!("size = {:?}", data_size(&server));
             let operate = Operate;
             let e = server.incoming(operate).await;
             println!("close server ==== addr = {:?} e = {:?}", addr, e);
@@ -72,7 +97,7 @@ fn main() {
         .worker_threads(4)
         .enable_time()
         .thread_name("wmproxy")
-        .thread_stack_size(10 * 1024 * 1024)
+        .thread_stack_size((1.2 * 1024f32 * 1024f32) as usize)
         .build()
         .unwrap();
     runtime.block_on(async {

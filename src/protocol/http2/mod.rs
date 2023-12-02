@@ -27,7 +27,7 @@ pub use priority_queue::PriorityQueue;
 pub use inner_stream::InnerStream;
 pub use send_response::{SendResponse, SendControl};
 pub use send_request::SendRequest;
-pub use control::Control;
+pub use control::{Control, ControlConfig};
 pub use client_connection::ClientH2Connection;
 pub use server_connection::ServerH2Connection;
 // pub use server::Builder;

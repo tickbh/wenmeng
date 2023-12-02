@@ -18,6 +18,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use datasize::DataSize;
 use futures_core::{ready, Stream};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -502,6 +503,9 @@ impl Control {
         stream_id: StreamIdentifier,
         push: Option<StreamIdentifier>,
     ) -> ProtResult<()> {
+        
+        println!("now RecvResponse = {:?}", std::mem::size_of_val(&res));
+
         let mut data = self.response_queue.lock().unwrap();
         let is_end = res.body().is_end();
         let response = SendResponse::new(stream_id, push, res, webparse::Method::Get, is_end);

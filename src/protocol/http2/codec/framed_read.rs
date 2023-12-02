@@ -161,6 +161,8 @@ fn decode_frame(
     let _kind = head.kind();
     let frame = Frame::parse(head, bytes, decoder, max_header_list_size)?;
     println!("parse frame = {:?}", frame);
+    
+    println!("now Frame = {:?}", std::mem::size_of_val(&frame));
 
     Ok(Some(frame))
 }
