@@ -143,12 +143,17 @@ impl Control {
 
     pub fn encode_response(&mut self, cx: &mut Context) -> ProtResult<()> {
         let mut list = self.response_queue.lock().unwrap();
-        let vals = (*list).drain(..).collect::<Vec<SendResponse>>();
-        for mut l in vals {
+        if list.len() == 0 {
+            return Ok(())
+        }
+        let mut new_list = vec![];
+        println!("list len = {:?}", list.len());
+        // let vals = (*list).drain(..).collect::<Vec<SendResponse>>();
+        for mut l in (*list).drain(..) {
             let (isend, vec) = l.encode_frames(cx);
             self.send_frames.send_frames(l.stream_id, vec)?;
             if !isend {
-                (*list).push(l);
+                new_list.push(l);
             }
         }
         Ok(())

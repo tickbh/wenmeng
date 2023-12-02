@@ -5,6 +5,10 @@ use tokio::{net::TcpListener};
 use webparse::{Response};
 use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, OperateTrait, Middleware};
 
+// #[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 struct Operate;
 
 #[async_trait]
@@ -32,10 +36,16 @@ impl Middleware for HelloMiddleware {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    
-    env_logger::init();
+async fn run_main() -> Result<(), Box<dyn Error>> {
+    // 在main函数最开头调用这个方法
+    let file_name = format!("heap-{}.json", std::process::id());
+    // let _profiler = dhat::Profiler::builder().file_name(file_name).build();
+    //
+    // let _profiler = dhat::Profiler::new_heap();
+
+
+    // env_logger::init();
+    // console_subscriber::init();
     let addr = env::args()
         .nth(1)
         .unwrap_or_else(|| "0.0.0.0:8080".to_string());
@@ -51,4 +61,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("close server ==== addr = {:?} e = {:?}", addr, e);
         });
     }
+}
+
+
+fn main() {
+    env_logger::init();
+    use tokio::runtime::Builder;
+    let runtime = Builder::new_multi_thread()
+        .enable_io()
+        .worker_threads(4)
+        .enable_time()
+        .thread_name("wmproxy")
+        .thread_stack_size(10 * 1024 * 1024)
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        if let Err(e) = run_main().await {
+            println!("运行wmproxy发生错误:{:?}", e);
+        }
+    })
 }

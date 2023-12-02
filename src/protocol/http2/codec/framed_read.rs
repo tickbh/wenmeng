@@ -160,6 +160,7 @@ fn decode_frame(
 
     let _kind = head.kind();
     let frame = Frame::parse(head, bytes, decoder, max_header_list_size)?;
+    println!("parse frame = {:?}", frame);
 
     Ok(Some(frame))
 }
