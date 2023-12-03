@@ -52,7 +52,7 @@ fn read_all_data<R: Read>(read_buf: &mut BinaryMut, read: &mut Box<R>) -> io::Re
 #[derive(Debug)]
 struct InnerReceiver {
     receiver: Option<Receiver<(bool, Binary)>>,
-    file: Option<File>,
+    file: Option<Box<File>>,
     cache_buf: Vec<u8>,
     data_size: u64,
 }
@@ -80,7 +80,7 @@ impl InnerReceiver {
         let vec = vec![0u8; 4096];
         Self {
             receiver: None,
-            file: Some(file),
+            file: Some(Box::new(file)),
             cache_buf: vec,
             data_size,
         }
@@ -286,6 +286,9 @@ impl RecvStream {
 
     pub fn print_debug(&self) {
         println!("receiver = {:?}", std::mem::size_of_val(&self.receiver));
+
+        println!("file = {:?}", std::mem::size_of_val(&self.receiver.file));
+
         println!("sem = {:?}", std::mem::size_of_val(&self.sem));
         println!("permit = {:?}", std::mem::size_of_val(&self.permit));
         println!("origin_buf = {:?}", std::mem::size_of_val(&self.origin_buf));
