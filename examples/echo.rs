@@ -44,6 +44,12 @@ async fn run_main() -> Result<(), Box<dyn Error>> {
     //
     // let _profiler = dhat::Profiler::new_heap();
 
+    let res = Response::text().body("").unwrap();
+    println!("res size = {:?}", std::mem::size_of_val(&res));
+
+    let rec = RecvStream::empty();
+    rec.print_debug();
+    println!("rec size = {:?}", std::mem::size_of_val(&rec));
 
     // env_logger::init();
     // console_subscriber::init();
