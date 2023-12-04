@@ -16,7 +16,7 @@ use std::{
     time::Duration,
 };
 
-use futures_core::{Stream};
+use tokio_stream::Stream;
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -195,7 +195,7 @@ where
     where
         F: OperateTrait + Send,
     {
-        use futures_util::stream::StreamExt;
+        use tokio_stream::StreamExt;
         let mut receiver = self.inner.receiver_push.take().unwrap();
         tokio::select! {
             res = receiver.recv() => {

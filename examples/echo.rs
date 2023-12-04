@@ -1,7 +1,6 @@
 use std::{env, error::Error, time::Duration};
 use async_trait::async_trait;
 
-use datasize::data_size;
 use tokio::{net::TcpListener, sync::mpsc::channel};
 use webparse::{Response, http2::frame::Settings};
 use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, OperateTrait, Middleware, http2::{Control, ControlConfig}, RecvStream};

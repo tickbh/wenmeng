@@ -19,7 +19,7 @@ use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
 
-use futures_core::Stream;
+use tokio_stream::Stream;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::length_delimited;
 use webparse::BinaryMut;

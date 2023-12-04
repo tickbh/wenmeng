@@ -19,9 +19,6 @@ bytes = "1.4.0"
 log="0.4.20"
 
 tracing = { version = "0.1.21", default-features = false, features = ["std"] }
-futures-core = { version = "0.3", default-features = false }
-futures-sink = { version = "0.3", default-features = false }
-futures-util = { version = "0.3", default-features = false }
 tokio-rustls="0.24"
 webpki-roots = "0.25"
 rustls="0.21"
@@ -40,7 +37,6 @@ async-trait = "0.1.74"
 # async-compression = {version="0.4.3", features=["all"]}
 
 #"tokio", "brotli", "deflate", "gzip"
-datasize = "0.2.15"
 
 [dependencies.webparse]
 path="../webparse"

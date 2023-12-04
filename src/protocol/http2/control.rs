@@ -14,12 +14,12 @@ use std::{
     collections::{HashMap, HashSet, LinkedList},
     pin::Pin,
     sync::{Arc, Mutex},
-    task::{Context, Poll},
+    task::{Context, Poll, ready},
     time::{Duration, Instant},
 };
 
-use datasize::DataSize;
-use futures_core::{ready, Stream};
+use tokio_stream::Stream;
+
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::mpsc::Sender,
@@ -148,7 +148,6 @@ impl Control {
             return Ok(())
         }
         let mut new_list = vec![];
-        println!("list len = {:?}", list.len());
         // let vals = (*list).drain(..).collect::<Vec<SendResponse>>();
         for mut l in (*list).drain(..) {
             let (isend, vec) = l.encode_frames(cx);
@@ -503,9 +502,6 @@ impl Control {
         stream_id: StreamIdentifier,
         push: Option<StreamIdentifier>,
     ) -> ProtResult<()> {
-        
-        println!("now RecvResponse = {:?}", std::mem::size_of_val(&res));
-
         let mut data = self.response_queue.lock().unwrap();
         let is_end = res.body().is_end();
         let response = SendResponse::new(stream_id, push, res, webparse::Method::Get, is_end);

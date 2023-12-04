@@ -15,7 +15,8 @@ use std::{
     task::{Context, Poll}, time::{Duration},
 };
 
-use futures_core::{Stream};
+use tokio_stream::Stream;
+
 use tokio::{io::{AsyncRead, AsyncWrite}};
 use webparse::{Binary, http2::{HTTP2_MAGIC, frame::Settings}};
 
@@ -109,7 +110,7 @@ where
 
     pub async fn incoming(&mut self) -> ProtResult<Option<RecvResponse>>
     {
-        use futures_util::stream::StreamExt;
+        use tokio_stream::StreamExt;
         let req = self.next().await;
 
         match req {

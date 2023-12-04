@@ -16,7 +16,8 @@ use std::{
     time::Duration,
 };
 
-use futures_core::{Future, Stream};
+use tokio_stream::Stream;
+use std::future::Future;
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -199,7 +200,7 @@ where
     }
 
     pub async fn incoming(&mut self) -> ProtResult<Option<RecvResponse>> {
-        use futures_util::stream::StreamExt;
+        use tokio_stream::StreamExt;
         tokio::select! {
             res = self.next() => {
                 match res {

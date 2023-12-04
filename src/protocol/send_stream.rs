@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2023/09/14 09:42:25
 
-use futures_core::Stream;
+use tokio_stream::Stream;
 use std::{fmt::Debug};
 use std::io::Read;
 use tokio::sync::mpsc::{Sender};

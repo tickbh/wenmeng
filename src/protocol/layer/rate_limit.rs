@@ -11,7 +11,7 @@
 // Created Date: 2023/11/10 02:23:05
 
 use std::{task::{Poll, Context}, io, pin::Pin};
-use futures_core::Future;
+use std::future::Future;
 use tokio::time::{Duration, Instant, Sleep};
 
 #[derive(Debug)]

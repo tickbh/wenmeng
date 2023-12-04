@@ -16,7 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures_core::Future;
+use std::future::Future;
 use tokio::time::Sleep;
 
 use crate::ProtResult;

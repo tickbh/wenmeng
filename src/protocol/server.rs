@@ -283,43 +283,18 @@ where
         Ok(())
     }
 
-    async fn test<F>(
-        f: &mut F,
-        addr: &Option<SocketAddr>,
-        middles: &mut Vec<Box<dyn Middleware>>,) ->  ProtResult<Option<bool>>
-        where
-            F: OperateTrait + Send, {
-
-        Ok(None)
-    }
-
     pub async fn incoming<F>(&mut self, mut f: F) -> ProtResult<Option<bool>>
     where
         F: OperateTrait + Send,
     {
         loop {
-            println!("now incoming size = {:?}", std::mem::size_of_val(&self));
-
-            let x = Self::test(&mut f, &self.addr, &mut self.middles);
-            println!("now  test size = {:?}", std::mem::size_of_val(&x));
-            let _ = x.await;
             let result = if let Some(h1) = &mut self.http1 {
-                
-
-                println!("now incoming h1 size = {:?}", std::mem::size_of_val(&h1));
-                println!("now incoming h1 size = {:?}", std::mem::size_of_val(&self.middles));
-                println!("now incoming h1 size = {:?}", std::mem::size_of_val(&f));
-                let x = h1.incoming(&mut f, &self.addr, &mut self.middles);
-                println!("now incoming h1 size = {:?}", std::mem::size_of_val(&x));
-                x.await
-                // h1.incoming(&mut f, &self.addr, &mut self.middles).await
+                h1.incoming(&mut f, &self.addr, &mut self.middles).await
             } else if let Some(h2) = &mut self.http2 {
-                println!("now incoming h2 size = {:?}", std::mem::size_of_val(&h2));
                 h2.incoming(&mut f, &self.addr, &mut self.middles).await
             } else {
                 Ok(Some(true))
             };
-            println!("now size = {:?}", std::mem::size_of_val(&self));
             match result {
                 Ok(None) | Ok(Some(false)) => {
                     self.req_num = self.req_num.wrapping_add(1);
