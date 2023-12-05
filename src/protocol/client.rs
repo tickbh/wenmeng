@@ -25,7 +25,6 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
-use tokio_rustls::client::TlsStream;
 use tokio_rustls::TlsConnector;
 use webparse::http2::frame::Settings;
 use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
@@ -237,24 +236,26 @@ impl Default for ClientOption {
     }
 }
 
-pub struct Client
+pub struct Client<T=TcpStream>
 {
     option: ClientOption,
     sender: Sender<ProtResult<RecvResponse> >,
     receiver: Option<Receiver<ProtResult<RecvResponse>>>,
     req_receiver: Option<Receiver<RecvRequest>>,
-    http1: Option<ClientH1Connection<MaybeHttpsStream<TcpStream>>>,
-    http2: Option<ClientH2Connection<MaybeHttpsStream<TcpStream>>>,
+    http1: Option<ClientH1Connection<MaybeHttpsStream<T>>>,
+    http2: Option<ClientH2Connection<MaybeHttpsStream<T>>>,
 }
 
-
-impl Client
-{
+impl Client {
     pub fn builder() -> Builder {
         Builder::new()
     }
+}
 
-    pub fn new(option: ClientOption, stream: MaybeHttpsStream<TcpStream>) -> Self {
+impl<T> Client<T>
+where T: AsyncRead + AsyncWrite + Unpin + 'static + Send 
+{
+    pub fn new(option: ClientOption, stream: MaybeHttpsStream<T>) -> Self {
         let (sender, receiver) = channel(10);
         let mut client = Self {
             option,
@@ -280,7 +281,7 @@ impl Client
         client
     }
 
-    fn build_client_h1_connection(&self, stream: MaybeHttpsStream<TcpStream>) -> ClientH1Connection<MaybeHttpsStream<TcpStream>> {
+    fn build_client_h1_connection(&self, stream: MaybeHttpsStream<T>) -> ClientH1Connection<MaybeHttpsStream<T>> {
         let mut client = ClientH1Connection::new(stream);
         client.set_timeout_layer(self.option.timeout.clone());
         client
