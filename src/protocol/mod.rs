@@ -24,6 +24,7 @@ mod send_stream;
 mod consts;
 mod layer;
 mod middle;
+mod proxy;
 
 pub use self::recv_stream::RecvStream;
 pub use self::send_stream::SendStream;
