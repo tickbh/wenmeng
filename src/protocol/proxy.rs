@@ -11,7 +11,7 @@
 // Created Date: 2023/12/07 03:05:04
 
 use lazy_static::lazy_static;
-use std::{net::SocketAddr, os::unix::ffi::OsStrExt, env};
+use std::{net::SocketAddr, os::unix::ffi::OsStrExt, env, collections::HashSet};
 
 use tokio::{net::TcpStream, io::{AsyncRead, AsyncWrite}};
 use webparse::{Url, HeaderValue, BinaryMut, Scheme};
@@ -152,6 +152,38 @@ impl ProxyScheme {
             static ref ENV_PROXIES: Vec<ProxyScheme> = get_from_environment();
         }
         &ENV_PROXIES
+    }
+
+    pub fn get_env_no_proxy() -> &'static HashSet<String> {
+        lazy_static! {
+            static ref ENV_NO_PROXY: HashSet<String> = {
+                let mut hash = HashSet::new();
+                hash.insert("localhost".to_string());
+                hash.insert("127.0.0.1".to_string());
+                hash.insert("::1".to_string());
+                fn insert_no_proxy(all_hash: &mut HashSet<String>, key: &str) -> bool {
+                    if let Ok(val) = env::var(key) {
+                        let all = val.split(",").collect::<Vec<&str>>();
+                        for one in all {
+                            all_hash.insert(one.trim().to_string());
+                        }
+                        return true
+                    }
+                    false
+                }
+                if !insert_no_proxy(&mut hash, "NO_PROXY") {
+                    insert_no_proxy(&mut hash, "no_proxy");
+                }
+                hash
+            };
+        }
+        &ENV_NO_PROXY
+    }
+
+    pub fn is_no_proxy(host: &String) -> bool {
+        let hash = Self::get_env_no_proxy();
+        println!("hashs = {:?}", hash);
+        hash.contains(host)
     }
 
     pub async fn connect(&self, url:&Url) -> ProtResult<Option<TcpStream>> {
