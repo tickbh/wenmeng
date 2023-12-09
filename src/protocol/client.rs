@@ -30,6 +30,8 @@ use webparse::http2::frame::Settings;
 use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
 use webparse::{Binary, Url};
 
+use super::proxy::ProxyScheme;
+
 #[derive(Debug)]
 pub struct Builder {
     inner: ClientOption,
@@ -98,6 +100,12 @@ impl Builder {
         self
     }
 
+    pub fn add_proxy(mut self, val: &str) -> ProtResult<Self> {
+        let proxy = ProxyScheme::try_from(val)?;
+        self.inner.proxies.push(proxy);
+        Ok(self)
+    }
+
     pub fn value(self) -> ClientOption {
         self.inner
     }
@@ -126,11 +134,26 @@ impl Builder {
     where
         U: TryInto<Url>,
     {
-        let url = TryInto::<Url>::try_into(url);
-        if url.is_err() {
-            return Err(ProtError::Extension("unknown connection url"));
+        let url = TryInto::<Url>::try_into(url)
+            .map_err(|_e| ProtError::Extension("unknown connection url"))?;
+
+        if self.inner.proxies.len() > 0 {
+            for p in self.inner.proxies.iter() {
+                println!("run proxy = {:?} url = {:?}", p, url);
+                match p.connect(&url).await? {
+                    Some(tcp) => {
+                        
+                        if url.scheme.is_https() {
+                            return self.connect_tls_by_stream(tcp, url).await;
+                        } else {
+                            return Ok(Client::new(self.inner, MaybeHttpsStream::Http(tcp)))
+                        }
+                    },
+                    None => continue,
+                }
+            }
+            return Err(ProtError::Extension("not proxy error!"));
         } else {
-            let url = url.ok().unwrap();
             if url.scheme.is_https() {
                 let connect = url.get_connect_url();
                 let stream = self.inner_connect(&connect.unwrap()).await?;
@@ -140,6 +163,7 @@ impl Builder {
                 Ok(Client::new(self.inner, MaybeHttpsStream::Http(tcp)))
             }
         }
+
     }
 
     pub async fn connect_tls_by_stream<T>(
@@ -203,6 +227,7 @@ pub struct ClientOption {
     http2: bool,
     settings: Settings,
     timeout: Option<TimeoutLayer>,
+    proxies: Vec<ProxyScheme>,
 }
 
 impl ClientOption {
@@ -232,6 +257,7 @@ impl Default for ClientOption {
             http2: true,
             settings: Default::default(),
             timeout: None,
+            proxies: vec![],
         }
     }
 }
