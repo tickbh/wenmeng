@@ -154,6 +154,20 @@ impl Builder {
             }
             return Err(ProtError::Extension("not proxy error!"));
         } else {
+            let proxies = ProxyScheme::get_env_proxies();
+            for p in proxies.iter() {
+                println!("run proxy = {:?} url = {:?}", p, url);
+                match p.connect(&url).await? {
+                    Some(tcp) => {
+                        if url.scheme.is_https() {
+                            return self.connect_tls_by_stream(tcp, url).await;
+                        } else {
+                            return Ok(Client::new(self.inner, MaybeHttpsStream::Http(tcp)))
+                        }
+                    },
+                    None => continue,
+                }
+            }
             if url.scheme.is_https() {
                 let connect = url.get_connect_url();
                 let stream = self.inner_connect(&connect.unwrap()).await?;

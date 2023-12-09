@@ -10,12 +10,15 @@
 // -----
 // Created Date: 2023/12/07 03:05:04
 
-use std::{net::SocketAddr, os::unix::ffi::OsStrExt};
+use lazy_static::lazy_static;
+use std::{net::SocketAddr, os::unix::ffi::OsStrExt, env};
 
 use tokio::{net::TcpStream, io::{AsyncRead, AsyncWrite}};
-use webparse::{Url, HeaderValue, BinaryMut};
+use webparse::{Url, HeaderValue, BinaryMut, Scheme};
 
 use crate::{ProtError, ProtResult, MaybeHttpsStream};
+
+
 
 #[derive(Debug, Clone)]
 pub enum ProxyScheme {
@@ -102,14 +105,66 @@ where
     }
 }
 
+fn insert_from_env(proxies: &mut Vec<ProxyScheme>, scheme: Scheme, key: &str) -> bool {
+    if let Ok(val) = env::var(key) {
+        if let Ok(proxy) = ProxyScheme::try_from(&*val) {
+            if scheme.is_http() {
+                if let Ok(proxy) = proxy.trans_http() {
+                    proxies.push(proxy);
+                    return true;
+                }
+            } else {
+                if let Ok(proxy) = proxy.trans_https() {
+                    proxies.push(proxy);
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn get_from_environment() -> Vec<ProxyScheme> {
+    let mut proxies = vec![];
+
+    if !insert_from_env(&mut proxies, Scheme::Http, "HTTP_PROXY") {
+        insert_from_env(&mut proxies, Scheme::Http, "http_proxy");
+    }
+
+    if !insert_from_env(&mut proxies, Scheme::Https, "HTTPS_PROXY") {
+        insert_from_env(&mut proxies, Scheme::Https, "https_proxy");
+    }
+
+    if !(insert_from_env(&mut proxies, Scheme::Http, "ALL_PROXY")
+        && insert_from_env(&mut proxies, Scheme::Https, "ALL_PROXY"))
+    {
+        insert_from_env(&mut proxies, Scheme::Http, "all_proxy");
+        insert_from_env(&mut proxies, Scheme::Https, "all_proxy");
+    }
+
+    proxies
+}
 
 impl ProxyScheme {
+
+    pub fn get_env_proxies() -> &'static Vec<ProxyScheme> {
+        lazy_static! {
+            static ref ENV_PROXIES: Vec<ProxyScheme> = get_from_environment();
+        }
+        &ENV_PROXIES
+    }
 
     pub async fn connect(&self, url:&Url) -> ProtResult<Option<TcpStream>> {
         match self {
             ProxyScheme::Http {addr, auth : _} => {
                 println!("connect = {}", addr);
-                return Ok(Some(TcpStream::connect(addr).await?))
+                let tcp = TcpStream::connect(addr).await?;
+                if url.scheme.is_https() {
+                    let tcp = tunnel(tcp, url.domain.clone().unwrap_or_default(), url.port.unwrap_or(443), None, None).await?;
+                    return Ok(Some(tcp));
+                } else {
+                    return Ok(Some(tcp));
+                }
             },
             ProxyScheme::Https {addr, auth: _ }  => {
                 if !url.scheme.is_https() {
@@ -124,6 +179,35 @@ impl ProxyScheme {
                 let tcp = Self::socks5_connect(tcp, &url, auth).await?;
                 return Ok(Some(tcp))
             },
+        }
+    }
+
+    fn trans_http(self) -> ProtResult<Self> {
+        match self {
+            ProxyScheme::Http { addr, auth } => {
+                Ok(ProxyScheme::Http { addr, auth })
+            }
+            ProxyScheme::Https { addr, auth } => {
+                Ok(ProxyScheme::Http { addr, auth })
+            }
+            _ => {
+                Err(ProtError::Extension("unknow type"))
+            }
+        }
+    }
+
+
+    fn trans_https(self) -> ProtResult<Self> {
+        match self {
+            ProxyScheme::Http { addr, auth } => {
+                Ok(ProxyScheme::Https { addr, auth })
+            }
+            ProxyScheme::Https { addr, auth } => {
+                Ok(ProxyScheme::Https { addr, auth })
+            }
+            _ => {
+                Err(ProtError::Extension("unknow type"))
+            }
         }
     }
 
