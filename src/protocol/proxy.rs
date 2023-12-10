@@ -20,6 +20,7 @@ use crate::{ProtError, ProtResult, MaybeHttpsStream};
 
 
 
+/// 客户端代理类
 #[derive(Debug, Clone)]
 pub enum ProxyScheme {
     Http {

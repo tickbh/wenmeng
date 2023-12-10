@@ -21,12 +21,19 @@ async fn test_http2() -> ProtResult<()> {
     // let url = "http://localhost:82/root/target/rid_maps.log";
     // let url = "http://127.0.0.1:8080/root/README.md";
     let url = "http://www.baidu.com";
+    let req = Request::builder().method("GET").url(url).body("").unwrap();
+    println!("url = {:?} now = {:?}", req.get_connect_url(), Instant::now());
+    let client = Client::builder()
+        .connect(url).await.unwrap();
+    let (mut recv, _sender) = client.send2(req.into_type()).await?;
+    let res = recv.recv().await;
+    
     // let mut vecs = vec![];
     // tokio::time::sleep(Duration::from_secs(100000)).await;
     let req = Request::builder().method("GET").header(HeaderName::ACCEPT_ENCODING, "gzip").url(url).body("").unwrap();
     println!("url = {:?} now = {:?}", req.get_connect_url(), Instant::now());
     let client = Client::builder()
-        .http2(false)
+        // .http2(false)
         // .http2_only(true)
         // .connect_timeout(Duration::new(1, 10))
         // .ka_timeout(Duration::new(10, 10))
