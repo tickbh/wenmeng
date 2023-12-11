@@ -488,13 +488,17 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
     pub async fn send_now(
         mut self,
         mut req: RecvRequest,
-    ) -> ProtResult<ProtResult<RecvResponse>> {
+    ) -> ProtResult<RecvResponse> {
         self.rebuild_request(&mut req);
         let (mut r, _) = self.split()?;
         // let _ = self.operate(req).await;
-        self.inner_operate(req).await?;
+        tokio::spawn(async move {
+            if let Err(e) = self.inner_operate(req).await {
+                println!("http数据请求时发生错误: {:?}", e);
+            }
+        });
         if let Some(s) = r.recv().await {
-            return Ok(s);
+            return s;
         } else {
             return Err(ProtError::Extension("unknow response"));
         }

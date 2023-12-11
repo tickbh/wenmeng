@@ -21,7 +21,7 @@ async fn test_http2() -> ProtResult<()> {
     println!("aaaaaaaaaaaaaa");
     // let url = "http://localhost:82/root/target/rid_maps.log";
     // let url = "http://127.0.0.1:8080/root/README.md";
-    let url = "http://www.baidu.com";
+    let url = "https://www.baidu.com";
     let req = Request::builder().method("GET").url(url).body("").unwrap();
     println!("url = {:?} now = {:?}", req.get_connect_url(), Instant::now());
     let client = Client::builder()
@@ -39,24 +39,22 @@ async fn test_http2() -> ProtResult<()> {
         // .connect_timeout(Duration::new(1, 10))
         // .ka_timeout(Duration::new(10, 10))
         // .read_timeout(Duration::new(0, 1))
-        .add_proxy("socks5://wmproxy:wmproxy@127.0.0.1:8090")?
+        // .add_proxy("socks5://wmproxy:wmproxy@127.0.0.1:8090")?
+        .add_proxy("http://127.0.0.1:8090")?
         // .write_timeout(Duration::new(0, 1))
         .connect(url).await.unwrap();
 
-    let (mut recv, _sender) = client.send2(req.into_type()).await?;
 
-    let res = recv.recv().await;
-    // println!("ret res = {:?}", res);
-    let mut res = res.unwrap()?;
-
+    let mut res = client.send_now(req.into_type()).await.unwrap();
+    res.body_mut().wait_all().await;
+    println!("res = {} {} compress  = {}", res.status(), res.body_mut().origin_len(), res.body_mut().get_origin_compress());
+    
     // let mut res = match recv.recv().await {
     //     Some(res) => res,
     //     None => {
     //         println!("err === {:?}", e);
     //     }
     // }
-    res.body_mut().wait_all().await;
-    println!("res = {} {} compress  = {}", res.status(), res.body_mut().origin_len(), res.body_mut().get_origin_compress());
     let res = res.into_type::<String>();
     println!("return body = {}", 
     unsafe {
