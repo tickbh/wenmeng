@@ -11,7 +11,7 @@
 // Created Date: 2023/12/07 03:05:04
 
 use lazy_static::lazy_static;
-use std::{net::SocketAddr, os::unix::ffi::OsStrExt, env, collections::HashSet};
+use std::{net::SocketAddr, env, collections::HashSet, fmt::Display};
 
 use tokio::{net::TcpStream, io::{AsyncRead, AsyncWrite}};
 use webparse::{Url, HeaderValue, BinaryMut, Scheme};
@@ -188,6 +188,7 @@ impl ProxyScheme {
     }
 
     pub async fn connect(&self, url:&Url) -> ProtResult<Option<TcpStream>> {
+        log::trace!("客户端访问\"{}\", 尝试通过代理\"{}\"", url, self);
         match self {
             ProxyScheme::Http {addr, auth : _} => {
                 println!("connect = {}", addr);
@@ -336,6 +337,30 @@ impl TryFrom<&str> for ProxyScheme {
                 Ok(ProxyScheme::Socks5 { addr, auth })
             }
             _ => Err(ProtError::Extension("unknow scheme")),
+        }
+    }
+}
+
+impl Display for ProxyScheme {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProxyScheme::Http {addr, auth : _} => {
+                f.write_fmt(format_args!("HTTP {}", addr))
+            },
+            ProxyScheme::Https {addr, auth }  => {
+                if auth.is_none() {
+                    f.write_fmt(format_args!("HTTPS {}", addr))
+                } else {
+                    f.write_fmt(format_args!("HTTPS {}, Auth: {}, {}", addr, auth.as_ref().unwrap().0, auth.as_ref().unwrap().1))
+                }
+            },
+            ProxyScheme::Socks5 { addr, auth } => {
+                if auth.is_none() {
+                    f.write_fmt(format_args!("SOCKS5 {}", addr))
+                } else {
+                    f.write_fmt(format_args!("SOCKS5 {}, Auth: {}, {}", addr, auth.as_ref().unwrap().0, auth.as_ref().unwrap().1))
+                }
+            },
         }
     }
 }

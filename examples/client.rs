@@ -16,6 +16,7 @@ use wenmeng::{Client, ProtResult};
 
 async fn test_http2() -> ProtResult<()> {
     // let url = "http://nghttp2.org/";
+    env_logger::init();
 
     println!("aaaaaaaaaaaaaa");
     // let url = "http://localhost:82/root/target/rid_maps.log";
@@ -38,7 +39,7 @@ async fn test_http2() -> ProtResult<()> {
         // .connect_timeout(Duration::new(1, 10))
         // .ka_timeout(Duration::new(10, 10))
         // .read_timeout(Duration::new(0, 1))
-        // .add_proxy("socks5://wmproxy:wmproxy@127.0.0.1:8090")?
+        .add_proxy("socks5://wmproxy:wmproxy@127.0.0.1:8090")?
         // .write_timeout(Duration::new(0, 1))
         .connect(url).await.unwrap();
 

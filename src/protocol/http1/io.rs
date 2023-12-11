@@ -40,8 +40,8 @@ pub struct IoBuffer<T> {
 struct ConnectionInfo {
     deal_req: usize,
     read_sender: Option<Sender<(bool, Binary)>>,
-    res: LinkedList<RecvResponse>,
-    req: LinkedList<RecvRequest>,
+    res_list: LinkedList<RecvResponse>,
+    req_list: LinkedList<RecvRequest>,
     is_keep_alive: bool,
     is_delay_close: bool,
     is_idle: bool,
@@ -117,8 +117,8 @@ where
             inner: ConnectionInfo {
                 deal_req: 0,
                 read_sender: None,
-                res: LinkedList::new(),
-                req: LinkedList::new(),
+                res_list: LinkedList::new(),
+                req_list: LinkedList::new(),
                 is_keep_alive: false,
                 is_delay_close: false,
                 is_idle: true,
@@ -136,7 +136,7 @@ where
     }
 
     pub fn check_finish_status(&mut self) {
-        if (self.inner.req.is_empty() || self.inner.req_status.is_send_finish) && (self.inner.res.is_empty() || self.inner.res_status.is_send_finish) {
+        if (self.inner.req_list.is_empty() || self.inner.req_status.is_send_finish) && (self.inner.res_list.is_empty() || self.inner.res_status.is_send_finish) {
             self.set_now_end();
         }
     }
@@ -151,9 +151,9 @@ where
 
     pub fn is_write_end(&self) -> bool {
         if self.is_server {
-            self.inner.req.is_empty() || self.inner.res_status.is_send_finish
+            self.inner.req_list.is_empty() || self.inner.res_status.is_send_finish
         } else {
-            self.inner.res.is_empty() || self.inner.req_status.is_send_finish
+            self.inner.res_list.is_empty() || self.inner.req_status.is_send_finish
         }
     }
 
@@ -162,7 +162,7 @@ where
     }
 
     pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<usize>> {
-        if let Some(res) = self.inner.res.front_mut() {
+        if let Some(res) = self.inner.res_list.front_mut() {
             if !self.inner.res_status.is_send_header {
                 self.inner.res_status.is_chunked = res.headers().is_chunked();
                 // HeaderHelper::process_response_header(Version::Http11, true, res)?;
@@ -184,13 +184,13 @@ where
             }
         }
         if self.inner.res_status.is_send_finish {
-            self.inner.res.pop_front();
+            self.inner.res_list.pop_front();
             self.inner.res_status.clear_write();
 
             self.check_finish_status();
         }
 
-        if let Some(req) = self.inner.req.front_mut() {
+        if let Some(req) = self.inner.req_list.front_mut() {
             if !self.inner.req_status.is_send_header {
                 req.encode_header(&mut self.write_buf)?;
                 self.inner.req_status.is_send_header = true;
@@ -209,7 +209,7 @@ where
             }
         }
         if self.inner.req_status.is_send_finish {
-            self.inner.req.pop_front();
+            self.inner.req_list.pop_front();
             self.inner.req_status.clear_write();
 
             self.check_finish_status();
@@ -503,16 +503,16 @@ where
         (self.io, self.send_stream.read_buf, self.write_buf)
     }
 
-    pub async fn send_response(&mut self, res: RecvResponse) -> ProtResult<()> {
+    pub fn send_response(&mut self, res: RecvResponse) -> ProtResult<()> {
         self.check_finish_status();
-        self.inner.res.push_back(res);
+        self.inner.res_list.push_back(res);
         self.inner.is_idle = false;
         Ok(())
     }
 
     pub fn send_request(&mut self, req: RecvRequest) -> ProtResult<()> {
         self.check_finish_status();
-        self.inner.req.push_back(req);
+        self.inner.req_list.push_back(req);
         self.inner.is_idle = false;
         Ok(())
     }

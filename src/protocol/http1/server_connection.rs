@@ -144,14 +144,14 @@ where
             None => return Ok(Some(true)),
             Some(Err(e)) => return Err(e),
             Some(Ok(r)) => {
-                self.handle_request(addr, r, f, middles).await?;
+                return self.handle_request(addr, r, f, middles).await;
             }
         };
         return Ok(Some(true));
     }
 
     pub async fn send_response(&mut self, res: RecvResponse) -> ProtResult<()> {
-        self.io.send_response(res).await
+        self.io.send_response(res)
     }
 }
 

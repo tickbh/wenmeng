@@ -123,7 +123,7 @@ where
     }
 
     pub async fn send_response(&mut self, res: RecvResponse) -> ProtResult<()> {
-        self.io.send_response(res).await
+        self.io.send_response(res)
     }
 
     pub fn send_request(&mut self, mut req: RecvRequest) -> ProtResult<()> {
