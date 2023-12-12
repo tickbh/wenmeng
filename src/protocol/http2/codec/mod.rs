@@ -51,6 +51,10 @@ where
         Self::with_max_recv_frame_size(io, DEFAULT_MAX_FRAME_SIZE as usize)
     }
 
+    pub fn into_io(self) -> T {
+        self.inner.into_io().into_io()       
+    }
+
     /// Returns a new `Codec` with the given maximum frame size
     pub fn with_max_recv_frame_size(io: T, _max_frame_size: usize) -> Self {
         // Wrap with writer

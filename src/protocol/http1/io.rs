@@ -130,6 +130,14 @@ where
             ready_time: Instant::now(),
         }
     }
+    
+    pub fn into_io(self) -> T {
+        self.io        
+    }
+
+    pub fn set_read_cache(&mut self, binary: BinaryMut) {
+        self.send_stream.read_buf.put_slice(binary.as_slice());
+    }
 
     pub fn get_ready_time(&self) -> &Instant {
         &self.ready_time

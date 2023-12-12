@@ -96,6 +96,10 @@ where
         }
     }
 
+    pub fn into_io(self) -> T {
+        self.codec.into_io()        
+    }
+
     pub fn set_read_timeout(&mut self, read_timeout: Option<Duration>) {
         if self.timeout.is_none() {
             self.timeout = Some(TimeoutLayer::new());

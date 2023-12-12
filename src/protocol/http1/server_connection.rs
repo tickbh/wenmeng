@@ -44,6 +44,19 @@ where
             timeout: None,
         }
     }
+    
+    pub fn new_by_cache(io: T, binary: BinaryMut) -> Self {
+        let mut io = IoBuffer::new(io, true);
+        io.set_read_cache(binary);
+        ServerH1Connection {
+            io,
+            timeout: None,
+        }
+    }
+
+    pub fn into_io(self) -> T {
+        self.io.into_io()
+    }
 
     pub fn set_read_timeout(&mut self, read_timeout: Option<Duration>) {
         if self.timeout.is_none() {

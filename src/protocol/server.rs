@@ -20,7 +20,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpStream},
 };
-use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize, Version};
+use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize, Version, BinaryMut};
 
 use crate::{
     ProtError, ProtResult, RecvRequest, RecvStream, ServerH2Connection, TimeoutLayer, OperateTrait, Middleware,
@@ -124,6 +124,7 @@ where
     addr: Option<SocketAddr>,
     timeout: Option<TimeoutLayer>,
     req_num: usize,
+    max_req_num: usize,
 }
 
 impl Server<TcpStream> {
@@ -145,6 +146,7 @@ where
 
             timeout: None,
             req_num: 0,
+            max_req_num: usize::MAX,
         }
     }
 }
@@ -153,14 +155,23 @@ impl<T> Server<T>
 where
     T: AsyncRead + AsyncWrite + Unpin
 {
-    pub fn new_data(io: T, addr: Option<SocketAddr>) -> Self {
+    pub fn new_by_cache(io: T, addr: Option<SocketAddr>, binary: BinaryMut) -> Self {
         Self {
-            http1: Some(ServerH1Connection::new(io)),
+            http1: Some(ServerH1Connection::new_by_cache(io, binary)),
             http2: None,
             addr,
             middles: vec![],
             timeout: None,
             req_num: 0,
+            max_req_num: usize::MAX,
+        }
+    }
+
+    pub fn into_io(self) -> T {
+        if self.http1.is_some() {
+            self.http1.unwrap().into_io()
+        } else {
+            self.http2.unwrap().into_io()
         }
     }
 
@@ -298,7 +309,6 @@ where
             match result {
                 Ok(None) | Ok(Some(false)) => {
                     self.req_num = self.req_num.wrapping_add(1);
-                    continue;
                 }
                 Err(ProtError::ServerUpgradeHttp2(b, r)) => {
                     if self.http1.is_some() {
@@ -312,7 +322,6 @@ where
 
                             self.req_num = self.req_num.wrapping_add(1);
                         }
-                        continue;
                     } else {
                         return Err(ProtError::ServerUpgradeHttp2(b, r));
                     }
@@ -325,17 +334,13 @@ where
                 }
                 Ok(Some(true)) => return Ok(Some(true)),
             };
+            if self.req_num >= self.max_req_num {
+                return Ok(Some(true))
+            }
         }
-        // loop {
-        //     tokio::select! {
-        //         _ = receiver.recv() => {
-        //             let _ = poll_fn(|cx| Poll::Ready(self.poll_write(cx))).await;
-        //         },
-        //         v = self.next() => {
-        //             self.inner.receiver = Some(receiver);
-        //             return v;
-        //         }
-        //     }
-        // }
+    }
+
+    pub fn set_max_req(&mut self, num: usize) {
+        self.max_req_num = num;
     }
 }

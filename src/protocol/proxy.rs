@@ -25,11 +25,11 @@ use crate::{ProtError, ProtResult, MaybeHttpsStream};
 pub enum ProxyScheme {
     Http {
         addr: SocketAddr,
-        auth: Option<(String, String)>,
+        auth: Option<HeaderValue>,
     },
     Https {
         addr: SocketAddr,
-        auth: Option<(String, String)>,
+        auth: Option<HeaderValue>,
     },
     Socks5 {
         addr: SocketAddr,
@@ -41,8 +41,8 @@ async fn tunnel<T>(
     mut conn: T,
     host: String,
     port: u16,
-    user_agent: Option<HeaderValue>,
-    auth: Option<HeaderValue>,
+    user_agent: &Option<HeaderValue>,
+    auth: &Option<HeaderValue>,
 ) -> ProtResult<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
@@ -104,6 +104,24 @@ where
             return Err(ProtError::Extension("unsuccessful tunnel"));
         }
     }
+}
+
+pub fn basic_auth(auth: &Option<(String, String)>) -> Option<HeaderValue>
+{
+    use base64::prelude::BASE64_STANDARD;
+    use base64::write::EncoderWriter;
+    use std::io::Write;
+    if auth.is_none() {
+        return  None;
+    }
+
+    let mut buf = b"Basic ".to_vec();
+    {
+        let mut encoder = EncoderWriter::new(&mut buf, &BASE64_STANDARD);
+        let _ = write!(encoder, "{}:{}", auth.as_ref().unwrap().0, auth.as_ref().unwrap().1);
+    }
+    let header = HeaderValue::from_bytes(&buf);
+    Some(header)
 }
 
 fn insert_from_env(proxies: &mut Vec<ProxyScheme>, scheme: Scheme, key: &str) -> bool {
@@ -190,22 +208,22 @@ impl ProxyScheme {
     pub async fn connect(&self, url:&Url) -> ProtResult<Option<TcpStream>> {
         log::trace!("客户端访问\"{}\", 尝试通过代理\"{}\"", url, self);
         match self {
-            ProxyScheme::Http {addr, auth : _} => {
+            ProxyScheme::Http {addr, auth} => {
                 println!("connect = {}", addr);
                 let tcp = TcpStream::connect(addr).await?;
                 if url.scheme.is_https() {
-                    let tcp = tunnel(tcp, url.domain.clone().unwrap_or_default(), url.port.unwrap_or(443), None, None).await?;
+                    let tcp = tunnel(tcp, url.domain.clone().unwrap_or_default(), url.port.unwrap_or(443), &None, &auth).await?;
                     return Ok(Some(tcp));
                 } else {
                     return Ok(Some(tcp));
                 }
             },
-            ProxyScheme::Https {addr, auth: _ }  => {
+            ProxyScheme::Https {addr, auth }  => {
                 if !url.scheme.is_https() {
                     return Ok(None);
                 }
                 let tcp = TcpStream::connect(addr).await?;
-                let tcp = tunnel(tcp, url.domain.clone().unwrap_or_default(), url.port.unwrap_or(443), None, None).await?;
+                let tcp = tunnel(tcp, url.domain.clone().unwrap_or_default(), url.port.unwrap_or(443), &None, &auth).await?;
                 return Ok(Some(tcp));
             },
             ProxyScheme::Socks5 { addr, auth } => {
@@ -328,10 +346,10 @@ impl TryFrom<&str> for ProxyScheme {
         };
         match &url.scheme {
             webparse::Scheme::Http => Ok(ProxyScheme::Http {
-                addr, auth
+                addr, auth: basic_auth(&auth)
             }),
             webparse::Scheme::Https => Ok(ProxyScheme::Https {
-                addr, auth
+                addr, auth: basic_auth(&auth)
             }),
             webparse::Scheme::Extension(s) if s == "socks5" => {
                 Ok(ProxyScheme::Socks5 { addr, auth })
@@ -351,7 +369,7 @@ impl Display for ProxyScheme {
                 if auth.is_none() {
                     f.write_fmt(format_args!("HTTPS {}", addr))
                 } else {
-                    f.write_fmt(format_args!("HTTPS {}, Auth: {}, {}", addr, auth.as_ref().unwrap().0, auth.as_ref().unwrap().1))
+                    f.write_fmt(format_args!("HTTPS {}, Auth: {}", addr, auth.as_ref().unwrap()))
                 }
             },
             ProxyScheme::Socks5 { addr, auth } => {

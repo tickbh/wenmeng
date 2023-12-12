@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/14 09:42:25
@@ -17,8 +17,10 @@ use std::{
 };
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use webparse::{BinaryMut, Buf, http::http2::{FrameSize, DEFAULT_MAX_FRAME_SIZE}};
-
+use webparse::{
+    http::http2::{FrameSize, DEFAULT_MAX_FRAME_SIZE},
+    BinaryMut, Buf,
+};
 
 #[derive(Debug)]
 pub struct FramedWrite<T> {
@@ -40,6 +42,10 @@ where
             binary: BinaryMut::new(),
             max_frame_size: DEFAULT_MAX_FRAME_SIZE,
         }
+    }
+
+    pub fn into_io(self) -> T {
+        self.inner
     }
 
     pub fn get_mut(&mut self) -> &mut T {
@@ -87,7 +93,7 @@ where
         ready!(self.flush(cx))?;
         Pin::new(&mut self.inner).poll_shutdown(cx)
     }
-    
+
     pub fn set_cache_buf(&mut self, write_buf: BinaryMut) {
         self.binary.put_slice(write_buf.chunk());
     }

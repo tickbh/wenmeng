@@ -94,6 +94,10 @@ where
         }
     }
 
+    pub fn into_io(self) -> T {
+        self.codec.into_io()
+    }
+
     pub fn set_timeout_layer(&mut self, timeout_layer: Option<TimeoutLayer>) {
         self.timeout = timeout_layer;
     }

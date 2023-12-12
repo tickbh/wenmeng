@@ -15,6 +15,15 @@ pub enum MaybeHttpsStream<T> {
     Https(TlsStream<T>),
 }
 
+impl<T> MaybeHttpsStream<T> {
+    pub fn into_io(self) -> T {
+        match self {
+            MaybeHttpsStream::Http(h) => h,
+            MaybeHttpsStream::Https(h) => h.into_inner().0,
+        }
+    }
+}
+
 // ===== impl MaybeHttpsStream =====
 
 impl<T: fmt::Debug> fmt::Debug for MaybeHttpsStream<T> {

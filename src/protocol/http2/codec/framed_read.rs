@@ -78,6 +78,10 @@ where
             partial: None,
         }
     }
+
+    pub fn into_io(self) -> T {
+        self.inner.into_inner()
+    }
     
     pub fn set_cache_buf(&mut self, read_buf: BinaryMut) {
         self.inner.read_buffer_mut().put_slice(read_buf.chunk());

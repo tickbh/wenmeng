@@ -328,6 +328,14 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
         client.set_timeout_layer(self.option.timeout.clone());
         client
     }
+    
+    pub fn into_io(self) -> T {
+        if self.http1.is_some() {
+            self.http1.unwrap().into_io().into_io()
+        } else {
+            self.http2.unwrap().into_io().into_io()
+        }
+    }
 
     pub fn split(
         &mut self,
