@@ -13,7 +13,7 @@
 use std::{
     any::{Any, TypeId},
     net::SocketAddr,
-    time::Duration,
+    time::Duration, future::poll_fn,
 };
 
 use tokio::{
@@ -335,9 +335,25 @@ where
                 Ok(Some(true)) => return Ok(Some(true)),
             };
             if self.req_num >= self.max_req_num {
+                self.flush().await?;
                 return Ok(Some(true))
             }
         }
+    }
+
+    
+    pub async fn flush(&mut self) -> ProtResult<()>
+    {
+        if let Some(h1) = &mut self.http1 {
+            let _ = poll_fn(|cx| {
+                h1.poll_write(cx)
+            }).await;
+        } else if let Some(h2) = &mut self.http2 {
+            let _ = poll_fn(|cx| {
+                h2.poll_write(cx)
+            }).await;
+        };
+        return Ok(())
     }
 
     pub fn set_max_req(&mut self, num: usize) {
