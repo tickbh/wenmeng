@@ -146,7 +146,10 @@ impl Builder {
                         if url.scheme.is_https() {
                             return self.connect_tls_by_stream(tcp, url).await;
                         } else {
-                            return Ok(Client::new(self.inner, MaybeHttpsStream::Http(tcp)))
+                            let proxy = p.clone();
+                            let mut client = Client::new(self.inner, MaybeHttpsStream::Http(tcp));
+                            client.set_proxy(proxy);
+                            return Ok(client)
                         }
                     },
                     None => continue,
@@ -163,7 +166,10 @@ impl Builder {
                             if url.scheme.is_https() {
                                 return self.connect_tls_by_stream(tcp, url).await;
                             } else {
-                                return Ok(Client::new(self.inner, MaybeHttpsStream::Http(tcp)))
+                                let proxy = p.clone();
+                                let mut client = Client::new(self.inner, MaybeHttpsStream::Http(tcp));
+                                client.set_proxy(proxy);
+                                return Ok(client)
                             }
                         },
                         None => continue,
@@ -286,6 +292,7 @@ pub struct Client<T=TcpStream>
     req_receiver: Option<Receiver<RecvRequest>>,
     http1: Option<ClientH1Connection<MaybeHttpsStream<T>>>,
     http2: Option<ClientH2Connection<MaybeHttpsStream<T>>>,
+    proxy: Option<ProxyScheme>,
 }
 
 impl Client {
@@ -306,6 +313,7 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
             req_receiver: None,
             http1: None,
             http2: None,
+            proxy: None,
         };
         if client.option.http2_only {
             let mut value = http2::Builder::new()
@@ -328,6 +336,10 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
         client.set_timeout_layer(self.option.timeout.clone());
         client
     }
+
+    pub fn set_proxy(&mut self, proxy: ProxyScheme) {
+        self.proxy = Some(proxy);
+    }
     
     pub fn into_io(self) -> T {
         if self.http1.is_some() {
@@ -348,7 +360,10 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
         Ok((self.receiver.take().unwrap(), sender))
     }
 
-    fn send_req(&mut self, req: RecvRequest) -> ProtResult<()> {
+    fn send_req(&mut self, mut req: RecvRequest) -> ProtResult<()> {
+        if let Some(proxy) = &self.proxy {
+            proxy.fix_request(&mut req)?;
+        }
         if let Some(h) = &mut self.http1 {
             h.send_request(req)?;
         } else if let Some(h) = &mut self.http2 {

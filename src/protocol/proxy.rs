@@ -16,7 +16,7 @@ use std::{net::SocketAddr, env, collections::HashSet, fmt::Display};
 use tokio::{net::TcpStream, io::{AsyncRead, AsyncWrite}};
 use webparse::{Url, HeaderValue, BinaryMut, Scheme};
 
-use crate::{ProtError, ProtResult, MaybeHttpsStream};
+use crate::{ProtError, ProtResult, MaybeHttpsStream, RecvRequest};
 
 
 
@@ -203,6 +203,19 @@ impl ProxyScheme {
         let hash = Self::get_env_no_proxy();
         println!("hashs = {:?}", hash);
         hash.contains(host)
+    }
+
+    pub fn fix_request(&self, req: &mut RecvRequest) -> ProtResult<()> {
+        match self {
+            ProxyScheme::Http {addr: _, auth} => {
+                if auth.is_some() {
+                    req.headers_mut().insert("Proxy-Authorization", auth.clone().unwrap());
+                }
+            },
+            _ => {}
+
+        }
+        Ok(())
     }
 
     pub async fn connect(&self, url:&Url) -> ProtResult<Option<TcpStream>> {
