@@ -15,13 +15,12 @@ use webparse::{HeaderName, Request};
 use wenmeng::{Client, ProtResult};
 
 async fn test_http2() -> ProtResult<()> {
-    // let url = "http://nghttp2.org/";
-    env_logger::init();
+    let url = "http://nghttp2.org/";
 
     // println!("aaaaaaaaaaaaaa");
     // // let url = "http://localhost:82/root/target/rid_maps.log";
     // // let url = "http://127.0.0.1:8080/root/README.md";
-    let url = "http://www.baidu.com";
+    // let url = "http://www.baidu.com";
     // let req = Request::builder().method("GET").url(url).body("").unwrap();
     // println!("url = {:?} now = {:?}", req.get_connect_url(), Instant::now());
     // let client = Client::builder()
@@ -65,11 +64,9 @@ async fn test_http2() -> ProtResult<()> {
     );
 
     let res = res.into_type::<String>();
-    if res.body().len() > 10 {
-        println!("return body = {}", unsafe {
-            res.body().as_str().get_unchecked(0..10)
-        });
-    }
+    println!("return body = {}", unsafe {
+        res.body().as_str().get_unchecked(0..10)
+    });
 
     // // let req = Request::builder()
     // //     .method("GET")
@@ -117,8 +114,11 @@ async fn test_https2() -> ProtResult<()> {
 
 #[tokio::main]
 async fn main() {
-    if let Err(e) = test_http2().await {
-        println!("发生错误:{:?}", e);
+    env_logger::init();
+    for _ in 0..10 {
+        if let Err(e) = test_http2().await {
+            println!("发生错误:{:?}", e);
+        }
     }
     // test_https2().await;
     return;

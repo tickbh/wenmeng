@@ -2,9 +2,9 @@ use webparse::Request;
 use wenmeng::{Client, ProtResult};
 
 async fn test_http2() -> ProtResult<()> {
-    // let url = "http://nghttp2.org/";
+    let url = "http://nghttp2.org/";
 
-    let url = "http://localhost:8080/";
+    // let url = "http://localhost:8080/";
     let req = Request::builder().method("GET").url(url).body("").unwrap();
 
     println!("url = {:?}", req.get_connect_url());

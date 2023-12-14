@@ -201,7 +201,6 @@ impl ProxyScheme {
 
     pub fn is_no_proxy(host: &String) -> bool {
         let hash = Self::get_env_no_proxy();
-        println!("hashs = {:?}", hash);
         hash.contains(host)
     }
 
@@ -222,7 +221,6 @@ impl ProxyScheme {
         log::trace!("客户端访问\"{}\", 尝试通过代理\"{}\"", url, self);
         match self {
             ProxyScheme::Http {addr, auth} => {
-                println!("connect = {}", addr);
                 let tcp = TcpStream::connect(addr).await?;
                 if url.scheme.is_https() {
                     let tcp = tunnel(tcp, url.domain.clone().unwrap_or_default(), url.port.unwrap_or(443), &None, &auth).await?;

@@ -150,12 +150,13 @@ impl Control {
         let mut new_list = vec![];
         // let vals = (*list).drain(..).collect::<Vec<SendResponse>>();
         for mut l in (*list).drain(..) {
-            let (isend, vec) = l.encode_frames(cx);
+            let (is_send, vec) = l.encode_frames(cx);
             self.send_frames.send_frames(l.stream_id, vec)?;
-            if !isend {
+            if !is_send {
                 new_list.push(l);
             }
         }
+        list.extend(new_list);
         Ok(())
     }
 

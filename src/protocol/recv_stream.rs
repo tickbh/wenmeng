@@ -56,6 +56,15 @@ struct InnerReceiver {
     cache_buf: Vec<u8>,
     data_size: u64,
 }
+
+impl Drop for InnerReceiver {
+    fn drop(&mut self) {
+        if self.receiver.is_some() {
+            // println!("drop one receiver = {:?}", self.receiver);
+        }
+    }
+}
+
 impl InnerReceiver {
     pub fn new() -> Self {
         Self {

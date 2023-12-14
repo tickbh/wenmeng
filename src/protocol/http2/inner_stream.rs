@@ -133,6 +133,7 @@ impl InnerStream {
         } else {
             let (sender, receiver) = channel::<(bool, Binary)>(20);
             self.sender = Some(PollSender::new(sender));
+            
             RecvStream::new(receiver, binary, is_end_stream)
         };
         self.content_len = builder.get_body_len() as usize;

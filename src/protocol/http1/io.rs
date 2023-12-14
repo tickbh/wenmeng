@@ -1,18 +1,20 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/14 09:42:25
 
 use std::{
+    collections::LinkedList,
     pin::Pin,
-    task::{ready, Context, Poll}, collections::LinkedList, time::Instant,
+    task::{ready, Context, Poll},
+    time::Instant,
 };
 
 use tokio::{
@@ -20,9 +22,11 @@ use tokio::{
     sync::mpsc::Sender,
 };
 
-use crate::{ProtError, ProtResult, RecvStream, HeaderHelper, SendStream, RecvResponse, RecvRequest};
+use crate::{
+    HeaderHelper, ProtError, ProtResult, RecvRequest, RecvResponse, RecvStream, SendStream,
+};
 use webparse::{
-    http::http2, Binary, BinaryMut, Buf, BufMut, Request, Response, Version,
+    http::http2, http2::frame::Settings, Binary, BinaryMut, Buf, BufMut, Request, Response, Version,
 };
 
 pub struct IoBuffer<T> {
@@ -88,7 +92,7 @@ impl SendStatus {
         self.is_send_header = false;
         self.is_send_finish = false;
     }
-    
+
     pub fn clear_read(&mut self) {
         self.is_read_finish = false;
         self.is_read_header_end = false;
@@ -130,9 +134,9 @@ where
             ready_time: Instant::now(),
         }
     }
-    
+
     pub fn into_io(self) -> T {
-        self.io        
+        self.io
     }
 
     pub fn set_read_cache(&mut self, binary: BinaryMut) {
@@ -144,7 +148,9 @@ where
     }
 
     pub fn check_finish_status(&mut self) {
-        if (self.inner.req_list.is_empty() || self.inner.req_status.is_send_finish) && (self.inner.res_list.is_empty() || self.inner.res_status.is_send_finish) {
+        if (self.inner.req_list.is_empty() || self.inner.req_status.is_send_finish)
+            && (self.inner.res_list.is_empty() || self.inner.res_status.is_send_finish)
+        {
             self.set_now_end();
         }
     }
@@ -180,10 +186,7 @@ where
 
             if !res.body().is_end() || !self.inner.res_status.is_send_body {
                 self.inner.res_status.is_send_body = true;
-                let _ = res.body_mut().poll_encode_write(
-                    cx,
-                    &mut self.write_buf,
-                );
+                let _ = res.body_mut().poll_encode_write(cx, &mut self.write_buf);
             }
 
             if res.body().is_end() {
@@ -206,10 +209,7 @@ where
 
             if !req.body().is_end() || !self.inner.req_status.is_send_body {
                 self.inner.req_status.is_send_body = true;
-                let _ = req.body_mut().poll_encode_write(
-                    cx,
-                    &mut self.write_buf,
-                );
+                let _ = req.body_mut().poll_encode_write(cx, &mut self.write_buf);
             }
             if req.body().is_end() {
                 self.inner.req_status.is_send_finish = true;
@@ -283,10 +283,7 @@ where
         }
     }
 
-    pub fn poll_request(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtResult<RecvRequest>>> {
+    pub fn poll_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtResult<RecvRequest>>> {
         let n = self.poll_write(cx)?;
         if n == Poll::Ready(0) && self.inner.is_active_close() && self.write_buf.is_empty() {
             return Poll::Ready(None);
@@ -307,7 +304,9 @@ where
                         self.send_stream.set_end_headers(false);
                     }
                     // 如果还有数据可能是keep-alive继续读取头信息
-                    if self.send_stream.read_buf.is_empty() && !self.inner.req_status.is_read_header_end {
+                    if self.send_stream.read_buf.is_empty()
+                        && !self.inner.req_status.is_read_header_end
+                    {
                         return Poll::Pending;
                     }
                 }
@@ -318,7 +317,8 @@ where
                             return Poll::Pending;
                         } else {
                             if self.send_stream.read_buf.remaining() >= http2::MAIGC_LEN
-                                && &self.send_stream.read_buf[..http2::MAIGC_LEN] == http2::HTTP2_MAGIC
+                                && &self.send_stream.read_buf[..http2::MAIGC_LEN]
+                                    == http2::HTTP2_MAGIC
                             {
                                 // self.read_buf.advance(http2::MAIGC_LEN);
                                 let err = ProtError::ServerUpgradeHttp2(Binary::new(), None);
@@ -417,7 +417,7 @@ where
                 }
                 if self.inner.res_status.is_read_header_end {
                     let is_close = self.do_deal_body(false)?;
-                    
+
                     if self.inner.res_status.is_read_finish {
                         self.inner.res_status.clear_read();
                     }
@@ -468,11 +468,26 @@ where
                     if response.headers().is_chunked() {
                         self.inner.res_status.is_chunked = true;
                     }
+                } else if response.status() == 101 {
+                    if response
+                        .headers()
+                        .is_contains(&"Connection", "Upgrade".as_bytes())
+                        && response.headers().is_contains(&"Upgrade", "h2c".as_bytes())
+                    {
+                        return Poll::Ready(Some(Err(ProtError::ClientUpgradeHttp2(
+                            Settings::default(),
+                        ))));
+                    }
                 }
                 let (mut recv, sender) =
                     Self::build_recv_stream(&mut self.inner.res_status, &mut self.send_stream)?;
 
-                HeaderHelper::process_headers(Version::Http11, true, response.headers_mut(), &mut recv)?;
+                HeaderHelper::process_headers(
+                    Version::Http11,
+                    true,
+                    response.headers_mut(),
+                    &mut recv,
+                )?;
                 if recv.is_end() {
                     self.inner.res_status.clear_read();
                 }
@@ -496,7 +511,10 @@ where
             let mut read_data = BinaryMut::new();
             send_stream.read_data(&mut read_data)?;
             let (sender, receiver) = tokio::sync::mpsc::channel::<(bool, Binary)>(30);
-            return Ok((RecvStream::new(receiver, read_data, send_stream.is_end()), Some(sender)));
+            return Ok((
+                RecvStream::new(receiver, read_data, send_stream.is_end()),
+                Some(sender),
+            ));
         }
     }
 

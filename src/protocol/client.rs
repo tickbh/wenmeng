@@ -139,7 +139,6 @@ impl Builder {
 
         if self.inner.proxies.len() > 0 {
             for p in self.inner.proxies.iter() {
-                println!("run proxy = {:?} url = {:?}", p, url);
                 match p.connect(&url).await? {
                     Some(tcp) => {
                         
@@ -160,7 +159,6 @@ impl Builder {
             if !ProxyScheme::is_no_proxy(url.domain.as_ref().unwrap_or(&String::new())) {
                 let proxies = ProxyScheme::get_env_proxies();
                 for p in proxies.iter() {
-                    println!("run proxy = {:?} url = {:?}", p, url);
                     match p.connect(&url).await? {
                         Some(tcp) => {
                             if url.scheme.is_https() {
@@ -461,11 +459,13 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
                 }
             };
         }
+        
     }
 
     async fn inner_operate(mut self, req: RecvRequest) -> ProtResult<()> {
         self.send_req(req)?;
-        self.wait_operate().await
+        self.wait_operate().await?;
+        Ok(())
     }
 
     fn rebuild_request(&mut self, req: &mut RecvRequest) {
@@ -485,8 +485,9 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
         mut req: RecvRequest,
     ) -> ProtResult<Receiver<ProtResult<RecvResponse>>> {
         self.rebuild_request(&mut req);
-        let (r, _s) = self.split()?;
+        let (r, s) = self.split()?;
         tokio::spawn(async move {
+            let _sender = s;
             if let Err(e) = self.inner_operate(req).await {
                 println!("http数据请求时发生错误: {:?}", e);
             }
@@ -513,14 +514,18 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
         mut req: RecvRequest,
     ) -> ProtResult<RecvResponse> {
         self.rebuild_request(&mut req);
-        let (mut r, _) = self.split()?;
+        let (mut r, s) = self.split()?;
         // let _ = self.operate(req).await;
         tokio::spawn(async move {
+            let _sender = s;
             if let Err(e) = self.inner_operate(req).await {
                 println!("http数据请求时发生错误: {:?}", e);
             }
         });
-        if let Some(s) = r.recv().await {
+        if let Some(mut s) = r.recv().await {
+            if let Ok(res) = &mut s {
+                res.extensions_mut().insert(r);
+            }
             return s;
         } else {
             return Err(ProtError::Extension("unknow response"));
