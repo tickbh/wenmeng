@@ -16,7 +16,7 @@ use std::{
 
 use webparse::{HeaderName, Response, Version};
 
-use crate::{ProtResult, RecvRequest, RecvResponse, RecvStream, OperateTrait, Middleware};
+use crate::{ProtResult, RecvRequest, RecvResponse, Body, OperateTrait, Middleware};
 
 pub struct HttpHelper;
 

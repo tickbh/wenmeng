@@ -12,7 +12,7 @@
 
 use webparse::{Serialize, Request, Response, HeaderName, HeaderMap, Version};
 
-use crate::{RecvStream, ProtResult, Consts, RecvResponse, RecvRequest};
+use crate::{Body, ProtResult, Consts, RecvResponse, RecvRequest};
 
 pub struct HeaderHelper;
 
@@ -66,7 +66,7 @@ impl HeaderHelper {
         return Consts::COMPRESS_METHOD_NONE;
     }
 
-    pub fn process_headers(version: Version, is_client: bool, headers: &mut HeaderMap, body: &mut RecvStream) -> ProtResult<()> {
+    pub fn process_headers(version: Version, is_client: bool, headers: &mut HeaderMap, body: &mut Body) -> ProtResult<()> {
         let compress = Self::get_compress_method(headers);
         if version.is_http2() {
             headers.remove(&HeaderName::TRANSFER_ENCODING);
@@ -87,6 +87,7 @@ impl HeaderHelper {
                 let _ = body.process_data(None)?;
                 let len = body.body_len();
                 headers.insert(HeaderName::CONTENT_LENGTH, len);
+                
             }
         } else {
             if header_body_len == 0 {

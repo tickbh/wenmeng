@@ -24,7 +24,7 @@ use webparse::{
 
 use crate::{HeaderHelper, ProtError, ProtResult, RecvResponse, RecvRequest};
 
-use crate::RecvStream;
+use crate::Body;
 
 /// 组成帧的基本数据
 pub struct InnerStream {
@@ -129,12 +129,12 @@ impl InnerStream {
         }
         self.end_stream = is_end_stream;
         let recv = if is_nobody {
-            RecvStream::empty()
+            Body::empty()
         } else {
             let (sender, receiver) = channel::<(bool, Binary)>(20);
             self.sender = Some(PollSender::new(sender));
             
-            RecvStream::new(receiver, binary, is_end_stream)
+            Body::new(receiver, binary, is_end_stream)
         };
         self.content_len = builder.get_body_len() as usize;
         if self.content_len == 0 {
@@ -173,11 +173,11 @@ impl InnerStream {
             }
         }
         let mut recv = if is_nobody {
-            RecvStream::empty()
+            Body::empty()
         } else {
             let (sender, receiver) = channel::<(bool, Binary)>(20);
             self.sender = Some(PollSender::new(sender));
-            RecvStream::new(receiver, binary, is_end_stream)
+            Body::new(receiver, binary, is_end_stream)
         };
         HeaderHelper::process_headers(
             Version::Http2,

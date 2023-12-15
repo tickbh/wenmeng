@@ -3,7 +3,7 @@ use async_trait::async_trait;
 
 use tokio::{net::TcpListener, sync::mpsc::channel};
 use webparse::{Response, http2::frame::Settings};
-use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, OperateTrait, Middleware, http2::{Control, ControlConfig}, RecvStream};
+use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, OperateTrait, Middleware, http2::{Control, ControlConfig}, Body};
 
 // #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -46,7 +46,7 @@ async fn run_main() -> Result<(), Box<dyn Error>> {
     let res = Response::text().body("").unwrap();
     println!("res size = {:?}", std::mem::size_of_val(&res));
 
-    let rec = RecvStream::empty();
+    let rec = Body::empty();
     rec.print_debug();
     println!("rec size = {:?}", std::mem::size_of_val(&rec));
 
@@ -76,7 +76,7 @@ async fn run_main() -> Result<(), Box<dyn Error>> {
             //     false,
             // );
             // let s = std::mem::size_of_val(&control);
-            let recv = RecvStream::empty();
+            let recv = Body::empty();
             println!("recv = {:?}", std::mem::size_of_val(&recv));
             recv.print_debug();
             let x = vec![0;1900];

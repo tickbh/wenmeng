@@ -15,8 +15,8 @@ mod protocol;
 pub use protocol::*;
 use webparse::{Request, Response};
 
-pub type RecvRequest = Request<RecvStream>;
-pub type RecvResponse = Response<RecvStream>;
+pub type RecvRequest = Request<Body>;
+pub type RecvResponse = Response<Body>;
 
 use async_trait::async_trait;
 

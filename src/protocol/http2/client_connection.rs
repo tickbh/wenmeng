@@ -31,7 +31,7 @@ use webparse::{
 
 use crate::{
     protocol::{ProtError, ProtResult},
-    Builder, Initiator, RecvStream, TimeoutLayer, RecvResponse, RecvRequest,
+    Builder, Initiator, Body, TimeoutLayer, RecvResponse, RecvRequest,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -182,13 +182,13 @@ where
     where
         F: FnMut(Request<Req>) -> Fut,
         Fut: Future<Output = ProtResult<Option<Response<Res>>>>,
-        Req: From<RecvStream>,
+        Req: From<Body>,
         Req: Serialize + Any,
-        RecvStream: From<Res>,
+        Body: From<Res>,
         Res: Serialize + Any,
     {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
-        if TypeId::of::<Req>() != TypeId::of::<RecvStream>() {
+        if TypeId::of::<Req>() != TypeId::of::<Body>() {
             let _ = r.body_mut().wait_all().await;
         }
         match f(r.into_type::<Req>()).await? {

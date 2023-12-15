@@ -23,7 +23,7 @@ use tokio::{
 };
 
 use crate::{
-    HeaderHelper, ProtError, ProtResult, RecvRequest, RecvResponse, RecvStream, SendStream,
+    HeaderHelper, ProtError, ProtResult, RecvRequest, RecvResponse, Body, SendStream,
 };
 use webparse::{
     http::http2, http2::frame::Settings, Binary, BinaryMut, Buf, BufMut, Request, Response, Version,
@@ -355,7 +355,7 @@ where
                 }
 
                 let (mut recv, sender) =
-                    Self::build_recv_stream(&mut self.inner.res_status, &mut self.send_stream)?;
+                    Self::build_recv_stream(&mut self.inner.req_status, &mut self.send_stream)?;
                 recv.set_origin_compress_method(method);
                 if recv.is_end() {
                     self.inner.req_status.clear_read();
@@ -500,19 +500,19 @@ where
     fn build_recv_stream(
         status: &mut SendStatus,
         send_stream: &mut SendStream,
-    ) -> ProtResult<(RecvStream, Option<Sender<(bool, Binary)>>)> {
+    ) -> ProtResult<(Body, Option<Sender<(bool, Binary)>>)> {
         send_stream.set_left_body(status.left_read_body_len);
         send_stream.set_chunked(status.is_chunked);
 
         if status.left_read_body_len == 0 {
-            return Ok((RecvStream::empty(), None));
+            return Ok((Body::empty(), None));
         } else {
             send_stream.process_data()?;
             let mut read_data = BinaryMut::new();
             send_stream.read_data(&mut read_data)?;
             let (sender, receiver) = tokio::sync::mpsc::channel::<(bool, Binary)>(30);
             return Ok((
-                RecvStream::new(receiver, read_data, send_stream.is_end()),
+                Body::new(receiver, read_data, send_stream.is_end()),
                 Some(sender),
             ));
         }

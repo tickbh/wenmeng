@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use crate::http2::{self, ClientH2Connection};
 use crate::{http1::ClientH1Connection, ProtError};
-use crate::{ProtResult, TimeoutLayer, RecvResponse, RecvRequest, MaybeHttpsStream};
+use crate::{ProtResult, TimeoutLayer, RecvResponse, RecvRequest, MaybeHttpsStream, Middleware};
 use rustls::{ClientConfig, RootCertStore};
 use tokio::net::ToSocketAddrs;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -28,11 +28,11 @@ use tokio::{
 use tokio_rustls::TlsConnector;
 use webparse::http2::frame::Settings;
 use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
-use webparse::{Binary, Url};
+use webparse::{Binary, Url, WebError};
 
+use super::middle::BaseMiddleware;
 use super::proxy::ProxyScheme;
 
-#[derive(Debug)]
 pub struct Builder {
     inner: ClientOption,
 }
@@ -109,6 +109,11 @@ impl Builder {
     pub fn value(self) -> ClientOption {
         self.inner
     }
+    
+    pub fn middle<M: Middleware + 'static>(mut self, middle: M) -> Self {
+        self.inner.middles.push(Box::new(middle));
+        self
+    }
 
     pub async fn connect_by_stream(self, stream: TcpStream) -> ProtResult<Client> {
         Ok(Client::new(self.inner, MaybeHttpsStream::Http(stream)))
@@ -132,7 +137,8 @@ impl Builder {
 
     pub async fn connect<U>(self, url: U) -> ProtResult<Client>
     where
-        U: TryInto<Url>,
+        Url: TryFrom<U>,
+        <Url as TryFrom<U>>::Error: Into<WebError>,
     {
         let url = TryInto::<Url>::try_into(url)
             .map_err(|_e| ProtError::Extension("unknown connection url"))?;
@@ -241,13 +247,13 @@ impl Builder {
 
 }
 
-#[derive(Clone, Debug)]
 pub struct ClientOption {
     http2_only: bool,
     http2: bool,
     settings: Settings,
     timeout: Option<TimeoutLayer>,
     proxies: Vec<ProxyScheme>,
+    middles: Vec<Box<dyn Middleware>>,
 }
 
 impl ClientOption {
@@ -278,6 +284,7 @@ impl Default for ClientOption {
             settings: Default::default(),
             timeout: None,
             proxies: vec![],
+            middles: vec![Box::new(BaseMiddleware::new(true))],
         }
     }
 }
@@ -285,7 +292,7 @@ impl Default for ClientOption {
 pub struct Client<T=TcpStream>
 {
     option: ClientOption,
-    sender: Sender<ProtResult<RecvResponse> >,
+    sender: Sender<ProtResult<RecvResponse>>,
     receiver: Option<Receiver<ProtResult<RecvResponse>>>,
     req_receiver: Option<Receiver<RecvRequest>>,
     http1: Option<ClientH1Connection<MaybeHttpsStream<T>>>,
@@ -358,9 +365,12 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
         Ok((self.receiver.take().unwrap(), sender))
     }
 
-    fn send_req(&mut self, mut req: RecvRequest) -> ProtResult<()> {
+    async fn send_req(&mut self, mut req: RecvRequest) -> ProtResult<()> {
         if let Some(proxy) = &self.proxy {
             proxy.fix_request(&mut req)?;
+        }
+        for i in 0usize .. self.option.middles.len() {
+            self.option.middles[i].process_request(&mut req).await?;
         }
         if let Some(h) = &mut self.http1 {
             h.send_request(req)?;
@@ -368,6 +378,10 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
             h.send_request(req)?;
         }
         Ok(())
+    }
+    
+    pub fn middle<M: Middleware + 'static>(&mut self, middle: M) {
+        self.option.middles.push(Box::new(middle));
     }
 
     pub async fn wait_operate(mut self) -> ProtResult<()> {
@@ -422,7 +436,7 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
                 }
                 req = req_receiver(&mut self.req_receiver) => {
                     if let Some(req) = req {
-                        self.send_req(req)?;
+                        self.send_req(req).await?;
                     } else {
                         self.req_receiver = None;
                     }
@@ -463,7 +477,7 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
     }
 
     async fn inner_operate(mut self, req: RecvRequest) -> ProtResult<()> {
-        self.send_req(req)?;
+        self.send_req(req).await?;
         self.wait_operate().await?;
         Ok(())
     }

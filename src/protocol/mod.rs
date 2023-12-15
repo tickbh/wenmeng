@@ -19,14 +19,14 @@ mod header_helper;
 mod http_helper;
 mod stream;
 
-mod recv_stream;
+mod body;
 mod send_stream;
 mod consts;
 mod layer;
 mod middle;
 mod proxy;
 
-pub use self::recv_stream::RecvStream;
+pub use self::body::Body;
 pub use self::send_stream::SendStream;
 pub use self::stream::MaybeHttpsStream;
 

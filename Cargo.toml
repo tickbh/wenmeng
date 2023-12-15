@@ -31,15 +31,15 @@ serde_yaml = "0.9"
 flate2 = "1.0"
 brotli = "3.4.0"
 
-webparse="0.2.2"
 toml="0.8.2"
 async-trait = "0.1.74"
 # async-compression = {version="0.4.3", features=["all"]}
 
 #"tokio", "brotli", "deflate", "gzip"
 
-# [dependencies.webparse]
-# path="../webparse"
+# webparse="0.2.2"
+[dependencies.webparse]
+path="../webparse"
 
 [dev-dependencies]
 serde = "1.0"

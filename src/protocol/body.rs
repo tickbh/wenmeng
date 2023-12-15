@@ -245,7 +245,7 @@ impl InnerDecompress {
 }
 
 #[derive(Debug)]
-pub struct RecvStream {
+pub struct Body {
     receiver: InnerReceiver,
     sem: PollSemaphore,
     permit: Option<OwnedSemaphorePermit>,
@@ -263,7 +263,7 @@ pub struct RecvStream {
     rate_limit: Option<RateLimitLayer>,
 }
 
-impl Default for RecvStream {
+impl Default for Body {
     fn default() -> Self {
         Self {
             receiver: InnerReceiver::new(),
@@ -288,8 +288,8 @@ impl Default for RecvStream {
     }
 }
 
-impl RecvStream {
-    pub fn empty() -> RecvStream {
+impl Body {
+    pub fn empty() -> Body {
         Default::default()
     }
 
@@ -310,15 +310,22 @@ impl RecvStream {
         println!("rate_limit = {:?}", std::mem::size_of_val(&self.rate_limit));
     }
 
-    pub fn only(binary: Binary) -> RecvStream {
-        RecvStream {
+    pub fn only(binary: Binary) -> Body {
+        Body {
             origin_buf: Some(BinaryMut::from(binary)),
             ..Default::default()
         }
     }
+    
+    pub fn new_binary(binary: BinaryMut) -> Body {
+        Body {
+            origin_buf: Some(binary),
+            ..Default::default()
+        }
+    }
 
-    pub fn new(receiver: Receiver<(bool, Binary)>, binary: BinaryMut, is_end: bool) -> RecvStream {
-        RecvStream {
+    pub fn new(receiver: Receiver<(bool, Binary)>, binary: BinaryMut, is_end: bool) -> Body {
+        Body {
             receiver: InnerReceiver::new_receiver(receiver),
             origin_buf: Some(binary),
             is_end,
@@ -326,10 +333,17 @@ impl RecvStream {
         }
     }
 
-    pub fn new_file(file: File, data_size: u64) -> RecvStream {
-        RecvStream {
+    pub fn new_file(file: File, data_size: u64) -> Body {
+        Body {
             receiver: InnerReceiver::new_file(file, data_size),
             is_end: false,
+            ..Default::default()
+        }
+    }
+
+    pub fn new_text(text: String) -> Self {
+        Body {
+            origin_buf: Some(BinaryMut::from(text)),
             ..Default::default()
         }
     }
@@ -843,7 +857,7 @@ impl RecvStream {
     }
 }
 
-impl AsyncRead for RecvStream {
+impl AsyncRead for Body {
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -858,7 +872,7 @@ impl AsyncRead for RecvStream {
     }
 }
 
-impl Serialize for RecvStream {
+impl Serialize for Body {
     fn serialize<B: webparse::Buf + webparse::BufMut>(
         &mut self,
         buffer: &mut B,
@@ -885,59 +899,59 @@ impl Serialize for RecvStream {
     }
 }
 
-unsafe impl Sync for RecvStream {}
+unsafe impl Sync for Body {}
 
-unsafe impl Send for RecvStream {}
+unsafe impl Send for Body {}
 
-impl From<()> for RecvStream {
+impl From<()> for Body {
     fn from(_: ()) -> Self {
-        RecvStream::empty()
+        Body::empty()
     }
 }
 
-impl From<&str> for RecvStream {
+impl From<&str> for Body {
     fn from(value: &str) -> Self {
         let bin = Binary::from(value.as_bytes().to_vec());
-        RecvStream::only(bin)
+        Body::only(bin)
     }
 }
 
-impl From<Binary> for RecvStream {
+impl From<Binary> for Body {
     fn from(value: Binary) -> Self {
-        RecvStream::only(value)
+        Body::only(value)
     }
 }
 
-impl From<String> for RecvStream {
+impl From<String> for Body {
     fn from(value: String) -> Self {
         let bin = Binary::from(value.into_bytes().to_vec());
-        RecvStream::only(bin)
+        Body::only(bin)
     }
 }
 
-impl From<Vec<u8>> for RecvStream {
+impl From<Vec<u8>> for Body {
     fn from(value: Vec<u8>) -> Self {
         let bin = Binary::from(value);
-        RecvStream::only(bin)
+        Body::only(bin)
     }
 }
 
-impl From<RecvStream> for Vec<u8> {
-    fn from(mut value: RecvStream) -> Self {
+impl From<Body> for Vec<u8> {
+    fn from(mut value: Body) -> Self {
         let bin = value.read_now();
         bin.into_slice_all()
     }
 }
 
-impl From<RecvStream> for String {
-    fn from(mut value: RecvStream) -> Self {
+impl From<Body> for String {
+    fn from(mut value: Body) -> Self {
         let bin = value.read_now();
         let v = bin.into_slice_all();
         String::from_utf8_lossy(&v).to_string()
     }
 }
 
-impl Display for RecvStream {
+impl Display for Body {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.is_end {
             let bin = self.copy_now();

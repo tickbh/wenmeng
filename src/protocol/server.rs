@@ -23,7 +23,7 @@ use tokio::{
 use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize, Version, BinaryMut};
 
 use crate::{
-    ProtError, ProtResult, RecvRequest, RecvStream, ServerH2Connection, TimeoutLayer, OperateTrait, Middleware,
+    ProtError, ProtResult, RecvRequest, Body, ServerH2Connection, TimeoutLayer, OperateTrait, Middleware,
 };
 use super::http1::ServerH1Connection;
 
@@ -252,15 +252,15 @@ where
         stream_id: Option<StreamIdentifier>,
     ) -> ProtResult<()>
     where
-        RecvStream: From<R>,
+        Body: From<R>,
         R: Serialize,
     {
         let _result = if let Some(h1) = &mut self.http1 {
-            h1.send_response(res.into_type::<RecvStream>()).await?;
+            h1.send_response(res.into_type::<Body>()).await?;
         } else if let Some(h2) = &mut self.http2 {
             if let Some(stream_id) = stream_id {
-                let _recv = RecvStream::only(Binary::new());
-                let res = res.into_type::<RecvStream>();
+                let _recv = Body::only(Binary::new());
+                let res = res.into_type::<Body>();
                 h2.send_response(res, stream_id).await?;
             }
         };
@@ -270,10 +270,10 @@ where
 
     pub async fn req_into_type<Req>(mut r: RecvRequest) -> Request<Req>
     where
-        Req: From<RecvStream>,
+        Req: From<Body>,
         Req: Serialize + Any,
     {
-        if TypeId::of::<Req>() == TypeId::of::<RecvStream>() {
+        if TypeId::of::<Req>() == TypeId::of::<Body>() {
             r.into_type::<Req>()
         } else {
             if !r.body().is_end() {
@@ -285,7 +285,7 @@ where
 
     pub async fn try_wait_req<Req>(r: &mut RecvRequest) -> ProtResult<()>
     where
-        Req: From<RecvStream>,
+        Req: From<Body>,
         Req: Serialize,
     {
         if !r.body().is_end() {
