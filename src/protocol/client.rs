@@ -140,6 +140,15 @@ impl Builder {
         Url: TryFrom<U>,
         <Url as TryFrom<U>>::Error: Into<WebError>,
     {
+        self.connect_with_domain(url, "").await
+    }
+
+    
+    pub async fn connect_with_domain<U>(self, url: U, domain: &str) -> ProtResult<Client>
+    where
+        Url: TryFrom<U>,
+        <Url as TryFrom<U>>::Error: Into<WebError>,
+    {
         let url = TryInto::<Url>::try_into(url)
             .map_err(|_e| ProtError::Extension("unknown connection url"))?;
 
@@ -149,7 +158,7 @@ impl Builder {
                     Some(tcp) => {
                         
                         if url.scheme.is_https() {
-                            return self.connect_tls_by_stream(tcp, url).await;
+                            return self.connect_tls_by_stream_with_domain(tcp, url, domain).await;
                         } else {
                             let proxy = p.clone();
                             let mut client = Client::new(self.inner, MaybeHttpsStream::Http(tcp));
@@ -168,7 +177,7 @@ impl Builder {
                     match p.connect(&url).await? {
                         Some(tcp) => {
                             if url.scheme.is_https() {
-                                return self.connect_tls_by_stream(tcp, url).await;
+                                return self.connect_tls_by_stream_with_domain(tcp, url, domain).await;
                             } else {
                                 let proxy = p.clone();
                                 let mut client = Client::new(self.inner, MaybeHttpsStream::Http(tcp));
@@ -183,7 +192,7 @@ impl Builder {
             if url.scheme.is_https() {
                 let connect = url.get_connect_url();
                 let stream = self.inner_connect(&connect.unwrap()).await?;
-                self.connect_tls_by_stream(stream, url).await
+                self.connect_tls_by_stream_with_domain(stream, url, domain).await
             } else {
                 let tcp = self.inner_connect(url.get_connect_url().unwrap()).await?;
                 Ok(Client::new(self.inner, MaybeHttpsStream::Http(tcp)))
@@ -200,6 +209,19 @@ impl Builder {
     where
         T: TryInto<Url>,
     {
+        self.connect_tls_by_stream_with_domain(stream, url, "").await
+    }
+
+
+    pub async fn connect_tls_by_stream_with_domain<T>(
+        self,
+        stream: TcpStream,
+        url: T,
+        domain: &str,
+    ) -> ProtResult<Client>
+    where
+        T: TryInto<Url>,
+    {
         let mut option = self.inner;
         let url = TryInto::<Url>::try_into(url);
         if url.is_err() {
@@ -207,10 +229,15 @@ impl Builder {
         } else {
             let url = url.ok().unwrap();
             let connect = url.get_connect_url();
-            let domain = url.domain;
-            if domain.is_none() || connect.is_none() {
-                return Err(ProtError::Extension("unknown connection domain"));
-            }
+            let name = if domain.len() > 0 {
+                domain
+            } else {
+                if url.domain.is_none() || connect.is_none() {
+                    return Err(ProtError::Extension("unknown connection domain"));
+                } else {
+                    &*url.domain.as_ref().unwrap()
+                }
+            };
             let mut root_store = RootCertStore::empty();
             root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
                 rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
@@ -228,23 +255,20 @@ impl Builder {
             let connector = TlsConnector::from(tls_client);
 
             // 这里的域名只为认证设置
-            let domain = rustls::ServerName::try_from(&*domain.unwrap())
+            let domain = rustls::ServerName::try_from(name)
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
 
             let outbound = connector.connect(domain, stream).await?;
             let aa = outbound.get_ref().1.alpn_protocol();
-            if aa.is_none() {
-                return Err(ProtError::Extension("not support protocol"));
-            }
-
             if aa == Some(&ClientOption::H2_PROTOCOL) {
                 option.http2_only = true;
+            } else {
+                option.http2 = true;
+                option.http2_only = false;
             }
-
             Ok(Client::new(option, MaybeHttpsStream::Https(outbound)))
         }
     }
-
 }
 
 pub struct ClientOption {

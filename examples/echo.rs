@@ -94,20 +94,10 @@ async fn run_main() -> Result<(), Box<dyn Error>> {
 }
 
 
-fn main() {
+#[tokio::main]
+async fn main() {
     env_logger::init();
-    use tokio::runtime::Builder;
-    let runtime = Builder::new_multi_thread()
-        .enable_io()
-        .worker_threads(4)
-        .enable_time()
-        .thread_name("wmproxy")
-        .thread_stack_size((1.2 * 1024f32 * 1024f32) as usize)
-        .build()
-        .unwrap();
-    runtime.block_on(async {
-        if let Err(e) = run_main().await {
-            println!("运行wmproxy发生错误:{:?}", e);
-        }
-    })
+    if let Err(e) = run_main().await {
+        println!("运行wmproxy发生错误:{:?}", e);
+    }
 }
