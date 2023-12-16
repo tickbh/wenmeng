@@ -14,7 +14,7 @@ use crate::{Middleware, HeaderHelper};
 
 use async_trait::async_trait;
 
-use crate::{ProtError, ProtResult, RecvRequest, RecvResponse};
+use crate::{ProtResult, RecvRequest, RecvResponse};
 
 pub struct BaseMiddleware {
     is_client: bool,

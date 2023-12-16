@@ -53,12 +53,12 @@ fn main() {
         
     // }
 
-    let x = 1;
+    let _x = 1;
     // For some reason this does not print zero =/
     println!("memory used: {} bytes", GLOBAL.get());
-    let y = vec![1, 2, 3, 4];
+    let _y = vec![1, 2, 3, 4];
     println!("memory used: {} bytes", GLOBAL.get());
-    let z = Box::new(3u64);
+    let _z = Box::new(3u64);
     println!("memory used: {} bytes", GLOBAL.get());
 
     let x = 4_u32;
@@ -71,7 +71,7 @@ fn main() {
         println!("Couldn't get the current memory usage :(");
     }
     
-    let value1 = vec![10;1024000];
+    let _value1 = vec![10;1024000];
     
     std::thread::sleep(std::time::Duration::from_secs(1));
 
@@ -93,7 +93,7 @@ fn main() {
         println!("Couldn't get the current memory usage :(");
     }
 
-    let val = Box::new(value);
+    let _val = Box::new(value);
     
     std::thread::sleep(std::time::Duration::from_secs(1));
     if let Some(usage) = memory_stats() {

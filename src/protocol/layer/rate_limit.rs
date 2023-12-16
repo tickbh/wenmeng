@@ -12,7 +12,7 @@
 
 use std::fmt::Display;
 use std::future::Future;
-use std::str::FromStr;
+
 use std::{
     io,
     pin::Pin,

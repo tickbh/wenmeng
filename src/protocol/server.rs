@@ -1,31 +1,35 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/14 09:42:25
 
 use std::{
     any::{Any, TypeId},
+    future::poll_fn,
     net::SocketAddr,
-    time::Duration, future::poll_fn,
+    time::Duration,
 };
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::{TcpStream},
+    net::TcpStream,
 };
-use webparse::{http::http2::frame::StreamIdentifier, Binary, Request, Response, Serialize, Version, BinaryMut};
+use webparse::{
+    http::http2::frame::StreamIdentifier, Binary, BinaryMut, Request, Response, Serialize,
+};
 
+use super::{http1::ServerH1Connection, middle::BaseMiddleware};
 use crate::{
-    ProtError, ProtResult, RecvRequest, Body, ServerH2Connection, TimeoutLayer, OperateTrait, Middleware,
+    Body, Middleware, OperateTrait, ProtError, ProtResult, RecvRequest, ServerH2Connection,
+    TimeoutLayer,
 };
-use super::http1::ServerH1Connection;
 
 pub struct Builder {
     inner: ServerOption,
@@ -107,11 +111,21 @@ impl Builder {
     }
 }
 
-#[derive(Default)]
+// #[derive(Default)]
 pub struct ServerOption {
     addr: Option<SocketAddr>,
     timeout: Option<TimeoutLayer>,
     middles: Vec<Box<dyn Middleware>>,
+}
+
+impl Default for ServerOption {
+    fn default() -> Self {
+        Self {
+            addr: Default::default(),
+            timeout: Default::default(),
+            middles: vec![Box::new(BaseMiddleware::new(false))],
+        }
+    }
 }
 
 pub struct Server<T>
@@ -153,7 +167,7 @@ where
 
 impl<T> Server<T>
 where
-    T: AsyncRead + AsyncWrite + Unpin
+    T: AsyncRead + AsyncWrite + Unpin,
 {
     pub fn new_by_cache(io: T, addr: Option<SocketAddr>, binary: BinaryMut) -> Self {
         Self {
@@ -237,7 +251,7 @@ where
             http.set_timeout_layer(timeout);
         }
     }
-    
+
     pub fn middle<M: Middleware + 'static>(&mut self, middle: M) {
         self.middles.push(Box::new(middle));
     }
@@ -327,7 +341,7 @@ where
                     }
                 }
                 Err(e) => {
-                    for i in 0usize .. self.middles.len() {
+                    for i in 0usize..self.middles.len() {
                         self.middles[i].process_error(None, &e).await;
                     }
                     return Err(e);
@@ -336,24 +350,18 @@ where
             };
             if self.req_num >= self.max_req_num {
                 self.flush().await?;
-                return Ok(Some(true))
+                return Ok(Some(true));
             }
         }
     }
 
-    
-    pub async fn flush(&mut self) -> ProtResult<()>
-    {
+    pub async fn flush(&mut self) -> ProtResult<()> {
         if let Some(h1) = &mut self.http1 {
-            let _ = poll_fn(|cx| {
-                h1.poll_write(cx)
-            }).await;
+            let _ = poll_fn(|cx| h1.poll_write(cx)).await;
         } else if let Some(h2) = &mut self.http2 {
-            let _ = poll_fn(|cx| {
-                h2.poll_write(cx)
-            }).await;
+            let _ = poll_fn(|cx| h2.poll_write(cx)).await;
         };
-        return Ok(())
+        return Ok(());
     }
 
     pub fn set_max_req(&mut self, num: usize) {

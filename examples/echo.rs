@@ -1,9 +1,9 @@
 use std::{env, error::Error, time::Duration};
 use async_trait::async_trait;
 
-use tokio::{net::TcpListener, sync::mpsc::channel};
-use webparse::{Response, http2::frame::Settings};
-use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, OperateTrait, Middleware, http2::{Control, ControlConfig}, Body};
+use tokio::{net::TcpListener};
+use webparse::{Response};
+use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, OperateTrait, Middleware, Body};
 
 // #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -38,7 +38,7 @@ impl Middleware for HelloMiddleware {
 
 async fn run_main() -> Result<(), Box<dyn Error>> {
     // 在main函数最开头调用这个方法
-    let file_name = format!("heap-{}.json", std::process::id());
+    let _file_name = format!("heap-{}.json", std::process::id());
     // let _profiler = dhat::Profiler::builder().file_name(file_name).build();
     //
     // let _profiler = dhat::Profiler::new_heap();

@@ -1,22 +1,20 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/10/16 09:44:12
 
-use std::{
-    net::SocketAddr,
-};
+use std::net::SocketAddr;
 
 use webparse::{HeaderName, Response, Version};
 
-use crate::{ProtResult, RecvRequest, RecvResponse, Body, OperateTrait, Middleware};
+use crate::{Middleware, OperateTrait, ProtResult, RecvRequest, RecvResponse};
 
 pub struct HttpHelper;
 
@@ -26,7 +24,7 @@ impl HttpHelper {
         addr: &Option<SocketAddr>,
         mut r: RecvRequest,
         f: &mut F,
-        middles: &mut Vec<Box<dyn Middleware>>
+        middles: &mut Vec<Box<dyn Middleware>>,
     ) -> ProtResult<RecvResponse>
     where
         F: OperateTrait + Send,
@@ -66,21 +64,29 @@ impl HttpHelper {
                 Ok(mut res) => {
                     *res.version_mut() = version;
                     // 如果外部有设置编码，内部不做改变，如果有body大小值，不做任何改变，因为改变会变更大小值
-                    // if res.get_body_len() == 0 && res.headers_mut().get_option_value(&HeaderName::CONTENT_ENCODING).is_none() && (!res.body().is_end() || res.body_mut().origin_len() > 1024) {
-                    //     if gzip {
-                    //         res.headers_mut().insert(HeaderName::CONTENT_ENCODING, "gzip");
-                    //     } else if br {
-                    //         res.headers_mut().insert(HeaderName::CONTENT_ENCODING, "br");
-                    //     } else if deflate {
-                    //         res.headers_mut().insert(HeaderName::CONTENT_ENCODING, "deflate");
-                    //     }
-                    // }
+                    if res.get_body_len() == 0
+                        && res
+                            .headers_mut()
+                            .get_option_value(&HeaderName::CONTENT_ENCODING)
+                            .is_none()
+                        && (!res.body().is_end() || res.body_mut().origin_len() > 1024)
+                    {
+                        if gzip {
+                            res.headers_mut()
+                                .insert(HeaderName::CONTENT_ENCODING, "gzip");
+                        } else if br {
+                            res.headers_mut().insert(HeaderName::CONTENT_ENCODING, "br");
+                        } else if deflate {
+                            res.headers_mut()
+                                .insert(HeaderName::CONTENT_ENCODING, "deflate");
+                        }
+                    }
                     // HeaderHelper::process_response_header(&mut res)?;
                     res
                 }
                 Err(e) => {
                     log::info!("处理数据时出错:{:?}", e);
-                    for i in 0usize .. middles.len() {
+                    for i in 0usize..middles.len() {
                         middles[i].process_error(Some(&mut r), &e).await;
                     }
                     Response::builder()
@@ -93,7 +99,7 @@ impl HttpHelper {
             response = Some(res);
         }
         let mut response = response.unwrap();
-        for i in (0usize .. middles.len()).rev() {
+        for i in (0usize..middles.len()).rev() {
             middles[i].process_response(&mut r, &mut response).await?;
         }
         Ok(response)

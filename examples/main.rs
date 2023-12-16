@@ -9,10 +9,10 @@ extern crate serde_derive;
 use std::{
     env,
     error::Error,
-    io::{Read, self}, net::SocketAddr,
+    io::{self}, net::SocketAddr,
 };
 use tokio::{
-    net::{TcpListener, TcpStream}, io::AsyncReadExt, fs::File,
+    net::{TcpListener, TcpStream}, fs::File,
 };
 
 use wenmeng::{self, ProtResult, Body, Server, RecvRequest, RecvResponse, OperateTrait};

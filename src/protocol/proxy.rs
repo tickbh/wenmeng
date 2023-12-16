@@ -16,7 +16,7 @@ use std::{net::SocketAddr, env, collections::HashSet, fmt::Display};
 use tokio::{net::TcpStream, io::{AsyncRead, AsyncWrite}};
 use webparse::{Url, HeaderValue, BinaryMut, Scheme};
 
-use crate::{ProtError, ProtResult, MaybeHttpsStream, RecvRequest};
+use crate::{ProtError, ProtResult, RecvRequest};
 
 
 

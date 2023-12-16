@@ -355,7 +355,7 @@ where
                 }
 
                 let (mut recv, sender) =
-                    Self::build_recv_stream(&mut self.inner.req_status, &mut self.send_stream)?;
+                    Self::build_body(&mut self.inner.req_status, &mut self.send_stream)?;
                 recv.set_origin_compress_method(method);
                 if recv.is_end() {
                     self.inner.req_status.clear_read();
@@ -480,7 +480,7 @@ where
                     }
                 }
                 let (mut recv, sender) =
-                    Self::build_recv_stream(&mut self.inner.res_status, &mut self.send_stream)?;
+                    Self::build_body(&mut self.inner.res_status, &mut self.send_stream)?;
 
                 HeaderHelper::process_headers(
                     Version::Http11,
@@ -497,7 +497,7 @@ where
         }
     }
 
-    fn build_recv_stream(
+    fn build_body(
         status: &mut SendStatus,
         send_stream: &mut SendStream,
     ) -> ProtResult<(Body, Option<Sender<(bool, Binary)>>)> {

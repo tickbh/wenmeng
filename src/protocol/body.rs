@@ -29,7 +29,7 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, ReadBuf},
     sync::{mpsc::Receiver, OwnedSemaphorePermit, Semaphore},
 };
-use webparse::{Binary, BinaryMut, Buf, BufMut, Helper, Serialize, WebResult};
+use webparse::{Binary, BinaryMut, Buf, Helper, Serialize, WebResult};
 
 use crate::Consts;
 
@@ -244,7 +244,6 @@ impl InnerDecompress {
     }
 }
 
-#[derive(Debug)]
 pub struct Body {
     receiver: InnerReceiver,
     sem: PollSemaphore,
@@ -716,58 +715,6 @@ impl Body {
         return Poll::Ready(Ok(has_change));
     }
 
-    // /// 返回true表示需要等待, 否则继续执行
-    // fn inner_decode_data(&mut self) -> webparse::WebResult<bool> {
-    //     // 无数据
-    //     if self.read_buf.is_none() {
-    //         return Ok(true)
-    //     }
-    //     // 原始的压缩方式不为空, 表示数据可能需要处理
-    //     if self.origin_compress_method != Consts::COMPRESS_METHOD_NONE {
-    //         // 数据方式与原有的一模一样, 不做处理
-    //         if self.origin_compress_method == self.now_compress_method {
-    //             return Ok(false)
-    //         }
-    //         // 数据结束前不做解压缩操作, 后续也不可读
-    //         if !self.is_end {
-    //             return Ok(true)
-    //         }
-    //         let _size = match self.origin_compress_method {
-    //             Consts::COMPRESS_METHOD_GZIP => {
-    //                 self.decompress.open_reader_gz();
-    //                 let gz = self.decompress.reader_gz.as_mut().unwrap();
-    //                 let mut read_buf = BinaryMut::new();
-    //                 let s = read_all_data(&mut read_buf, gz)?;
-    //                 self.read_buf = Some(read_buf);
-    //                 s
-    //             },
-    //             Consts::COMPRESS_METHOD_DEFLATE => {
-    //                 self.decompress.open_reader_de();
-    //                 let de = self.decompress.reader_de.as_mut().unwrap();
-    //                 let mut read_buf = BinaryMut::new();
-    //                 let s = read_all_data(&mut read_buf, de)?;
-    //                 self.read_buf = Some(read_buf);
-    //                 s
-    //             },
-    //             Consts::COMPRESS_METHOD_BROTLI => {
-    //                 self.decompress.open_reader_br();
-    //                 let br = self.decompress.reader_br.as_mut().unwrap();
-    //                 let mut read_buf = BinaryMut::new();
-    //                 let s = read_all_data(&mut read_buf, br)?;
-    //                 self.read_buf = Some(read_buf);
-    //                 s
-    //             },
-    //             _ => {
-    //                 return Err(WebError::Extension("未知的压缩格式"));
-    //             }
-    //         };
-    //         self.origin_compress_method = Consts::COMPRESS_METHOD_NONE;
-    //         self.notify_some_read();
-    //     }
-
-    //     Ok(false)
-    // }
-
     /// 返回true表示需要等待, 否则继续执行
     fn decode_read_data(&mut self, data: &[u8])  -> std::io::Result<usize> {
         if self.read_buf.is_none() {
@@ -882,19 +829,6 @@ impl Serialize for Body {
             size += buffer.put_slice(bin.chunk());
             self.notify_some_read();
         }
-        // if !self.is_end {
-        //     loop {
-        //         match self.receiver.try_recv() {
-        //             Some((is_end, mut bin)) => {
-        //                 size += bin.serialize(buffer)?;
-        //                 self.is_end = is_end;
-        //             }
-        //             None => {
-        //                 return Ok(size);
-        //             }
-        //         }
-        //     }
-        // }
         Ok(size)
     }
 }
@@ -911,8 +845,8 @@ impl From<()> for Body {
 
 impl From<&str> for Body {
     fn from(value: &str) -> Self {
-        let bin = Binary::from(value.as_bytes().to_vec());
-        Body::only(bin)
+        let bin = BinaryMut::from(value.as_bytes().to_vec());
+        Body::new_binary(bin)
     }
 }
 
@@ -924,15 +858,15 @@ impl From<Binary> for Body {
 
 impl From<String> for Body {
     fn from(value: String) -> Self {
-        let bin = Binary::from(value.into_bytes().to_vec());
-        Body::only(bin)
+        let bin = BinaryMut::from(value.into_bytes().to_vec());
+        Body::new_binary(bin)
     }
 }
 
 impl From<Vec<u8>> for Body {
     fn from(value: Vec<u8>) -> Self {
-        let bin = Binary::from(value);
-        Body::only(bin)
+        let bin = BinaryMut::from(value);
+        Body::new_binary(bin)
     }
 }
 
@@ -964,5 +898,11 @@ impl Display for Body {
             }
             f.finish()
         }
+    }
+}
+
+impl Debug for Body {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}", self))
     }
 }

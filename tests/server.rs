@@ -1,3 +1,15 @@
+// Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
+// file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+//
+// Author: tickbh
+// -----
+// Created Date: 2023/12/15 10:57:42
+
 // #![deny(warnings)]
 #![deny(rust_2018_idioms)]
 
@@ -6,17 +18,15 @@ mod tests {
     use async_trait::async_trait;
     use serde::Serialize;
     use std::{
-        env,
         error::Error,
-        io::{self, Read},
+        io::{self},
         net::SocketAddr,
     };
     use tokio::{
         fs::File,
-        io::AsyncReadExt,
         net::{TcpListener, TcpStream},
     };
-    use webparse::{BinaryMut, Buf, HeaderName, Request, Response, Version, Method};
+    use webparse::{BinaryMut, Buf, Request, Response, Version};
 
     use wenmeng::{
         self, Body, Client, OperateTrait, ProtResult, RecvRequest, RecvResponse, Server,
@@ -34,16 +44,12 @@ mod tests {
                     Body::new_text("Hello, World!".to_string())
                 }
                 "/post" => {
-                    if let Some(value) = req.headers().get_option_value(&HeaderName::CONTENT_LENGTH) {
-                        println!("value = {:?}", value.as_string());
-                    }
                     let body = req.body_mut();
                     let mut binary = BinaryMut::new();
                     body.read_all(&mut binary).await.unwrap();
-                    println!("binary = {:?}", binary.remaining());
+                    // println!("binary = {:?}", binary.remaining());
                     builder = builder.header("content-type", "text/plain");
                     Body::new_binary(binary)
-                    // format!("Hello, World! {:?}", TryInto::<String>::try_into(binary)).to_string()
                 }
                 "/json" => {
                     builder = builder.header("content-type", "application/json");
@@ -51,7 +57,7 @@ mod tests {
                     struct Message {
                         message: &'static str,
                     }
-                    Body::new_text(
+                    Body::from(
                         serde_json::to_string(&Message {
                             message: "Hello, World!",
                         })
@@ -69,17 +75,7 @@ mod tests {
                     Body::empty()
                 }
             };
-
-            // if body.is_end() {
-            //     builder = builder.header("Content-Length", body.origin_len());
-            //     println!("length = {}", body.origin_len());
-            // } else {
-            //     builder = builder.header(HeaderName::TRANSFER_ENCODING, "chunked");
-            // }
-
             let response = builder
-                // .header("Content-Length", length as usize)
-                // .header(HeaderName::TRANSFER_ENCODING, "chunked")
                 .body(body)
                 .map_err(|_err| io::Error::new(io::ErrorKind::Other, ""))?;
             Ok(response)

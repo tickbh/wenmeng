@@ -18,7 +18,7 @@ use std::{
 use tokio_stream::Stream;
 
 use tokio::{io::{AsyncRead, AsyncWrite}};
-use webparse::{Binary, http2::{HTTP2_MAGIC, frame::Settings}, Buf};
+use webparse::{Binary, http2::{HTTP2_MAGIC, frame::Settings}};
 
 use crate::{ProtResult, http2::ClientH2Connection, TimeoutLayer, RecvResponse, RecvRequest};
 

@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2023/09/12 02:36:35
 
-use std::time::{Duration, Instant};
+use std::time::{Instant};
 use webparse::{HeaderName, Request};
 use wenmeng::{Client, ProtResult};
 
