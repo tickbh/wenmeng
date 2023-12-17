@@ -55,7 +55,7 @@ impl SendRequest {
         headers.insert(":method", request.method().as_str().to_string());
         headers.insert(":path", request.path().clone());
         let scheme = request.scheme().as_str().to_string();
-        let authority = request.get_host().unwrap_or(String::new());
+        let authority = request.get_connect_url().unwrap_or(String::new());
         if !scheme.is_empty() {
             headers.insert(":scheme", scheme);
         }
