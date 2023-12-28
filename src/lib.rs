@@ -22,11 +22,18 @@ use async_trait::async_trait;
 
 #[async_trait]
 pub trait OperateTrait {
+    /// 处理请求并返回正确的数据
     async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse>;
     
+    /// 处理中间件的请求，跟中间件相关的处理
     async fn middle_operate(&mut self, req: &mut RecvRequest, middles: &mut Vec<Box<dyn Middleware>>) -> ProtResult<()> {
         let _req = req;
         let _middle = middles;
         Ok(())
+    }
+
+    /// 是否主动结束服务，返回false则表示服务暂停
+    fn is_continue_next(&self) -> bool {
+        true
     }
 }

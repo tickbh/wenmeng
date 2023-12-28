@@ -348,7 +348,7 @@ where
                 }
                 Ok(Some(true)) => return Ok(Some(true)),
             };
-            if self.req_num >= self.max_req_num {
+            if self.req_num >= self.max_req_num || !f.is_continue_next() {
                 self.flush().await?;
                 return Ok(Some(true));
             }

@@ -41,6 +41,7 @@ async fn test_http2() -> ProtResult<()> {
         req.get_connect_url(),
         Instant::now()
     );
+    
     let client = Client::builder()
         // .http2(false)
         // .http2_only(true)
