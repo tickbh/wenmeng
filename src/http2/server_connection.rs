@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/10/07 09:41:03
@@ -20,9 +20,7 @@ use tokio_stream::Stream;
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::{
-        mpsc::{channel, Receiver},
-    },
+    sync::mpsc::{channel, Receiver},
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
@@ -30,8 +28,8 @@ use webparse::{
 };
 
 use crate::{
-    protocol::{ProtError, ProtResult},
-    Builder, HeaderHelper, HttpHelper, Initiator, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait, Middleware,
+    Builder, HeaderHelper, HttpHelper, Initiator, Middleware, OperateTrait, ProtError, ProtResult,
+    RecvRequest, RecvResponse, TimeoutLayer,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -97,7 +95,7 @@ where
     }
 
     pub fn into_io(self) -> T {
-        self.codec.into_io()        
+        self.codec.into_io()
     }
 
     pub fn set_read_timeout(&mut self, read_timeout: Option<Duration>) {
@@ -142,10 +140,7 @@ where
         Poll::Pending
     }
 
-    pub fn poll_request(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtResult<RecvRequest>>> {
+    pub fn poll_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtResult<RecvRequest>>> {
         if self.timeout.is_some() {
             let (ready_time, is_read_end, is_write_end, is_idle) = (
                 *self.inner.control.get_ready_time(),
@@ -177,7 +172,7 @@ where
         addr: &Option<SocketAddr>,
         mut r: RecvRequest,
         f: &mut F,
-        middles: &mut Vec<Box<dyn Middleware>>
+        middles: &mut Vec<Box<dyn Middleware>>,
     ) -> ProtResult<Option<bool>>
     where
         F: OperateTrait + Send,
@@ -224,10 +219,7 @@ where
         return Ok(None);
     }
 
-    fn handle_poll_result(
-        &mut self,
-        result: Option<ProtResult<RecvRequest>>,
-    ) -> ProtResult<()> {
+    fn handle_poll_result(&mut self, result: Option<ProtResult<RecvRequest>>) -> ProtResult<()> {
         match result {
             // 收到空包, 则关闭连接
             None => {

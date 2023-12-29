@@ -23,7 +23,7 @@ use webparse::http::http2::{frame, Decoder};
 use webparse::http2::DEFAULT_SETTINGS_HEADER_TABLE_SIZE;
 use webparse::{Binary, BinaryMut, Buf};
 
-use crate::protocol::{ProtResult};
+use crate::ProtResult;
 
 
 

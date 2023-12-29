@@ -15,7 +15,7 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::http::http2::frame::{Ping, Frame};
 
-use crate::{protocol::http2::codec::Codec, ProtResult};
+use crate::{http2::codec::Codec, ProtResult};
 
 pub struct StatePingPong {
     ping: Option<Ping>,

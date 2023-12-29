@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2023/09/14 09:42:25
 
-use crate::{protocol::http2::codec::Codec, Builder, ProtError, ProtResult};
+use crate::{http2::codec::Codec, Builder, ProtError, ProtResult};
 
 use std::{
     io,

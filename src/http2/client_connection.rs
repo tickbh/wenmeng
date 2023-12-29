@@ -30,7 +30,7 @@ use webparse::{
 };
 
 use crate::{
-    protocol::{ProtError, ProtResult},
+    ProtError, ProtResult,
     Builder, Initiator, Body, TimeoutLayer, RecvResponse, RecvRequest,
 };
 

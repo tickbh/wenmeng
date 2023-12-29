@@ -10,9 +10,36 @@
 // -----
 // Created Date: 2023/08/31 10:06:46
 
-mod protocol;
+mod server;
+mod client;
+pub mod http1;
+pub mod http2;
+mod error;
+mod header_helper;
+mod http_helper;
+mod stream;
 
-pub use protocol::*;
+mod body;
+mod send_stream;
+mod consts;
+mod layer;
+mod middle;
+mod proxy;
+
+pub use self::body::Body;
+pub use self::send_stream::SendStream;
+pub use self::stream::MaybeHttpsStream;
+
+pub use self::client::{Client, ClientOption};
+pub use self::server::Server;
+pub use self::error::{ProtResult, ProtError, Initiator};
+pub use self::http2::{Builder, ServerH2Connection, StateHandshake, SendControl};
+pub use self::header_helper::HeaderHelper;
+pub use self::consts::Consts;
+pub use self::http_helper::HttpHelper;
+pub use self::layer::{RateLimitLayer, TimeoutLayer, Rate};
+pub use self::middle::Middleware;
+
 use webparse::{Request, Response};
 
 pub type RecvRequest = Request<Body>;

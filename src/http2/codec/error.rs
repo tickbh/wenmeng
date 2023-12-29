@@ -12,7 +12,7 @@
 
 use std::{error, fmt};
 
-use crate::protocol::ProtError;
+use crate::ProtError;
 
 /// Errors caused by sending a message
 #[derive(Debug)]
