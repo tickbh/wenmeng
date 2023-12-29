@@ -18,6 +18,7 @@ mod error;
 mod header_helper;
 mod http_helper;
 mod stream;
+pub mod ws;
 
 mod body;
 mod send_stream;
