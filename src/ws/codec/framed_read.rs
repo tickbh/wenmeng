@@ -23,7 +23,7 @@ use tokio_util::codec::LengthDelimitedCodec;
 use webparse::http::http2::frame::{Frame, Kind};
 use webparse::http::http2::{frame, Decoder};
 use webparse::http2::DEFAULT_SETTINGS_HEADER_TABLE_SIZE;
-use webparse::{Binary, BinaryMut, Buf, DataFrame};
+use webparse::{Binary, BinaryMut, Buf, DataFrame, OwnedMessage};
 
 use crate::ProtResult;
 
@@ -48,28 +48,8 @@ impl tokio_util::codec::Decoder for MyCodec {
 #[derive(Debug)]
 pub struct FramedRead<T> {
     inner: InnerFramedRead<T, MyCodec>,
+    caches: Vec<DataFrame>,
 
-    decoder: Decoder,
-
-    max_header_list_size: usize,
-
-    partial: Option<Partial>,
-}
-
-/// Partially loaded headers frame
-#[derive(Debug)]
-struct Partial {
-    /// Empty frame
-    frame: Continuable,
-
-    /// Partial header payload
-    buf: BinaryMut,
-}
-
-#[derive(Debug)]
-enum Continuable {
-    Headers(frame::Headers),
-    PushPromise(frame::PushPromise),
 }
 
 impl<T> FramedRead<T> {
@@ -86,12 +66,10 @@ impl<T> FramedRead<T>
 where
     T: AsyncRead + Unpin,
 {
-    fn new(delimited: InnerFramedRead<T, MyCodec>) -> FramedRead<T> {
+    pub fn new(io: T) -> FramedRead<T> {
         FramedRead {
-            inner: delimited,
-            decoder: Decoder::new(),
-            max_header_list_size: DEFAULT_SETTINGS_HEADER_TABLE_SIZE,
-            partial: None,
+            inner: InnerFramedRead::new(io, MyCodec),
+            caches: vec![],
         }
     }
 
@@ -128,7 +106,7 @@ impl<T> Stream for FramedRead<T>
 where
     T: AsyncRead + Unpin,
 {
-    type Item = ProtResult<DataFrame>;
+    type Item = ProtResult<OwnedMessage>;
 
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
@@ -141,50 +119,14 @@ where
                 None => return Poll::Ready(None),
             };
 
-            return Poll::Ready(Some(Ok(bytes)));
+            let is_finish = bytes.finished;
+            self.caches.push(bytes);
+            if is_finish {
+                let msg = OwnedMessage::from_dataframes(self.caches.drain(..).collect())?;
+                return Poll::Ready(Some(Ok(msg)));
+            } else {
+                return Poll::Pending;
+            }
         }
     }
 }
-
-fn decode_frame(
-    decoder: &mut Decoder,
-    max_header_list_size: usize,
-    partial_inout: &mut Option<Partial>,
-    bytes: BytesMut,
-) -> ProtResult<Option<Frame>> {
-    use bytes::Buf;
-    let span = tracing::trace_span!("FramedRead::decode_frame", offset = bytes.len());
-    let _e = span.enter();
-
-    let mut bytes = Binary::from(bytes.chunk().to_vec());
-
-    tracing::trace!("decoding frame from {}B", bytes.len());
-
-    // Parse the head
-    let head = frame::FrameHeader::parse(&mut bytes)?;
-
-    if partial_inout.is_some() && head.kind() != &Kind::Continuation {
-        // proto_err!(conn: "expected CONTINUATION, got {:?}", head.kind());
-        // return Err(Error::library_go_away(Reason::PROTOCOL_ERROR));
-    }
-
-    let _kind = head.kind();
-    let frame = Frame::parse(head, bytes, decoder, max_header_list_size)?;
-
-    Ok(Some(frame))
-}
-// /// Partially loaded headers frame
-// #[derive(Debug)]
-// struct Partial {
-//     /// Empty frame
-//     frame: Continuable,
-
-//     /// Partial header payload
-//     buf: BinaryMut,
-// }
-
-// #[derive(Debug)]
-// enum Continuable {
-//     Headers(FrameHeader),
-//     PushPromise(PushPromise),
-// }

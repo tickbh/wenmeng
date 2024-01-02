@@ -21,6 +21,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
+use tokio_stream::StreamExt;
 use webparse::{
     http::http2::frame::StreamIdentifier, Binary, BinaryMut, Request, Response, Serialize,
 };
@@ -348,6 +349,25 @@ where
                 }
                 Ok(Some(true)) => return Ok(Some(true)),
             };
+            if self.req_num >= self.max_req_num || !f.is_continue_next() {
+                self.flush().await?;
+                return Ok(Some(true));
+            }
+        }
+    }
+
+    
+    pub async fn incoming_ws<F>(&mut self, mut f: F) -> ProtResult<Option<bool>>
+    where
+        F: OperateTrait + Send,
+    {
+        loop {
+            let result = if let Some(h1) = &mut self.http1 {
+                h1.next().await
+            } else {
+                None
+            };
+            
             if self.req_num >= self.max_req_num || !f.is_continue_next() {
                 self.flush().await?;
                 return Ok(Some(true));
