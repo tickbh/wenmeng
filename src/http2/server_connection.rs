@@ -24,7 +24,7 @@ use tokio::{
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
-    Binary, BinaryMut, Version,
+    Binary, BinaryMut, Version, Request,
 };
 
 use crate::{
@@ -185,38 +185,36 @@ where
         return Ok(None);
     }
 
-    pub async fn incoming<F>(
+    pub async fn incoming(
         &mut self,
-        f: &mut F,
-        addr: &Option<SocketAddr>,
-        middles: &mut Vec<Box<dyn Middleware>>,
-    ) -> ProtResult<Option<bool>>
-    where
-        F: OperateTrait + Send,
+    ) -> ProtResult<Option<RecvRequest>>
     {
         use tokio_stream::StreamExt;
-        let mut receiver = self.inner.receiver_push.take().unwrap();
-        tokio::select! {
-            res = receiver.recv() => {
-                self.inner.receiver_push = Some(receiver);
-                if res.is_some() {
-                    let res = res.unwrap();
-                    let id = self.inner.control.next_stream_id();
-                    self.inner.control.send_response_may_push(res.1, res.0, Some(id)).await?;
-                }
-            },
-            req = self.next() => {
-                self.inner.receiver_push = Some(receiver);
-                match req {
-                    None => return Ok(Some(true)),
-                    Some(Err(e)) => return Err(e),
-                    Some(Ok(r)) => {
-                        self.handle_request(addr, r, f, middles).await?;
+        loop {
+            let mut receiver = self.inner.receiver_push.take().unwrap();
+            tokio::select! {
+                res = receiver.recv() => {
+                    self.inner.receiver_push = Some(receiver);
+                    if res.is_some() {
+                        let res = res.unwrap();
+                        let id = self.inner.control.next_stream_id();
+                        self.inner.control.send_response_may_push(res.1, res.0, Some(id)).await?;
+                    } else {
+                        return Ok(None);
                     }
-                };
+                },
+                req = self.next() => {
+                    self.inner.receiver_push = Some(receiver);
+                    match req {
+                        None => return Ok(None),
+                        Some(Err(e)) => return Err(e),
+                        Some(Ok(r)) => {
+                            return Ok(Some(r));
+                        }
+                    };
+                }
             }
         }
-        return Ok(None);
     }
 
     fn handle_poll_result(&mut self, result: Option<ProtResult<RecvRequest>>) -> ProtResult<()> {

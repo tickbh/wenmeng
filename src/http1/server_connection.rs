@@ -142,25 +142,19 @@ where
         return Ok(None);
     }
 
-    pub async fn incoming<F>(
+    pub async fn incoming(
         &mut self,
-        f: &mut F,
-        addr: &Option<SocketAddr>,
-        middles: &mut Vec<Box<dyn Middleware>>,
-    ) -> ProtResult<Option<bool>>
-    where
-        F: OperateTrait + Send,
+    ) -> ProtResult<Option<RecvRequest>>
     {
         let req = self.next().await;
 
         match req {
-            None => return Ok(Some(true)),
+            None => return Ok(None),
             Some(Err(e)) => return Err(e),
             Some(Ok(r)) => {
-                return self.handle_request(addr, r, f, middles).await;
+                return Ok(Some(r));
             }
         };
-        return Ok(Some(true));
     }
 
     pub async fn send_response(&mut self, res: RecvResponse) -> ProtResult<()> {

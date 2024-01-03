@@ -309,37 +309,69 @@ where
         Ok(())
     }
 
+    pub async fn handle_request<F>(&mut self, f: &mut F, r: RecvRequest) -> ProtResult<Option<bool>>
+    where
+        F: OperateTrait + Send,
+    {
+        let result = if let Some(h1) = &mut self.http1 {
+            h1.handle_request(&self.addr, r, f, &mut self.middles).await
+        } else if let Some(h2) = &mut self.http2 {
+            h2.handle_request(&self.addr, r, f, &mut self.middles).await
+        } else {
+            Ok(None)
+        };
+        return result;
+    }
+
+    async fn handle_upgrade_http2<F>(
+        &mut self,
+        f: &mut F,
+        result: crate::ProtError,
+    ) -> ProtResult<()>
+    where
+        F: OperateTrait + Send,
+    {
+        match result {
+            ProtError::ServerUpgradeHttp2(b, r) => {
+                if self.http1.is_some() {
+                    self.http2 = Some(self.http1.take().unwrap().into_h2(b));
+                    if let Some(r) = r {
+                        self.http2
+                            .as_mut()
+                            .unwrap()
+                            .handle_request(&self.addr, r, f, &mut self.middles)
+                            .await?;
+
+                        self.req_num = self.req_num.wrapping_add(1);
+                    }
+                    Ok(())
+                } else {
+                    return Err(ProtError::ServerUpgradeHttp2(b, r));
+                }
+            }
+            _ => return Err(result),
+        }
+    }
+
     pub async fn incoming<F>(&mut self, mut f: F) -> ProtResult<Option<bool>>
     where
         F: OperateTrait + Send,
     {
         loop {
             let result = if let Some(h1) = &mut self.http1 {
-                h1.incoming(&mut f, &self.addr, &mut self.middles).await
+                h1.incoming().await
             } else if let Some(h2) = &mut self.http2 {
-                h2.incoming(&mut f, &self.addr, &mut self.middles).await
+                h2.incoming().await
             } else {
-                Ok(Some(true))
+                Ok(None)
             };
             match result {
-                Ok(None) | Ok(Some(false)) => {
-                    self.req_num = self.req_num.wrapping_add(1);
+                Ok(None) => {
+                    self.flush().await?;
+                    return Ok(None);
                 }
-                Err(ProtError::ServerUpgradeHttp2(b, r)) => {
-                    if self.http1.is_some() {
-                        self.http2 = Some(self.http1.take().unwrap().into_h2(b));
-                        if let Some(r) = r {
-                            self.http2
-                                .as_mut()
-                                .unwrap()
-                                .handle_request(&self.addr, r, &mut f, &mut self.middles)
-                                .await?;
-
-                            self.req_num = self.req_num.wrapping_add(1);
-                        }
-                    } else {
-                        return Err(ProtError::ServerUpgradeHttp2(b, r));
-                    }
+                Err(e) if e.is_server_upgrade_http2() => {
+                    self.handle_upgrade_http2(&mut f, e).await?;
                 }
                 Err(e) => {
                     for i in 0usize..self.middles.len() {
@@ -347,7 +379,12 @@ where
                     }
                     return Err(e);
                 }
-                Ok(Some(true)) => return Ok(Some(true)),
+                Ok(Some(r)) => {
+                    self.req_num = self.req_num.wrapping_add(1);
+                    if let Err(e) = self.handle_request(&mut f, r).await {
+                        self.handle_upgrade_http2(&mut f, e).await?;
+                    }
+                }
             };
             if self.req_num >= self.max_req_num || !f.is_continue_next() {
                 self.flush().await?;
@@ -356,7 +393,6 @@ where
         }
     }
 
-    
     pub async fn incoming_ws<F>(&mut self, mut f: F) -> ProtResult<Option<bool>>
     where
         F: OperateTrait + Send,
@@ -367,7 +403,7 @@ where
             } else {
                 None
             };
-            
+
             if self.req_num >= self.max_req_num || !f.is_continue_next() {
                 self.flush().await?;
                 return Ok(Some(true));

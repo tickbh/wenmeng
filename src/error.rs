@@ -171,6 +171,13 @@ impl ProtError {
         }
     }
 
+    pub fn is_server_upgrade_http2(&self) -> bool {
+        match self {
+            Self::ServerUpgradeHttp2(_, _) => true,
+            _ => false,
+        }
+    }
+
     pub fn connect_timeout(val: &'static str) -> Self {
         Self::Timeout(TimeoutError::Connect(val))
     }

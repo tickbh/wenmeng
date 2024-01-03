@@ -90,7 +90,8 @@ mod tests {
 
     async fn run_server() -> ProtResult<SocketAddr> {
         env_logger::init();
-        let addr = "127.0.0.1:0".to_string();
+        // let addr = "127.0.0.1:0".to_string();
+        let addr = "127.0.0.1:9999".to_string();
         let server = TcpListener::bind(&addr).await?;
         let addr = server.local_addr()?;
         println!("Listening on: {}", addr);
