@@ -23,7 +23,7 @@ use tokio::{
 use tokio_stream::{Stream, StreamExt};
 use webparse::{Binary, BinaryMut, Response, Serialize, Version};
 
-use crate::{ProtResult, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait, Middleware};
+use crate::{ProtResult, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait, Middleware, ws::ServerWsConnection};
 
 use super::IoBuffer;
 
@@ -110,6 +110,15 @@ where
         connect
     }
 
+    pub fn into_ws(self, binary: Binary) -> ServerWsConnection<T> {
+        let (io, read_buf, write_buf) = self.io.into();
+        let mut connect = ServerWsConnection::new(io);
+        connect.set_cache_buf(read_buf, write_buf);
+        connect.set_handshake_status(binary);
+        connect.set_timeout_layer(self.timeout);
+        connect
+    }
+
     pub async fn handle_request<F>(
         &mut self,
         addr: &Option<SocketAddr>,
@@ -120,22 +129,7 @@ where
     where
         F: OperateTrait + Send,
     {
-        if let Some(protocol) = r.headers().get_upgrade_protocol() {
-            if protocol == "h2c" {
-                let mut response = Response::builder()
-                    .status(101)
-                    .header("Connection", "Upgrade")
-                    .header("Upgrade", "h2c")
-                    .body(())
-                    .unwrap();
-                let mut binary = BinaryMut::new();
-                let _ = response.serialize(&mut binary);
-                return Err(crate::ProtError::ServerUpgradeHttp2(
-                    binary.freeze(),
-                    Some(r),
-                ));
-            }
-        }
+        
         let mut res = HttpHelper::handle_request(Version::Http11, addr, r, f, middles).await?;
         HeaderHelper::process_response_header(Version::Http11, false, &mut res)?;
         self.send_response(res).await?;

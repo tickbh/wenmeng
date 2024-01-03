@@ -51,7 +51,16 @@ where
         Self::with_max_recv_frame_size(io, DEFAULT_MAX_FRAME_SIZE as usize)
     }
 
+    pub fn into_io_with_cache(self) -> (T, BinaryMut, BinaryMut) {
+        use bytes::Buf;
+        let bytes = self.inner.get_read_buffer();
+        let read = BinaryMut::from(bytes.chunk().to_vec());
+        let write = self.inner.get_ref().get_bytes().clone();
+        (self.inner.into_io().into_io(), read, write)
+    }
+
     pub fn into_io(self) -> T {
+        // self.inner.get_mut().get_bytes()
         self.inner.into_io().into_io()       
     }
 
@@ -114,7 +123,7 @@ where
     pub fn send_frame(&mut self, frame: Frame) -> ProtResult<usize> {
         log::trace!("HTTP2:发送帧数据: {:?}", frame);
         let mut encoder = Encoder::new_index(self.header_index.clone(), self.max_send_frame_size);
-        let usize = frame.encode(self.framed_write().get_bytes(), &mut encoder)?;
+        let usize = frame.encode(self.framed_write().get_mut_bytes(), &mut encoder)?;
         Ok(usize)
     }
 

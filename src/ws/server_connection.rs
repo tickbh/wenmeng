@@ -66,7 +66,7 @@ impl<T> ServerWsConnection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(io: T, builder: Builder) -> ServerWsConnection<T> {
+    pub fn new(io: T) -> ServerWsConnection<T> {
         ServerWsConnection {
             codec: WsCodec::new(io),
             inner: InnerConnection {
@@ -202,13 +202,13 @@ where
     //     return Ok(None);
     // }
 
-    // pub fn set_cache_buf(&mut self, read_buf: BinaryMut, write_buf: BinaryMut) {
-    //     self.codec.set_cache_buf(read_buf, write_buf)
-    // }
+    pub fn set_cache_buf(&mut self, read_buf: BinaryMut, write_buf: BinaryMut) {
+        self.codec.set_cache_buf(read_buf, write_buf)
+    }
 
-    // pub fn set_handshake_status(&mut self, binary: Binary) {
-    //     self.inner.control.set_handshake_status(binary, false)
-    // }
+    pub fn set_handshake_status(&mut self, binary: Binary) {
+        self.inner.control.set_handshake_status(binary, false)
+    }
 
 }
 

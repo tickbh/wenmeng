@@ -29,7 +29,7 @@ use webparse::{
 
 use crate::{
     Builder, HeaderHelper, HttpHelper, Initiator, Middleware, OperateTrait, ProtError, ProtResult,
-    RecvRequest, RecvResponse, TimeoutLayer,
+    RecvRequest, RecvResponse, TimeoutLayer, ws::ServerWsConnection,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -96,6 +96,15 @@ where
 
     pub fn into_io(self) -> T {
         self.codec.into_io()
+    }
+    
+    pub fn into_ws(self, binary: Binary) -> ServerWsConnection<T> {
+        let (io, read_buf, write_buf) = self.codec.into_io_with_cache();
+        let mut connect = ServerWsConnection::new(io);
+        connect.set_cache_buf(read_buf, write_buf);
+        connect.set_handshake_status(binary);
+        connect.set_timeout_layer(self.timeout);
+        connect
     }
 
     pub fn set_read_timeout(&mut self, read_timeout: Option<Duration>) {

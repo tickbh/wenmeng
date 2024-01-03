@@ -83,6 +83,8 @@ pub enum ProtError {
     ServerUpgradeHttp2(Binary, Option<RecvRequest>),
     /// 协议数据升级, 第一参数表示将要写给客户端的消息, 第二参数表示原来未处理的请求
     ClientUpgradeHttp2(Settings),
+    /// 协议数据升级, 保留原请求
+    ServerUpgradeWs(RecvRequest),
     /// 发生错误或者收到关闭消息将要关闭该链接
     GoAway(Binary, Reason, Initiator),
 }
@@ -106,6 +108,7 @@ impl Display for ProtError {
             ProtError::Timeout(t) => t.fmt(f),
             ProtError::ServerUpgradeHttp2(_, _) => f.write_str("receive server upgrade http2 info"),
             ProtError::ClientUpgradeHttp2(_) => f.write_str("receive client upgrade http2 info"),
+            ProtError::ServerUpgradeWs(_) => f.write_str("receive server upgrade ws info"),
             ProtError::SendError => f.write_str("send erorr"),
         }
     }
@@ -174,6 +177,13 @@ impl ProtError {
     pub fn is_server_upgrade_http2(&self) -> bool {
         match self {
             Self::ServerUpgradeHttp2(_, _) => true,
+            _ => false,
+        }
+    }
+    
+    pub fn is_server_upgrade_ws(&self) -> bool {
+        match self {
+            Self::ServerUpgradeWs(_) => true,
             _ => false,
         }
     }

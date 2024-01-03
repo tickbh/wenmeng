@@ -10,6 +10,8 @@
 // -----
 // Created Date: 2024/01/02 10:51:49
 
+use webparse::Binary;
+
 use super::state::{WsStateGoAway, WsStateHandshake, WsStatePingPong};
 
 pub(crate) struct Control {
@@ -25,5 +27,11 @@ impl Control {
             goaway: WsStateGoAway::new(),
             pingpong: WsStatePingPong::new(),
         }
+    }
+
+    
+    pub fn set_handshake_status(&mut self, binary: Binary, is_client: bool) {
+        // self.is_client = is_client;
+        // self.state = Handshaking::Flushing(Flush(binary))
     }
 }

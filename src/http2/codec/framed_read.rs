@@ -79,6 +79,10 @@ where
         }
     }
 
+    pub fn get_read_buffer(&self) -> &BytesMut {
+        self.inner.read_buffer()
+    }
+
     pub fn into_io(self) -> T {
         self.inner.into_inner()
     }
