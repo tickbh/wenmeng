@@ -28,8 +28,8 @@ use webparse::{
 
 use super::{http1::ServerH1Connection, middle::BaseMiddleware};
 use crate::{
-    Body, Middleware, OperateTrait, ProtError, ProtResult, RecvRequest, ServerH2Connection,
-    TimeoutLayer, ws::ServerWsConnection
+    Body, Middleware, HttpTrait, ProtError, ProtResult, RecvRequest, ServerH2Connection,
+    TimeoutLayer, ws::{ServerWsConnection, WsTrait, Handshake}
 };
 
 pub struct Builder {
@@ -314,7 +314,7 @@ where
 
     pub async fn handle_request<F>(&mut self, f: &mut F, r: RecvRequest) -> ProtResult<Option<bool>>
     where
-        F: OperateTrait + Send,
+        F: HttpTrait + Send,
     {
         let result = if let Some(h1) = &mut self.http1 {
             h1.handle_request(&self.addr, r, f, &mut self.middles).await
@@ -328,7 +328,7 @@ where
 
     async fn handle_error<F>(&mut self, f: &mut F, err: crate::ProtError) -> ProtResult<()>
     where
-        F: OperateTrait + Send,
+        F: HttpTrait + Send,
     {
         match err {
             ProtError::ServerUpgradeHttp2(b, r) => {
@@ -357,9 +357,7 @@ where
         }
     }
 
-    pub async fn inner_incoming<F>(&mut self, f: &mut F) -> ProtResult<Option<RecvRequest>>
-    where
-        F: OperateTrait + Send,
+    pub async fn inner_incoming(&mut self) -> ProtResult<Option<RecvRequest>>
     {
         let result = if let Some(h1) = &mut self.http1 {
             h1.incoming().await
@@ -406,10 +404,10 @@ where
 
     pub async fn incoming<F>(&mut self, mut f: F) -> ProtResult<()>
     where
-        F: OperateTrait + Send,
+        F: HttpTrait + Send,
     {
         loop {
-            match self.inner_incoming(&mut f).await {
+            match self.inner_incoming().await {
                 Err(e) => {
                     self.handle_error(&mut f, e).await?;
                 }
@@ -428,22 +426,25 @@ where
 
     pub async fn incoming_ws<F>(&mut self, mut f: F) -> ProtResult<()>
     where
-        F: OperateTrait + Send,
+        F: WsTrait + Send,
     {
-        match self.inner_incoming(&mut f).await {
+        match self.inner_incoming().await {
             Err(ProtError::ServerUpgradeWs(r)) => {
-                let mut response = Response::builder()
-                    .status(101)
-                    .header("Connection", "Upgrade")
-                    .header("Upgrade", "h2c")
-                    .body(())
-                    .unwrap();
+                let mut response = f.on_request(&r)?;
+                if response.status() != 101 {
+                    self.send_response(response, None).await?;
+                    self.flush().await?;
+                    return Ok(());
+                }
                 let mut binary = BinaryMut::new();
                 let _ = response.serialize(&mut binary);
 
-                let value = if let Some(mut h1) = self.http1.take() {
+                let shake = Handshake::new(r, response, self.addr.clone());
+                f.on_open(shake)?;
+
+                let value = if let Some(h1) = self.http1.take() {
                     h1.into_ws(binary.freeze())
-                } else if let Some(mut h2) = self.http2.take() {
+                } else if let Some(h2) = self.http2.take() {
                     h2.into_ws(binary.freeze())
                 } else {
                     return Err(ProtError::Extension("unknow version"));

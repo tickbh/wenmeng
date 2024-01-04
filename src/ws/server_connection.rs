@@ -28,7 +28,7 @@ use webparse::{
 };
 
 use crate::{
-    Builder, HeaderHelper, HttpHelper, Initiator, Middleware, OperateTrait, ProtError, ProtResult,
+    Builder, HeaderHelper, HttpHelper, Initiator, Middleware, HttpTrait, ProtError, ProtResult,
     RecvRequest, RecvResponse, TimeoutLayer,
 };
 

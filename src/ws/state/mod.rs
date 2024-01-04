@@ -14,6 +14,6 @@ mod state_handshake;
 mod state_goaway;
 mod state_ping_pong;
   
-pub use state_handshake::WsStateHandshake;
+pub use state_handshake::{WsStateHandshake};
 pub use state_goaway::WsStateGoAway;
 pub use state_ping_pong::WsStatePingPong;

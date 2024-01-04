@@ -24,7 +24,7 @@ pub struct WsStateHandshake {
     /// 默认参数
     builder: Builder,
     /// 当前握手状态
-    state: Handshaking,
+    state: WsHandshaking,
     /// 是否为客户端
     is_client: bool,
     /// 握手日志信息
@@ -32,7 +32,7 @@ pub struct WsStateHandshake {
 }
 
 /// 握手状态
-enum Handshaking {
+enum WsHandshaking {
     /// 还未进行握手, 确定http2协议则开始握手
     Wait,
     /// 协议升级信息写入
@@ -48,7 +48,7 @@ impl WsStateHandshake {
     pub fn new_server() -> WsStateHandshake {
         WsStateHandshake {
             builder: Builder::new(),
-            state: Handshaking::Wait,
+            state: WsHandshaking::Wait,
             is_client: false,
             span: tracing::trace_span!("server_handshake"),
         }
@@ -57,7 +57,7 @@ impl WsStateHandshake {
     pub fn new_client() -> WsStateHandshake {
         WsStateHandshake {
             builder: Builder::new(),
-            state: Handshaking::Wait,
+            state: WsHandshaking::Wait,
             is_client: true,
             span: tracing::trace_span!("server_handshake"),
         }
@@ -73,22 +73,20 @@ impl WsStateHandshake {
     {
         loop {
             match &mut self.state {
-                Handshaking::Wait => {
+                WsHandshaking::Wait => {
                     return Poll::Pending;
                 }
-                Handshaking::Flushing(flush) => {
+                WsHandshaking::Flushing(flush) => {
                     match ready!(flush.poll_handle(cx, codec)) {
                         Ok(_) => {
                             tracing::trace!(flush.poll = %"Ready");
-                            if self.is_client {
-                                self.state = Handshaking::Done;
-                            }
+                            self.state = WsHandshaking::Done;
                             continue;
                         }
                         Err(e) => return Poll::Ready(Err(e)),
                     };
                 }
-                Handshaking::Done => {
+                WsHandshaking::Done => {
                     return Poll::Ready(Ok(()));
                 }
             }
@@ -97,7 +95,7 @@ impl WsStateHandshake {
     
     pub fn set_handshake_status(&mut self, binary: Binary, is_client: bool) {
         self.is_client = is_client;
-        self.state = Handshaking::Flushing(Flush(binary))
+        self.state = WsHandshaking::Flushing(Flush(binary))
     }
 }
 

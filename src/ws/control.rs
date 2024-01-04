@@ -18,6 +18,8 @@ pub(crate) struct Control {
     hand_shake: WsStateHandshake,
     goaway: WsStateGoAway,
     pingpong: WsStatePingPong,
+
+    is_client: bool,
 }
 
 impl Control {
@@ -26,12 +28,12 @@ impl Control {
             hand_shake: WsStateHandshake::new_server(),
             goaway: WsStateGoAway::new(),
             pingpong: WsStatePingPong::new(),
+            is_client: false,
         }
     }
 
-    
     pub fn set_handshake_status(&mut self, binary: Binary, is_client: bool) {
-        // self.is_client = is_client;
-        // self.state = Handshaking::Flushing(Flush(binary))
+        self.is_client = is_client;
+        self.hand_shake.set_handshake_status(binary, is_client);
     }
 }

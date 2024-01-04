@@ -14,7 +14,7 @@ use std::net::SocketAddr;
 
 use webparse::{HeaderName, Response, Version};
 
-use crate::{Middleware, OperateTrait, ProtResult, RecvRequest, RecvResponse};
+use crate::{Middleware, HttpTrait, ProtResult, RecvRequest, RecvResponse};
 
 pub struct HttpHelper;
 
@@ -27,7 +27,7 @@ impl HttpHelper {
         middles: &mut Vec<Box<dyn Middleware>>,
     ) -> ProtResult<RecvResponse>
     where
-        F: OperateTrait + Send,
+        F: HttpTrait + Send,
     {
         let (mut gzip, mut deflate, mut br) = (false, false, false);
         if let Some(accept) = r.headers().get_option_value(&HeaderName::ACCEPT_ENCODING) {

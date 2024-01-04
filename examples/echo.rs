@@ -3,7 +3,7 @@ use async_trait::async_trait;
 
 use tokio::{net::TcpListener};
 use webparse::{Response};
-use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, OperateTrait, Middleware, Body};
+use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, HttpTrait, Middleware, Body};
 
 // #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -12,7 +12,7 @@ static ALLOC: dhat::Alloc = dhat::Alloc;
 struct Operate;
 
 #[async_trait]
-impl OperateTrait for Operate {
+impl HttpTrait for Operate {
     async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
         tokio::time::sleep(Duration::new(1, 1)).await;
         let response = Response::builder()

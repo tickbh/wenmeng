@@ -28,7 +28,7 @@ use webparse::{
 };
 
 use crate::{
-    Builder, HeaderHelper, HttpHelper, Initiator, Middleware, OperateTrait, ProtError, ProtResult,
+    Builder, HeaderHelper, HttpHelper, Initiator, Middleware, HttpTrait, ProtError, ProtResult,
     RecvRequest, RecvResponse, TimeoutLayer, ws::ServerWsConnection,
 };
 
@@ -184,7 +184,7 @@ where
         middles: &mut Vec<Box<dyn Middleware>>,
     ) -> ProtResult<Option<bool>>
     where
-        F: OperateTrait + Send,
+        F: HttpTrait + Send,
     {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
 

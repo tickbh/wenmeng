@@ -41,6 +41,7 @@ pub use self::http_helper::HttpHelper;
 pub use self::layer::{RateLimitLayer, TimeoutLayer, Rate};
 pub use self::middle::Middleware;
 
+
 use webparse::{Request, Response};
 
 pub type RecvRequest = Request<Body>;
@@ -49,7 +50,7 @@ pub type RecvResponse = Response<Body>;
 use async_trait::async_trait;
 
 #[async_trait]
-pub trait OperateTrait {
+pub trait HttpTrait {
     /// 处理请求并返回正确的数据
     async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse>;
     

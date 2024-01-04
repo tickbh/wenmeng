@@ -23,7 +23,7 @@ use tokio::{
 use tokio_stream::{Stream, StreamExt};
 use webparse::{Binary, BinaryMut, Response, Serialize, Version};
 
-use crate::{ProtResult, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer, RecvResponse, RecvRequest, OperateTrait, Middleware, ws::ServerWsConnection};
+use crate::{ProtResult, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer, RecvResponse, RecvRequest, HttpTrait, Middleware, ws::ServerWsConnection};
 
 use super::IoBuffer;
 
@@ -127,7 +127,7 @@ where
         middles: &mut Vec<Box<dyn Middleware>>
     ) -> ProtResult<Option<bool>>
     where
-        F: OperateTrait + Send,
+        F: HttpTrait + Send,
     {
         
         let mut res = HttpHelper::handle_request(Version::Http11, addr, r, f, middles).await?;

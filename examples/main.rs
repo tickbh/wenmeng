@@ -15,12 +15,12 @@ use tokio::{
     net::{TcpListener, TcpStream}, fs::File,
 };
 
-use wenmeng::{self, ProtResult, Body, Server, RecvRequest, RecvResponse, OperateTrait};
+use wenmeng::{self, ProtResult, Body, Server, RecvRequest, RecvResponse, HttpTrait};
 
 struct Operate;
 
 #[async_trait]
-impl OperateTrait for Operate {
+impl HttpTrait for Operate {
     async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
         let mut builder = Response::builder().version(req.version().clone());
         let body = match &*req.url().path {

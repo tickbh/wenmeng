@@ -29,13 +29,13 @@ mod tests {
     use webparse::{BinaryMut, Buf, Request, Response, Version};
 
     use wenmeng::{
-        self, Body, Client, OperateTrait, ProtResult, RecvRequest, RecvResponse, Server,
+        self, Body, Client, HttpTrait, ProtResult, RecvRequest, RecvResponse, Server,
     };
 
     struct Operate;
 
     #[async_trait]
-    impl OperateTrait for Operate {
+    impl HttpTrait for Operate {
         async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
             let mut builder = Response::builder().version(req.version().clone());
             let body = match &*req.url().path {
