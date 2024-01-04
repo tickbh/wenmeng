@@ -10,4 +10,4 @@ use control::Control;
 use state::{WsStateGoAway, WsStateHandshake, WsStatePingPong};
 pub use server_connection::ServerWsConnection;
 pub use ws_trait::WsTrait;
-pub use handshake::Handshake;
+pub use handshake::WsHandshake;

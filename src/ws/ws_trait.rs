@@ -15,25 +15,17 @@ use webparse::{Response, OwnedMessage};
 
 use crate::{ProtResult, RecvRequest, RecvResponse, ProtError};
 
-use super::Handshake;
+use super::WsHandshake;
 
 #[async_trait]
 pub trait WsTrait {
     #[inline]
     fn on_request(&mut self, req: &RecvRequest) -> ProtResult<RecvResponse> {
         // warn!("Handler received request:\n{}", req);
-        let mut response = Response::builder()
-            .status(101)
-            .header("Connection", "Upgrade")
-            .header("Upgrade", "websocket")
-            .header("Sec-WebSocket-Accept", "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
-            .header("Sec-WebSocket-Protocol", "chat")
-            .body(())
-            .unwrap();
-        Ok(response.into_type())
+        WsHandshake::build_request(req)
     }
 
-    fn on_open(&mut self, shake: Handshake) -> ProtResult<()> {
+    fn on_open(&mut self, shake: WsHandshake) -> ProtResult<()> {
         Ok(())
     }
 

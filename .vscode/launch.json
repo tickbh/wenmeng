@@ -83,6 +83,25 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug example 'ws'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=ws",
+                    "--package=wenmeng"
+                ],
+                "filter": {
+                    "name": "ws",
+                    "kind": "example"
+                }
+            },
+            "env": {"RUST_LOG": "trace", "RUSTFLAGS": "--cfg tokio_unstable" },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug example 'udp'",
             "cargo": {
                 "args": [

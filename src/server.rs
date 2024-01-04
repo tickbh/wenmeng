@@ -29,7 +29,7 @@ use webparse::{
 use super::{http1::ServerH1Connection, middle::BaseMiddleware};
 use crate::{
     Body, Middleware, HttpTrait, ProtError, ProtResult, RecvRequest, ServerH2Connection,
-    TimeoutLayer, ws::{ServerWsConnection, WsTrait, Handshake}
+    TimeoutLayer, ws::{ServerWsConnection, WsTrait, WsHandshake}
 };
 
 pub struct Builder {
@@ -438,8 +438,10 @@ where
                 }
                 let mut binary = BinaryMut::new();
                 let _ = response.serialize(&mut binary);
-
-                let shake = Handshake::new(r, response, self.addr.clone());
+                self.send_response(response, None).await?;
+                self.flush().await?;
+                return Ok(());
+                let shake = WsHandshake::new(r, response, self.addr.clone());
                 f.on_open(shake)?;
 
                 let value = if let Some(h1) = self.http1.take() {
@@ -458,6 +460,10 @@ where
             Ok(Some(_r)) => {
                 return Err(ProtError::Extension("unknow websocket version"));
             }
+        }
+
+        if let Some(ws) = &mut self.ws {
+            
         }
 
         // let result = if let Some(h1) = &mut self.http1 {
