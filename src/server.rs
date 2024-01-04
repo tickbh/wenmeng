@@ -28,8 +28,9 @@ use webparse::{
 
 use super::{http1::ServerH1Connection, middle::BaseMiddleware};
 use crate::{
-    Body, Middleware, HttpTrait, ProtError, ProtResult, RecvRequest, ServerH2Connection,
-    TimeoutLayer, ws::{ServerWsConnection, WsTrait, WsHandshake}
+    ws::{ServerWsConnection, WsHandshake, WsTrait},
+    Body, HttpTrait, Middleware, ProtError, ProtResult, RecvRequest, ServerH2Connection,
+    TimeoutLayer,
 };
 
 pub struct Builder {
@@ -357,8 +358,7 @@ where
         }
     }
 
-    pub async fn inner_incoming(&mut self) -> ProtResult<Option<RecvRequest>>
-    {
+    pub async fn inner_incoming(&mut self) -> ProtResult<Option<RecvRequest>> {
         let result = if let Some(h1) = &mut self.http1 {
             h1.incoming().await
         } else if let Some(h2) = &mut self.http2 {
@@ -438,9 +438,9 @@ where
                 }
                 let mut binary = BinaryMut::new();
                 let _ = response.serialize(&mut binary);
-                self.send_response(response, None).await?;
-                self.flush().await?;
-                return Ok(());
+                // self.send_response(response, None).await?;
+                // self.flush().await?;
+                // return Ok(());
                 let shake = WsHandshake::new(r, response, self.addr.clone());
                 f.on_open(shake)?;
 
@@ -461,9 +461,16 @@ where
                 return Err(ProtError::Extension("unknow websocket version"));
             }
         }
-
-        if let Some(ws) = &mut self.ws {
-            
+        loop {
+            if let Some(ws) = &mut self.ws {
+                match ws.next().await {
+                    None => {}
+                    Some(Ok(msg)) => {
+                        f.on_message(msg).await?;
+                    }
+                    Some(Err(e)) => return Err(e),
+                }
+            }
         }
 
         // let result = if let Some(h1) = &mut self.http1 {

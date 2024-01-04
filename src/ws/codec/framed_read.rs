@@ -14,7 +14,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{ready, Poll};
 
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, BytesMut, Buf};
 use tokio::io::AsyncRead;
 use tokio_stream::Stream;
 use tokio_util::codec::FramedRead as InnerFramedRead;
@@ -23,7 +23,7 @@ use tokio_util::codec::LengthDelimitedCodec;
 use webparse::http::http2::frame::{Frame, Kind};
 use webparse::http::http2::{frame, Decoder};
 use webparse::http2::DEFAULT_SETTINGS_HEADER_TABLE_SIZE;
-use webparse::{Binary, BinaryMut, Buf, DataFrame, OwnedMessage};
+use webparse::{Binary, BinaryMut, Buf, DataFrame, OwnedMessage, BinaryRef};
 
 use crate::ProtResult;
 
@@ -35,6 +35,8 @@ impl tokio_util::codec::Decoder for MyCodec {
     type Item = DataFrame;
     type Error = io::Error;
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        
+        let frame = DataFrame::read_dataframe_with_limit(&mut BinaryRef::from(src.chunk()), false, 100000);
         // ...
         // Reserve enough to complete decoding of the current frame.
         let current_frame_len: usize = 1000; // Example.

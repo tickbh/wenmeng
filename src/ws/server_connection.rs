@@ -24,7 +24,7 @@ use tokio::{
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
-    Binary, BinaryMut, Version,
+    Binary, BinaryMut, Version, OwnedMessage,
 };
 
 use crate::{
@@ -123,28 +123,9 @@ where
         Poll::Pending
     }
 
-    // pub fn poll_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtResult<RecvRequest>>> {
-    //     if self.timeout.is_some() {
-    //         let (ready_time, is_read_end, is_write_end, is_idle) = (
-    //             *self.inner.control.get_ready_time(),
-    //             self.inner.control.is_read_end(),
-    //             self.inner.control.is_write_end(&self.codec),
-    //             self.inner.control.is_idle(&self.codec),
-    //         );
-    //         self.timeout.as_mut().unwrap().poll_ready(
-    //             cx,
-    //             "server",
-    //             ready_time,
-    //             is_read_end,
-    //             is_write_end,
-    //             is_idle,
-    //         )?;
-    //     }
-    //     self.inner.control.poll_request(cx, &mut self.codec)
-    //     // loop {
-    //     //     ready!(Pin::new(&mut self.codec).poll_next(cx)?);
-    //     // }
-    // }
+    pub fn poll_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtResult<OwnedMessage>>> {
+        self.inner.control.poll_request(cx, &mut self.codec)
+    }
 
     // pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<()>> {
     //     self.inner.control.poll_write(cx, &mut self.codec, false)
@@ -216,39 +197,38 @@ impl<T> Stream for ServerWsConnection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = ProtResult<RecvRequest>;
+    type Item = ProtResult<OwnedMessage>;
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        // loop {
-        //     match self.inner.state {
-        //         State::Open => {
-        //             match self.poll_request(cx) {
-        //                 Poll::Pending => {
-        //                     return Poll::Pending;
-        //                 }
-        //                 Poll::Ready(Some(Ok(v))) => {
-        //                     return Poll::Ready(Some(Ok(v)));
-        //                 }
-        //                 Poll::Ready(v) => {
-        //                     let _ = self.handle_poll_result(v)?;
-        //                     continue;
-        //                 }
-        //             };
-        //         }
-        //         State::Closing(reason, initiator) => {
-        //             ready!(self.codec.shutdown(cx))?;
-        //             self.inner.state = State::Closed(reason, initiator);
-        //         }
-        //         State::Closed(reason, initiator) => {
-        //             if let Err(e) = self.take_error(reason, initiator) {
-        //                 return Poll::Ready(Some(Err(e)));
-        //             }
-        //             return Poll::Ready(None);
-        //         }
-        //     }
-        // }
+        loop {
+            match self.inner.state {
+                State::Open => {
+                    match self.poll_request(cx) {
+                        Poll::Pending => {
+                            return Poll::Pending;
+                        }
+                        Poll::Ready(Some(Ok(v))) => {
+                            return Poll::Ready(Some(Ok(v)));
+                        }
+                        Poll::Ready(v) => {
+                            continue;
+                        }
+                    };
+                }
+                State::Closing(reason, initiator) => {
+                    ready!(self.codec.shutdown(cx))?;
+                    self.inner.state = State::Closed(reason, initiator);
+                }
+                State::Closed(reason, initiator) => {
+                    // if let Err(e) = self.take_error(reason, initiator) {
+                    //     return Poll::Ready(Some(Err(e)));
+                    // }
+                    return Poll::Ready(None);
+                }
+            }
+        }
         Poll::Pending
     }
 }
