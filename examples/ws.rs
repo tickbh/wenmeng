@@ -15,7 +15,7 @@ struct Operate;
 impl WsTrait for Operate {
     
     async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {
-
+        println!("callback on message = {:?}", msg);
         Ok(())
     }
     // async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {

@@ -54,77 +54,15 @@ impl Control {
         ready!(self.handshake.poll_handle(cx, codec))?;
         
         match Pin::new(&mut *codec).poll_next(cx) {
-            Poll::Ready(None) => todo!(),
+            Poll::Ready(None) => return Poll::Ready(None),
             Poll::Ready(Some(Ok(msg))) => {
                 println!("msg = {:?}", msg);
                 return Poll::Ready(Some(Ok(msg)));
             },
-            Poll::Ready(Some(Err(e))) => todo!(),
+            Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),
             Poll::Pending => return Poll::Pending,
         }
         // let mut has_change;
         Poll::Pending
-        // loop {
-        //     has_change = false;
-        //     let is_wait = ready!(self.setting.poll_handle(cx, codec, &mut self.config))?;
-        //     // 写入如果pending不直接pending, 等尝试读pending则返回
-        //     match self.poll_write(cx, codec, is_wait) {
-        //         Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e))),
-        //         _ => (),
-        //     }
-
-        //     self.poll_recv_frame(cx)?;
-
-        //     match Pin::new(&mut *codec).poll_next(cx) {
-        //         Poll::Ready(Some(Ok(frame))) => {
-        //             has_change = true;
-        //             match &frame {
-        //                 Frame::Settings(settings) => {
-        //                     self.setting
-        //                         .recv_setting(codec, settings.clone(), &mut self.config)?;
-        //                 }
-        //                 Frame::Data(_) => {
-        //                     let _ = self.recv_frame(frame, cx)?;
-        //                 }
-        //                 Frame::Headers(_) => {
-        //                     let _ = self.recv_frame(frame, cx)?;
-        //                 }
-        //                 Frame::Priority(v) => {
-        //                     self.send_frames.priority_recv(v.clone());
-        //                 }
-        //                 Frame::PushPromise(_) => {}
-        //                 Frame::Ping(p) => {
-        //                     self.ping_pong.receive(p.clone());
-        //                 }
-        //                 Frame::GoAway(e) => {
-        //                     self.error = Some(e.clone());
-        //                 }
-        //                 Frame::WindowUpdate(_v) => {
-        //                     // self.config.settings.set_initial_window_size(Some(v.size_increment()))
-        //                 }
-        //                 Frame::Reset(_v) => {}
-        //             }
-        //         }
-        //         Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),
-        //         Poll::Ready(None) => return Poll::Ready(None),
-        //         Poll::Pending => match ready!(self.build_request_frame()?) {
-        //             Some(r) => {
-        //                 return Poll::Ready(Some(Ok(r)));
-        //             }
-        //             None => {
-        //                 if let Some(e) = &self.error {
-        //                     return Poll::Ready(Some(Err(ProtError::library_go_away(e.reason()))));
-        //                 } else {
-        //                     // 有收到消息, 再处理一次数据, 如ack settings或者goway消息
-        //                     if has_change {
-        //                         continue;
-        //                     } else {
-        //                         return Poll::Pending;
-        //                     }
-        //                 }
-        //             }
-        //         },
-        //     }
-        // }
     }
 }

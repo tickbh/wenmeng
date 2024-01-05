@@ -438,9 +438,6 @@ where
                 }
                 let mut binary = BinaryMut::new();
                 let _ = response.serialize(&mut binary);
-                // self.send_response(response, None).await?;
-                // self.flush().await?;
-                // return Ok(());
                 let shake = WsHandshake::new(r, response, self.addr.clone());
                 f.on_open(shake)?;
 
@@ -464,7 +461,9 @@ where
         loop {
             if let Some(ws) = &mut self.ws {
                 match ws.next().await {
-                    None => {}
+                    None => {
+                        break;
+                    }
                     Some(Ok(msg)) => {
                         f.on_message(msg).await?;
                     }

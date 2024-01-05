@@ -14,7 +14,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{ready, Poll};
 
-use bytes::{BufMut, BytesMut, Buf};
+use bytes::{BufMut, BytesMut};
 use tokio::io::AsyncRead;
 use tokio_stream::Stream;
 use tokio_util::codec::FramedRead as InnerFramedRead;
@@ -23,7 +23,7 @@ use tokio_util::codec::LengthDelimitedCodec;
 use webparse::http::http2::frame::{Frame, Kind};
 use webparse::http::http2::{frame, Decoder};
 use webparse::http2::DEFAULT_SETTINGS_HEADER_TABLE_SIZE;
-use webparse::{Binary, BinaryMut, Buf, DataFrame, OwnedMessage, BinaryRef};
+use webparse::{Binary, BinaryMut, BinaryRef, Buf, DataFrame, OwnedMessage, WebError};
 
 use crate::ProtResult;
 
@@ -33,17 +33,25 @@ struct MyCodec;
 impl tokio_util::codec::Decoder for MyCodec {
     // ...
     type Item = DataFrame;
-    type Error = io::Error;
+    type Error = WebError;
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        
-        let frame = DataFrame::read_dataframe_with_limit(&mut BinaryRef::from(src.chunk()), false, 100000);
-        // ...
-        // Reserve enough to complete decoding of the current frame.
-        let current_frame_len: usize = 1000; // Example.
-                                             // And to start decoding the next frame.
-        let next_frame_header_len: usize = 10; // Example.
-        src.reserve(current_frame_len + next_frame_header_len);
-        return Ok(None);
+        use bytes::Buf;
+        println!("src ori size = {}", src.remaining());
+        let (frame, size) = {
+            let mut copy = BinaryRef::from(src.chunk());
+            let now_len = copy.remaining();
+            let frame = match DataFrame::read_dataframe_with_limit(&mut copy, false, 100000) {
+                Ok(frame) => frame,
+                Err(WebError::Io(io)) if io.kind() == io::ErrorKind::UnexpectedEof => {
+                    return Ok(None)
+                }
+                Err(e) => return Err(e),
+            };
+            (frame, now_len - copy.remaining())
+        };
+        src.advance(size);
+        println!("src size = {}", src.remaining());
+        return Ok(Some(frame));
     }
 }
 
@@ -51,7 +59,6 @@ impl tokio_util::codec::Decoder for MyCodec {
 pub struct FramedRead<T> {
     inner: InnerFramedRead<T, MyCodec>,
     caches: Vec<DataFrame>,
-
 }
 
 impl<T> FramedRead<T> {

@@ -213,7 +213,7 @@ where
                             return Poll::Ready(Some(Ok(v)));
                         }
                         Poll::Ready(v) => {
-                            continue;
+                            return Poll::Ready(None);
                         }
                     };
                 }
