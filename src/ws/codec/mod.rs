@@ -8,7 +8,7 @@ pub use framed_read::FramedRead;
 pub use framed_write::FramedWrite;
 use futures::Stream;
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::{BinaryMut, OwnedMessage};
+use webparse::{BinaryMut, OwnedMessage, DataFrameable};
 
 use crate::ProtResult;
 
@@ -71,6 +71,13 @@ where
         self.inner.set_cache_buf(read_buf);
         self.framed_write().set_cache_buf(write_buf);
     }
+    
+    pub fn send_msg(&mut self, msg: OwnedMessage) -> ProtResult<usize> {
+        log::trace!("HTTP2:发送帧数据: {:?}", msg);
+        msg.write_to(self.framed_write().get_mut_bytes(), false);
+        Ok(0)
+    }
+
 }
 
 impl<T> Stream for WsCodec<T>

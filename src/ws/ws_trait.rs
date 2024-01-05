@@ -25,16 +25,14 @@ pub trait WsTrait {
         WsHandshake::build_request(req)
     }
 
-    fn on_open(&mut self, shake: WsHandshake) -> ProtResult<()> {
-        Ok(())
-    }
-
+    fn on_open(&mut self, shake: WsHandshake) -> ProtResult<()>;
     
-    async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()>;
-
     async fn on_close(&mut self, reason: &str) {
     }
     
     async fn on_error(&mut self, err: ProtError) {
     }
+
+    async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()>;
+
 }

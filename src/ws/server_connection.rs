@@ -149,46 +149,16 @@ where
     //     return Ok(None);
     // }
 
-    // pub async fn incoming<F>(
-    //     &mut self,
-    //     f: &mut F,
-    //     addr: &Option<SocketAddr>,
-    //     middles: &mut Vec<Box<dyn Middleware>>,
-    // ) -> ProtResult<Option<bool>>
-    // where
-    //     F: OperateTrait + Send,
-    // {
-    //     use tokio_stream::StreamExt;
-    //     let mut receiver = self.inner.receiver_push.take().unwrap();
-    //     tokio::select! {
-    //         res = receiver.recv() => {
-    //             self.inner.receiver_push = Some(receiver);
-    //             if res.is_some() {
-    //                 let res = res.unwrap();
-    //                 let id = self.inner.control.next_stream_id();
-    //                 self.inner.control.send_response_may_push(res.1, res.0, Some(id)).await?;
-    //             }
-    //         },
-    //         req = self.next() => {
-    //             self.inner.receiver_push = Some(receiver);
-    //             match req {
-    //                 None => return Ok(Some(true)),
-    //                 Some(Err(e)) => return Err(e),
-    //                 Some(Ok(r)) => {
-    //                     self.handle_request(addr, r, f, middles).await?;
-    //                 }
-    //             };
-    //         }
-    //     }
-    //     return Ok(None);
-    // }
-
     pub fn set_cache_buf(&mut self, read_buf: BinaryMut, write_buf: BinaryMut) {
         self.codec.set_cache_buf(read_buf, write_buf)
     }
 
     pub fn set_handshake_status(&mut self, binary: Binary) {
         self.inner.control.set_handshake_status(binary, false)
+    }
+    
+    pub fn send_owned_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {
+        self.inner.control.send_owned_message(msg)
     }
 
 }

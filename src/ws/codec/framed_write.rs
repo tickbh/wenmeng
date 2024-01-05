@@ -50,8 +50,12 @@ where
         &mut self.inner
     }
 
-    pub fn get_bytes(&mut self) -> &mut BinaryMut {
+    pub fn get_mut_bytes(&mut self) -> &mut BinaryMut {
         &mut self.binary
+    }
+
+    pub fn get_bytes(&self) -> &BinaryMut {
+        &self.binary
     }
 
     pub fn has_capacity(&self) -> bool {

@@ -1,21 +1,30 @@
 use std::{env, error::Error, time::Duration};
 use async_trait::async_trait;
 
-use tokio::{net::TcpListener};
+use tokio::{net::TcpListener, sync::mpsc::Sender};
 use webparse::{Response, OwnedMessage};
-use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, HttpTrait, Middleware, Body, ws::WsTrait};
+use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, HttpTrait, Middleware, Body, ws::{WsTrait, WsHandshake}};
 
 // #[cfg(feature = "dhat-heap")]
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
 
-struct Operate;
+struct Operate {
+    sender: Option<Sender<OwnedMessage>>,
+}
 
 #[async_trait]
 impl WsTrait for Operate {
     
+    fn on_open(&mut self, shake: WsHandshake) -> ProtResult<()> {
+        self.sender = Some(shake.sender);
+        Ok(())
+    }
+    
     async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {
         println!("callback on message = {:?}", msg);
+        let _ = self.sender.as_mut().unwrap().send(OwnedMessage::Text("from server".to_string())).await;
+        let _ = self.sender.as_mut().unwrap().send(msg).await;
         Ok(())
     }
     // async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
@@ -53,7 +62,9 @@ async fn run_main() -> Result<(), Box<dyn Error>> {
             let mut server = Server::new(stream, Some(addr));
             println!("server size size = {:?}", std::mem::size_of_val(&server));
             // println!("size = {:?}", data_size(&server));
-            let operate = Operate;
+            let operate = Operate {
+                sender: None
+            };
             let e = server.incoming_ws(operate).await;
             println!("close server ==== addr = {:?} e = {:?}", addr, e);
         });

@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2024/01/02 10:51:49
 
-use std::{task::{Context, Poll, ready}, pin::Pin};
+use std::{task::{Context, Poll, ready}, pin::Pin, collections::LinkedList};
 
 use futures::Stream;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -25,6 +25,8 @@ pub(crate) struct Control {
     goaway: WsStateGoAway,
     pingpong: WsStatePingPong,
 
+    msgs: LinkedList<OwnedMessage>,
+
     is_client: bool,
 }
 
@@ -34,6 +36,8 @@ impl Control {
             handshake: WsStateHandshake::new_server(),
             goaway: WsStateGoAway::new(),
             pingpong: WsStatePingPong::new(),
+
+            msgs: LinkedList::new(),
             is_client: false,
         }
     }
@@ -42,7 +46,27 @@ impl Control {
         self.is_client = is_client;
         self.handshake.set_handshake_status(binary, is_client);
     }
+    
+    pub fn send_owned_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {
+        self.msgs.push_back(msg);
+        Ok(())
+    }
 
+    pub fn poll_write<T>(
+        &mut self,
+        cx: &mut Context,
+        codec: &mut WsCodec<T>,
+    ) -> Poll<ProtResult<()>>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
+        while let Some(msg) = self.msgs.pop_front() {
+            codec.send_msg(msg)?;
+        }
+        ready!(codec.poll_flush(cx))?;
+        Poll::Ready(Ok(()))
+    }
+    
     pub fn poll_request<T>(
         &mut self,
         cx: &mut Context<'_>,
@@ -52,6 +76,8 @@ impl Control {
         T: AsyncRead + AsyncWrite + Unpin,
     {
         ready!(self.handshake.poll_handle(cx, codec))?;
+
+        let _ = self.poll_write(cx, codec);
         
         match Pin::new(&mut *codec).poll_next(cx) {
             Poll::Ready(None) => return Poll::Ready(None),

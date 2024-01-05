@@ -19,11 +19,11 @@ use std::{
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::TcpStream,
+    net::TcpStream, sync::mpsc::channel,
 };
 use tokio_stream::StreamExt;
 use webparse::{
-    http::http2::frame::StreamIdentifier, Binary, BinaryMut, Request, Response, Serialize,
+    http::http2::frame::StreamIdentifier, Binary, BinaryMut, Request, Response, Serialize, OwnedMessage,
 };
 
 use super::{http1::ServerH1Connection, middle::BaseMiddleware};
@@ -428,7 +428,7 @@ where
     where
         F: WsTrait + Send,
     {
-        match self.inner_incoming().await {
+        let mut receiver = match self.inner_incoming().await {
             Err(ProtError::ServerUpgradeWs(r)) => {
                 let mut response = f.on_request(&r)?;
                 if response.status() != 101 {
@@ -438,7 +438,8 @@ where
                 }
                 let mut binary = BinaryMut::new();
                 let _ = response.serialize(&mut binary);
-                let shake = WsHandshake::new(r, response, self.addr.clone());
+                let (sender, receiver) = channel::<OwnedMessage>(10);
+                let shake = WsHandshake::new(sender, r, response, self.addr.clone());
                 f.on_open(shake)?;
 
                 let value = if let Some(h1) = self.http1.take() {
@@ -449,6 +450,7 @@ where
                     return Err(ProtError::Extension("unknow version"));
                 };
                 self.ws = Some(value);
+                receiver
             }
             Err(e) => {
                 return Err(e);
@@ -457,17 +459,31 @@ where
             Ok(Some(_r)) => {
                 return Err(ProtError::Extension("unknow websocket version"));
             }
-        }
+        };
         loop {
             if let Some(ws) = &mut self.ws {
-                match ws.next().await {
-                    None => {
-                        break;
+                tokio::select! {
+                    ret = ws.next() => {
+                        match ret {
+                            None => {
+                                return Ok(());
+                            }
+                            Some(Ok(msg)) => {
+                                f.on_message(msg).await?;
+                            }
+                            Some(Err(e)) => return Err(e),
+                        }
                     }
-                    Some(Ok(msg)) => {
-                        f.on_message(msg).await?;
+                    msg = receiver.recv() => {
+                        match msg {
+                            None => {
+                                return Ok(());
+                            }
+                            Some(msg) => {
+                                ws.send_owned_message(msg)?;
+                            }
+                        }
                     }
-                    Some(Err(e)) => return Err(e),
                 }
             }
         }

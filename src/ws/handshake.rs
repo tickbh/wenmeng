@@ -13,13 +13,15 @@
 use std::net::SocketAddr;
 
 use sha1::{Digest, Sha1};
-use webparse::{Response, WebError, WsError};
+use tokio::sync::mpsc::Sender;
+use webparse::{Response, WebError, WsError, OwnedMessage};
 
 use crate::{Body, ProtError, ProtResult, RecvRequest, RecvResponse};
 
 static MAGIC_GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 pub struct WsHandshake {
+    pub sender: Sender<OwnedMessage>,
     /// The HTTP request sent to begin the handshake.
     pub request: RecvRequest,
     /// The HTTP response from the server confirming the handshake.
@@ -33,11 +35,13 @@ pub struct WsHandshake {
 
 impl WsHandshake {
     pub fn new(
+        sender: Sender<OwnedMessage>,
         request: RecvRequest,
         response: RecvResponse,
         peer_addr: Option<SocketAddr>,
     ) -> Self {
         Self {
+            sender,
             request,
             response,
             peer_addr,
