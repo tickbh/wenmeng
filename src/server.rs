@@ -19,7 +19,7 @@ use std::{
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::TcpStream, sync::mpsc::channel,
+    net::TcpStream, sync::mpsc::{channel, Receiver},
 };
 use tokio_stream::StreamExt;
 use webparse::{
@@ -424,11 +424,54 @@ where
         }
     }
 
+    async fn inner_oper_ws<F>(&mut self, f: &mut F, mut receiver: Receiver<OwnedMessage>) -> ProtResult<()>
+    where
+        F: WsTrait + Send,
+    {
+        loop {
+            if let Some(ws) = &mut self.ws {
+                tokio::select! {
+                    ret = ws.next() => {
+                        match ret {
+                            None => {
+                                return Ok(());
+                            }
+                            Some(Ok(msg)) => {
+                                match msg {
+                                    OwnedMessage::Text(_) | OwnedMessage::Binary(_) => f.on_message(msg).await?,
+                                    OwnedMessage::Close(c) => f.on_close(c).await,
+                                    OwnedMessage::Ping(v) => {
+                                        let p = f.on_ping(v).await?;
+                                        ws.send_owned_message(p)?;
+                                    },
+                                    OwnedMessage::Pong(v) => {
+                                        f.on_pong(v).await;
+                                    },
+                                }
+                            }
+                            Some(Err(e)) => return Err(e),
+                        }
+                    }
+                    msg = receiver.recv() => {
+                        match msg {
+                            None => {
+                                return Ok(());
+                            }
+                            Some(msg) => {
+                                ws.send_owned_message(msg)?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     pub async fn incoming_ws<F>(&mut self, mut f: F) -> ProtResult<()>
     where
         F: WsTrait + Send,
     {
-        let mut receiver = match self.inner_incoming().await {
+        let receiver = match self.inner_incoming().await {
             Err(ProtError::ServerUpgradeWs(r)) => {
                 let mut response = f.on_request(&r)?;
                 if response.status() != 101 {
@@ -460,46 +503,10 @@ where
                 return Err(ProtError::Extension("unknow websocket version"));
             }
         };
-        loop {
-            if let Some(ws) = &mut self.ws {
-                tokio::select! {
-                    ret = ws.next() => {
-                        match ret {
-                            None => {
-                                return Ok(());
-                            }
-                            Some(Ok(msg)) => {
-                                f.on_message(msg).await?;
-                            }
-                            Some(Err(e)) => return Err(e),
-                        }
-                    }
-                    msg = receiver.recv() => {
-                        match msg {
-                            None => {
-                                return Ok(());
-                            }
-                            Some(msg) => {
-                                ws.send_owned_message(msg)?;
-                            }
-                        }
-                    }
-                }
-            }
+        if let Err(e) = self.inner_oper_ws(&mut f, receiver).await {
+            f.on_error(e).await;
         }
 
-        // let result = if let Some(h1) = &mut self.http1 {
-        //     h1.incoming().await?
-        // } else if let Some(h2) = &mut self.http2 {
-        //     h2.incoming().await?
-        // } else {
-        //     None
-        // };
-
-        // if self.req_num >= self.max_req_num || !f.is_continue_next() {
-        //     self.flush().await?;
-        //     return Ok(Some(true));
-        // }
         Ok(())
     }
 

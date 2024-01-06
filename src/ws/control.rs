@@ -91,4 +91,11 @@ impl Control {
         // let mut has_change;
         Poll::Pending
     }
+    
+    pub fn is_write_end<T>(&self, codec: &WsCodec<T>) -> bool
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
+        self.msgs.is_empty() && codec.is_write_end()
+    }
 }

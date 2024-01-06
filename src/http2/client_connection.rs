@@ -31,7 +31,7 @@ use webparse::{
 
 use crate::{
     ProtError, ProtResult,
-    Builder, Initiator, Body, TimeoutLayer, RecvResponse, RecvRequest,
+    Builder, Initiator, Body, TimeoutLayer, RecvResponse, RecvRequest, ws::ClientWsConnection,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -96,6 +96,15 @@ where
 
     pub fn into_io(self) -> T {
         self.codec.into_io()
+    }
+    
+    pub fn into_ws(self) -> ClientWsConnection<T> {
+        let (io, read_buf, write_buf) = self.codec.into_io_with_cache();
+        let mut connect = ClientWsConnection::new(io);
+        connect.set_cache_buf(read_buf, write_buf);
+        connect.set_handshake_status(Binary::new());
+        connect.set_timeout_layer(self.timeout);
+        connect
     }
 
     pub fn set_timeout_layer(&mut self, timeout_layer: Option<TimeoutLayer>) {

@@ -469,15 +469,17 @@ where
                         self.inner.res_status.is_chunked = true;
                     }
                 } else if response.status() == 101 {
-                    if response
-                        .headers()
-                        .is_contains(&"Connection", "Upgrade".as_bytes())
-                        && response.headers().is_contains(&"Upgrade", "h2c".as_bytes())
-                    {
-                        return Poll::Ready(Some(Err(ProtError::ClientUpgradeHttp2(
-                            Settings::default(),
-                        ))));
-                    }
+                    return Poll::Ready(Some(Ok(response.into(Body::empty()).0)));
+                    // if response
+                    //     .headers()
+                    //     .is_contains(&"Connection", "Upgrade".as_bytes())
+                    //     && response.headers().is_contains(&"Upgrade", "h2c".as_bytes())
+                    // {
+                    //     return Poll::Ready(Some(Ok(response.into(Body::empty()).0)));
+                    //     // return Poll::Ready(Some(Err(ProtError::ClientUpgradeHttp2(
+                    //     //     Settings::default(),
+                    //     // ))));
+                    // }
                 }
                 let (mut recv, sender) =
                     Self::build_body(&mut self.inner.res_status, &mut self.send_stream)?;

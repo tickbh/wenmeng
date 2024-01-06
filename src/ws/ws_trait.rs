@@ -11,9 +11,9 @@
 // Created Date: 2024/01/04 11:03:00
 
 use async_trait::async_trait;
-use webparse::{Response, OwnedMessage};
+use webparse::{OwnedMessage, CloseData, WebError, WsError};
 
-use crate::{ProtResult, RecvRequest, RecvResponse, ProtError};
+use crate::{ProtError, ProtResult, RecvRequest, RecvResponse};
 
 use super::WsHandshake;
 
@@ -26,13 +26,17 @@ pub trait WsTrait {
     }
 
     fn on_open(&mut self, shake: WsHandshake) -> ProtResult<()>;
-    
-    async fn on_close(&mut self, reason: &str) {
+
+    async fn on_close(&mut self, reason: Option<CloseData>) {}
+
+    async fn on_error(&mut self, err: ProtError) {}
+
+    async fn on_ping(&mut self, val: Vec<u8>) -> ProtResult<OwnedMessage> {
+        return Ok(OwnedMessage::Pong(val));
     }
     
-    async fn on_error(&mut self, err: ProtError) {
+    async fn on_pong(&mut self, val: Vec<u8>) {
     }
 
     async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()>;
-
 }

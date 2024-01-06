@@ -85,6 +85,7 @@ pub enum ProtError {
     ClientUpgradeHttp2(Settings),
     /// 协议数据升级, 保留原请求
     ServerUpgradeWs(RecvRequest),
+    ClientUpgradeWs(RecvRequest),
     /// 发生错误或者收到关闭消息将要关闭该链接
     GoAway(Binary, Reason, Initiator),
 }
@@ -97,7 +98,6 @@ pub enum Initiator {
     Remote,
 }
 
-
 impl Display for ProtError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -109,6 +109,7 @@ impl Display for ProtError {
             ProtError::ServerUpgradeHttp2(_, _) => f.write_str("receive server upgrade http2 info"),
             ProtError::ClientUpgradeHttp2(_) => f.write_str("receive client upgrade http2 info"),
             ProtError::ServerUpgradeWs(_) => f.write_str("receive server upgrade ws info"),
+            ProtError::ClientUpgradeWs(_) => f.write_str("receive client upgrade ws info"),
             ProtError::SendError => f.write_str("send erorr"),
         }
     }

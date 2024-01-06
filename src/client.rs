@@ -16,6 +16,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::http2::{self, ClientH2Connection};
+use crate::ws::ClientWsConnection;
 use crate::{http1::ClientH1Connection, ProtError};
 use crate::{ProtResult, TimeoutLayer, RecvResponse, RecvRequest, MaybeHttpsStream, Middleware};
 use rustls::{ClientConfig, RootCertStore};
@@ -54,6 +55,11 @@ impl Builder {
         self
     }
 
+    pub fn ws(mut self, ws: bool) -> Self {
+        self.inner.ws = ws;
+        self
+    }
+
     pub fn connect_timeout(mut self, connect_timeout: Duration) -> Self {
         if self.inner.timeout.is_none() {
             self.inner.timeout = Some(TimeoutLayer::new());
@@ -77,7 +83,6 @@ impl Builder {
         self.inner.timeout.as_mut().unwrap().read_timeout = Some(read_timeout);
         self
     }
-
     
     pub fn write_timeout(mut self, write_timeout: Duration) -> Self {
         if self.inner.timeout.is_none() {
@@ -274,6 +279,7 @@ impl Builder {
 pub struct ClientOption {
     http2_only: bool,
     http2: bool,
+    ws: bool,
     settings: Settings,
     timeout: Option<TimeoutLayer>,
     proxies: Vec<ProxyScheme>,
@@ -305,6 +311,7 @@ impl Default for ClientOption {
         Self {
             http2_only: false,
             http2: true,
+            ws: false,
             settings: Default::default(),
             timeout: None,
             proxies: vec![],
@@ -321,6 +328,7 @@ pub struct Client<T=TcpStream>
     req_receiver: Option<Receiver<RecvRequest>>,
     http1: Option<ClientH1Connection<MaybeHttpsStream<T>>>,
     http2: Option<ClientH2Connection<MaybeHttpsStream<T>>>,
+    ws: Option<ClientWsConnection<MaybeHttpsStream<T>>>,
     proxy: Option<ProxyScheme>,
 }
 
@@ -342,6 +350,7 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
             req_receiver: None,
             http1: None,
             http2: None,
+            ws: None,
             proxy: None,
         };
         if client.option.http2_only {
@@ -493,6 +502,24 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
                     return Ok(())
                 },
                 Ok(Some(r)) => {
+                    if r.status() == 101 && r .headers().is_contains(&"Connection", "Upgrade".as_bytes()) {
+                        if r.headers().is_contains(&"Upgrade", "h2c".as_bytes())
+                        {
+                            if self.http1.is_some() {
+                                self.http2 = Some(self.http1.take().unwrap().into_h2(self.option.settings.clone()));
+                                continue;
+                            } else {
+                                return Err(ProtError::ClientUpgradeHttp2(self.option.settings.clone()));
+                            }
+                        } else if r.headers().is_contains(&"Upgrade", "websocket".as_bytes()) {
+                            if self.http1.is_some() {
+                                self.ws = Some(self.http1.take().unwrap().into_ws());
+                                continue;
+                            } else {
+                                return Err(ProtError::ClientUpgradeHttp2(self.option.settings.clone()));
+                            }
+                        }
+                    }
                     self.sender.send(Ok(r)).await?;
                 }
             };
@@ -514,6 +541,16 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
                 header.insert("Connection", "Upgrade, HTTP2-Settings");
                 header.insert("Upgrade", "h2c");
                 header.insert("HTTP2-Settings", self.option.get_http2_setting());
+            }
+        } else if self.option.ws {
+            if let Some(_) = &self.http1 {
+                let header = req.headers_mut();
+                header.insert("Connection", "Upgrade");
+                header.insert("Upgrade", "websocket");
+                let key: [u8; 16] = rand::random();
+                header.insert("Sec-WebSocket-Key", base64::encode(&key));
+                header.insert("Sec-WebSocket-Version", "13");
+                header.insert("Sec-WebSocket-Protocol", "chat, superchat");
             }
         }
     }

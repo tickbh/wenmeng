@@ -27,13 +27,6 @@ impl WsTrait for Operate {
         let _ = self.sender.as_mut().unwrap().send(msg).await;
         Ok(())
     }
-    // async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
-    //     tokio::time::sleep(Duration::new(1, 1)).await;
-    //     let response = Response::builder()
-    //         .version(req.version().clone())
-    //         .body("Hello World\r\n".to_string())?;
-    //     Ok(response.into_type())
-    // }
 }
 
 async fn run_main() -> Result<(), Box<dyn Error>> {

@@ -20,7 +20,7 @@ use tokio_stream::Stream;
 use tokio::{io::{AsyncRead, AsyncWrite}};
 use webparse::{Binary, http2::{HTTP2_MAGIC, frame::Settings}};
 
-use crate::{ProtResult, http2::ClientH2Connection, TimeoutLayer, RecvResponse, RecvRequest};
+use crate::{ProtResult, http2::ClientH2Connection, TimeoutLayer, RecvResponse, RecvRequest, ws::ClientWsConnection};
 
 use super::IoBuffer;
 
@@ -100,15 +100,22 @@ where
         connect.set_timeout_layer(self.timeout);
         connect
     }
+    
+    pub fn into_ws(self) -> ClientWsConnection<T> {
+        let (io, read_buf, write_buf) = self.io.into();
+        let mut connect = ClientWsConnection::new(io);
+        connect.set_cache_buf(read_buf, write_buf);
+        connect.set_handshake_status(Binary::from_static(HTTP2_MAGIC));
+        connect.set_timeout_layer(self.timeout);
+        connect
+    }
+
 
     pub async fn handle_response(
         &mut self,
         r: RecvResponse,
     ) -> ProtResult<Option<RecvResponse>>
     {
-        if r.status() == 101 {
-            return Err(crate::ProtError::ClientUpgradeHttp2(self.settings.clone().unwrap_or(Settings::default())))
-        }
         return Ok(Some(r));
     }
 

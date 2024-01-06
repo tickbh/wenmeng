@@ -35,7 +35,7 @@ use crate::{
 use super::{WsCodec, Control};
 
 
-pub struct ServerWsConnection<T> {
+pub struct ClientWsConnection<T> {
     codec: WsCodec<T>,
     inner: InnerConnection,
     timeout: Option<TimeoutLayer>,
@@ -58,16 +58,16 @@ enum State {
     Closed(Reason, Initiator),
 }
 
-unsafe impl<T> Sync for ServerWsConnection<T> {}
+unsafe impl<T> Sync for ClientWsConnection<T> {}
 
-unsafe impl<T> Send for ServerWsConnection<T> {}
+unsafe impl<T> Send for ClientWsConnection<T> {}
 
-impl<T> ServerWsConnection<T>
+impl<T> ClientWsConnection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(io: T) -> ServerWsConnection<T> {
-        ServerWsConnection {
+    pub fn new(io: T) -> ClientWsConnection<T> {
+        ClientWsConnection {
             codec: WsCodec::new(io),
             inner: InnerConnection {
                 state: State::Open,
@@ -179,7 +179,7 @@ where
 
 }
 
-impl<T> Stream for ServerWsConnection<T>
+impl<T> Stream for ClientWsConnection<T>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
