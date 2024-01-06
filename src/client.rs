@@ -16,9 +16,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::http2::{self, ClientH2Connection};
-use crate::ws::ClientWsConnection;
+use crate::ws::{ClientWsConnection, WsTrait};
 use crate::{http1::ClientH1Connection, ProtError};
 use crate::{ProtResult, TimeoutLayer, RecvResponse, RecvRequest, MaybeHttpsStream, Middleware};
+use futures::StreamExt;
 use rustls::{ClientConfig, RootCertStore};
 use tokio::net::ToSocketAddrs;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -29,7 +30,7 @@ use tokio::{
 use tokio_rustls::TlsConnector;
 use webparse::http2::frame::Settings;
 use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
-use webparse::{Binary, Url, WebError};
+use webparse::{Binary, Url, WebError, OwnedMessage};
 
 use super::middle::BaseMiddleware;
 use super::proxy::ProxyScheme;
@@ -514,7 +515,7 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
                         } else if r.headers().is_contains(&"Upgrade", "websocket".as_bytes()) {
                             if self.http1.is_some() {
                                 self.ws = Some(self.http1.take().unwrap().into_ws());
-                                continue;
+                                break;
                             } else {
                                 return Err(ProtError::ClientUpgradeHttp2(self.option.settings.clone()));
                             }
@@ -524,7 +525,54 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
                 }
             };
         }
+
+        // self.inner_oper_ws(f, receiver).await
+
+        Ok(())
         
+    }
+
+    async fn inner_oper_ws<F>(&mut self, f: &mut F, mut receiver: Receiver<OwnedMessage>) -> ProtResult<()>
+    where
+        F: WsTrait + Send,
+    {
+        loop {
+            if let Some(ws) = &mut self.ws {
+                tokio::select! {
+                    ret = ws.next() => {
+                        match ret {
+                            None => {
+                                return Ok(());
+                            }
+                            Some(Ok(msg)) => {
+                                match msg {
+                                    OwnedMessage::Text(_) | OwnedMessage::Binary(_) => f.on_message(msg).await?,
+                                    OwnedMessage::Close(c) => f.on_close(c).await,
+                                    OwnedMessage::Ping(v) => {
+                                        let p = f.on_ping(v).await?;
+                                        ws.send_owned_message(p)?;
+                                    },
+                                    OwnedMessage::Pong(v) => {
+                                        f.on_pong(v).await;
+                                    },
+                                }
+                            }
+                            Some(Err(e)) => return Err(e),
+                        }
+                    }
+                    msg = receiver.recv() => {
+                        match msg {
+                            None => {
+                                return Ok(());
+                            }
+                            Some(msg) => {
+                                ws.send_owned_message(msg)?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     async fn inner_operate(mut self, req: RecvRequest) -> ProtResult<()> {
