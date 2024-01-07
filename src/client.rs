@@ -330,7 +330,7 @@ pub struct Client<T=TcpStream>
     http1: Option<ClientH1Connection<MaybeHttpsStream<T>>>,
     http2: Option<ClientH2Connection<MaybeHttpsStream<T>>>,
     ws: Option<ClientWsConnection<MaybeHttpsStream<T>>>,
-    callback_ws: Option<Box<dyn WsTrait + Send>>,
+    callback_ws: Option<Box<dyn WsTrait>>,
     proxy: Option<ProxyScheme>,
 }
 
@@ -382,11 +382,11 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
         self.proxy = Some(proxy);
     }
 
-    pub fn set_callback_ws(&mut self, callback_ws: Box<dyn WsTrait + Send>) {
+    pub fn set_callback_ws(&mut self, callback_ws: Box<dyn WsTrait>) {
         self.callback_ws = Some(callback_ws);
     }
 
-    pub fn take_callback_ws(&mut self) -> Option<Box<dyn WsTrait + Send>> {
+    pub fn take_callback_ws(&mut self) -> Option<Box<dyn WsTrait>> {
         self.callback_ws.take()
     }
     

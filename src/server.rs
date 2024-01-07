@@ -138,8 +138,8 @@ where
     http2: Option<ServerH2Connection<T>>,
     ws: Option<ServerWsConnection<T>>,
     middles: Vec<Box<dyn Middleware>>,
-    callback_http: Option<Box<dyn HttpTrait + Send>>,
-    callback_ws: Option<Box<dyn WsTrait + Send>>,
+    callback_http: Option<Box<dyn HttpTrait>>,
+    callback_ws: Option<Box<dyn WsTrait>>,
     addr: Option<SocketAddr>,
     timeout: Option<TimeoutLayer>,
     req_num: usize,
@@ -267,19 +267,19 @@ where
         self.middles.push(Box::new(middle));
     }
 
-    pub fn set_callback_http(&mut self, callback_http: Box<dyn HttpTrait + Send>) {
+    pub fn set_callback_http(&mut self, callback_http: Box<dyn HttpTrait>) {
         self.callback_http = Some(callback_http);
     }
 
-    pub fn take_callback_http(&mut self) -> Option<Box<dyn HttpTrait + Send>> {
+    pub fn take_callback_http(&mut self) -> Option<Box<dyn HttpTrait>> {
         self.callback_http.take()
     }
 
-    pub fn set_callback_ws(&mut self, callback_ws: Box<dyn WsTrait + Send>) {
+    pub fn set_callback_ws(&mut self, callback_ws: Box<dyn WsTrait>) {
         self.callback_ws = Some(callback_ws);
     }
 
-    pub fn take_callback_ws(&mut self) -> Option<Box<dyn WsTrait + Send>> {
+    pub fn take_callback_ws(&mut self) -> Option<Box<dyn WsTrait>> {
         self.callback_ws.take()
     }
 

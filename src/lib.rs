@@ -27,6 +27,8 @@ mod layer;
 mod middle;
 mod proxy;
 
+use std::any::Any;
+
 pub use self::body::Body;
 pub use self::send_stream::SendStream;
 pub use self::stream::MaybeHttpsStream;
@@ -50,7 +52,7 @@ pub type RecvResponse = Response<Body>;
 use async_trait::async_trait;
 
 #[async_trait]
-pub trait HttpTrait {
+pub trait HttpTrait: Send + Sync + Any {
     /// 处理请求并返回正确的数据
     async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse>;
     
@@ -64,5 +66,13 @@ pub trait HttpTrait {
     /// 是否主动结束服务，返回false则表示服务暂停
     fn is_continue_next(&self) -> bool {
         true
+    }
+
+    fn as_any(&self) -> Option<&dyn Any> {
+        None
+    }
+
+    fn as_any_mut(&mut self) -> Option<&mut dyn Any> {
+        None
     }
 }

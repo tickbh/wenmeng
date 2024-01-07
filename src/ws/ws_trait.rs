@@ -10,6 +10,8 @@
 // -----
 // Created Date: 2024/01/04 11:03:00
 
+use std::any::Any;
+
 use async_trait::async_trait;
 use webparse::{OwnedMessage, CloseData, WebError, WsError};
 
@@ -18,7 +20,7 @@ use crate::{ProtError, ProtResult, RecvRequest, RecvResponse};
 use super::WsHandshake;
 
 #[async_trait]
-pub trait WsTrait {
+pub trait WsTrait: Send {
     #[inline]
     fn on_request(&mut self, req: &RecvRequest) -> ProtResult<RecvResponse> {
         // warn!("Handler received request:\n{}", req);
@@ -39,4 +41,13 @@ pub trait WsTrait {
     }
 
     async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()>;
+
+
+    fn as_any(&self) -> Option<&dyn Any> {
+        None
+    }
+
+    fn as_any_mut(&mut self) -> Option<&mut dyn Any> {
+        None
+    }
 }

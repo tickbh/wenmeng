@@ -180,7 +180,7 @@ where
         &mut self,
         addr: &Option<SocketAddr>,
         mut r: RecvRequest,
-        f: &mut Box<dyn HttpTrait + Send>,
+        f: &mut Box<dyn HttpTrait>,
         middles: &mut Vec<Box<dyn Middleware>>,
     ) -> ProtResult<Option<bool>>
     {
