@@ -23,7 +23,7 @@ static MAGIC_GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 pub struct WsHandshake {
     pub sender: Sender<OwnedMessage>,
     /// The HTTP request sent to begin the handshake.
-    pub request: RecvRequest,
+    pub request: Option<RecvRequest>,
     /// The HTTP response from the server confirming the handshake.
     pub response: RecvResponse,
     /// The socket address of the other endpoint. This address may
@@ -36,7 +36,7 @@ pub struct WsHandshake {
 impl WsHandshake {
     pub fn new(
         sender: Sender<OwnedMessage>,
-        request: RecvRequest,
+        request: Option<RecvRequest>,
         response: RecvResponse,
         peer_addr: Option<SocketAddr>,
     ) -> Self {

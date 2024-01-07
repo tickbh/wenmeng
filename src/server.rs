@@ -138,6 +138,8 @@ where
     http2: Option<ServerH2Connection<T>>,
     ws: Option<ServerWsConnection<T>>,
     middles: Vec<Box<dyn Middleware>>,
+    callback_http: Option<Box<dyn HttpTrait + Send>>,
+    callback_ws: Option<Box<dyn WsTrait + Send>>,
     addr: Option<SocketAddr>,
     timeout: Option<TimeoutLayer>,
     req_num: usize,
@@ -161,6 +163,8 @@ where
             ws: None,
             middles: vec![],
             addr,
+            callback_http: None,
+            callback_ws: None,
 
             timeout: None,
             req_num: 0,
@@ -180,6 +184,8 @@ where
             ws: None,
             addr,
             middles: vec![],
+            callback_http: None,
+            callback_ws: None,
             timeout: None,
             req_num: 0,
             max_req_num: usize::MAX,
@@ -261,6 +267,22 @@ where
         self.middles.push(Box::new(middle));
     }
 
+    pub fn set_callback_http(&mut self, callback_http: Box<dyn HttpTrait + Send>) {
+        self.callback_http = Some(callback_http);
+    }
+
+    pub fn take_callback_http(&mut self) -> Option<Box<dyn HttpTrait + Send>> {
+        self.callback_http.take()
+    }
+
+    pub fn set_callback_ws(&mut self, callback_ws: Box<dyn WsTrait + Send>) {
+        self.callback_ws = Some(callback_ws);
+    }
+
+    pub fn take_callback_ws(&mut self) -> Option<Box<dyn WsTrait + Send>> {
+        self.callback_ws.take()
+    }
+
     pub fn get_req_num(&self) -> usize {
         self.req_num
     }
@@ -313,24 +335,26 @@ where
         Ok(())
     }
 
-    pub async fn handle_request<F>(&mut self, f: &mut F, r: RecvRequest) -> ProtResult<Option<bool>>
-    where
-        F: HttpTrait + Send,
+    pub async fn handle_request(&mut self, r: RecvRequest) -> ProtResult<Option<bool>>
     {
+        if self.callback_http.is_none() {
+            return Err(ProtError::Extension("http callback is none"));
+        }
         let result = if let Some(h1) = &mut self.http1 {
-            h1.handle_request(&self.addr, r, f, &mut self.middles).await
+            h1.handle_request(&self.addr, r, self.callback_http.as_mut().unwrap(), &mut self.middles).await
         } else if let Some(h2) = &mut self.http2 {
-            h2.handle_request(&self.addr, r, f, &mut self.middles).await
+            h2.handle_request(&self.addr, r, self.callback_http.as_mut().unwrap(), &mut self.middles).await
         } else {
             Ok(None)
         };
         return result;
     }
 
-    async fn handle_error<F>(&mut self, f: &mut F, err: crate::ProtError) -> ProtResult<()>
-    where
-        F: HttpTrait + Send,
+    async fn handle_error(&mut self, err: crate::ProtError) -> ProtResult<()>
     {
+        if self.callback_http.is_none() {
+            return Err(err);
+        }
         match err {
             ProtError::ServerUpgradeHttp2(b, r) => {
                 if self.http1.is_some() {
@@ -339,7 +363,7 @@ where
                         self.http2
                             .as_mut()
                             .unwrap()
-                            .handle_request(&self.addr, r, f, &mut self.middles)
+                            .handle_request(&self.addr, r, self.callback_http.as_mut().unwrap(), &mut self.middles)
                             .await?;
 
                         self.req_num = self.req_num.wrapping_add(1);
@@ -402,32 +426,65 @@ where
         };
     }
 
-    pub async fn incoming<F>(&mut self, mut f: F) -> ProtResult<()>
-    where
-        F: HttpTrait + Send,
+    pub async fn incoming(&mut self) -> ProtResult<()>
     {
+        let ws_receiver;
         loop {
             match self.inner_incoming().await {
+                Err(ProtError::ServerUpgradeWs(r)) => {
+                    if self.callback_ws.is_none() {
+                        return Err(ProtError::Extension("websocket callback is none"));
+                    }
+                    let mut response = self.callback_ws.as_mut().unwrap().on_request(&r)?;
+                    if response.status() != 101 {
+                        self.send_response(response, None).await?;
+                        self.flush().await?;
+                        return Ok(());
+                    }
+                    let mut binary = BinaryMut::new();
+                    let _ = response.serialize(&mut binary);
+                    let (sender, receiver) = channel::<OwnedMessage>(10);
+                    let shake = WsHandshake::new(sender, Some(r), response, self.addr.clone());
+                    self.callback_ws.as_mut().unwrap().on_open(shake)?;
+    
+                    let value = if let Some(h1) = self.http1.take() {
+                        h1.into_ws(binary.freeze())
+                    } else if let Some(h2) = self.http2.take() {
+                        h2.into_ws(binary.freeze())
+                    } else {
+                        return Err(ProtError::Extension("unknow version"));
+                    };
+                    self.ws = Some(value);
+                    ws_receiver = receiver;
+                    break;
+                }
                 Err(e) => {
-                    self.handle_error(&mut f, e).await?;
+                    self.handle_error(e).await?;
                 }
                 Ok(None) => return Ok(()),
                 Ok(Some(r)) => {
-                    self.handle_request(&mut f, r).await?;
+                    self.handle_request(r).await?;
                 }
             }
 
-            if self.req_num >= self.max_req_num || !f.is_continue_next() {
+            if self.req_num >= self.max_req_num || (self.callback_http.is_some() && !self.callback_http.as_mut().unwrap().is_continue_next()) {
                 self.flush().await?;
                 return Ok(());
             }
         }
+
+        if let Err(e) = self.inner_oper_ws(ws_receiver).await {
+            self.callback_ws.as_mut().unwrap().on_error(e).await;
+        }
+
+        Ok(())
     }
 
-    async fn inner_oper_ws<F>(&mut self, f: &mut F, mut receiver: Receiver<OwnedMessage>) -> ProtResult<()>
-    where
-        F: WsTrait + Send,
+    async fn inner_oper_ws(&mut self, mut receiver: Receiver<OwnedMessage>) -> ProtResult<()>
     {
+        if self.callback_ws.is_none() {
+            return Err(ProtError::Extension("websocket callback is none"));
+        }
         loop {
             if let Some(ws) = &mut self.ws {
                 tokio::select! {
@@ -438,14 +495,14 @@ where
                             }
                             Some(Ok(msg)) => {
                                 match msg {
-                                    OwnedMessage::Text(_) | OwnedMessage::Binary(_) => f.on_message(msg).await?,
-                                    OwnedMessage::Close(c) => f.on_close(c).await,
+                                    OwnedMessage::Text(_) | OwnedMessage::Binary(_) => self.callback_ws.as_mut().unwrap().on_message(msg).await?,
+                                    OwnedMessage::Close(c) => self.callback_ws.as_mut().unwrap().on_close(c).await,
                                     OwnedMessage::Ping(v) => {
-                                        let p = f.on_ping(v).await?;
+                                        let p = self.callback_ws.as_mut().unwrap().on_ping(v).await?;
                                         ws.send_owned_message(p)?;
                                     },
                                     OwnedMessage::Pong(v) => {
-                                        f.on_pong(v).await;
+                                        self.callback_ws.as_mut().unwrap().on_pong(v).await;
                                     },
                                 }
                             }
@@ -465,49 +522,6 @@ where
                 }
             }
         }
-    }
-
-    pub async fn incoming_ws<F>(&mut self, mut f: F) -> ProtResult<()>
-    where
-        F: WsTrait + Send,
-    {
-        let receiver = match self.inner_incoming().await {
-            Err(ProtError::ServerUpgradeWs(r)) => {
-                let mut response = f.on_request(&r)?;
-                if response.status() != 101 {
-                    self.send_response(response, None).await?;
-                    self.flush().await?;
-                    return Ok(());
-                }
-                let mut binary = BinaryMut::new();
-                let _ = response.serialize(&mut binary);
-                let (sender, receiver) = channel::<OwnedMessage>(10);
-                let shake = WsHandshake::new(sender, r, response, self.addr.clone());
-                f.on_open(shake)?;
-
-                let value = if let Some(h1) = self.http1.take() {
-                    h1.into_ws(binary.freeze())
-                } else if let Some(h2) = self.http2.take() {
-                    h2.into_ws(binary.freeze())
-                } else {
-                    return Err(ProtError::Extension("unknow version"));
-                };
-                self.ws = Some(value);
-                receiver
-            }
-            Err(e) => {
-                return Err(e);
-            }
-            Ok(None) => return Ok(()),
-            Ok(Some(_r)) => {
-                return Err(ProtError::Extension("unknow websocket version"));
-            }
-        };
-        if let Err(e) = self.inner_oper_ws(&mut f, receiver).await {
-            f.on_error(e).await;
-        }
-
-        Ok(())
     }
 
     pub async fn flush(&mut self) -> ProtResult<()> {

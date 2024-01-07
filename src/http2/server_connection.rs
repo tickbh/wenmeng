@@ -176,15 +176,13 @@ where
         self.inner.control.poll_write(cx, &mut self.codec, false)
     }
 
-    pub async fn handle_request<F>(
+    pub async fn handle_request(
         &mut self,
         addr: &Option<SocketAddr>,
         mut r: RecvRequest,
-        f: &mut F,
+        f: &mut Box<dyn HttpTrait + Send>,
         middles: &mut Vec<Box<dyn Middleware>>,
     ) -> ProtResult<Option<bool>>
-    where
-        F: HttpTrait + Send,
     {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
 

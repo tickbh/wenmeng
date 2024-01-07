@@ -58,7 +58,8 @@ async fn run_main() -> Result<(), Box<dyn Error>> {
             let operate = Operate {
                 sender: None
             };
-            let e = server.incoming_ws(operate).await;
+            server.set_callback_ws(Box::new(operate));
+            let e = server.incoming().await;
             println!("close server ==== addr = {:?} e = {:?}", addr, e);
         });
     }

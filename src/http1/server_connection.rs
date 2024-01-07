@@ -119,15 +119,13 @@ where
         connect
     }
 
-    pub async fn handle_request<F>(
+    pub async fn handle_request(
         &mut self,
         addr: &Option<SocketAddr>,
         r: RecvRequest,
-        f: &mut F,
+        f: &mut Box<dyn HttpTrait + Send>,
         middles: &mut Vec<Box<dyn Middleware>>
     ) -> ProtResult<Option<bool>>
-    where
-        F: HttpTrait + Send,
     {
         
         let mut res = HttpHelper::handle_request(Version::Http11, addr, r, f, middles).await?;

@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::http2::{self, ClientH2Connection};
-use crate::ws::{ClientWsConnection, WsTrait};
+use crate::ws::{ClientWsConnection, WsTrait, WsHandshake};
 use crate::{http1::ClientH1Connection, ProtError};
 use crate::{ProtResult, TimeoutLayer, RecvResponse, RecvRequest, MaybeHttpsStream, Middleware};
 use futures::StreamExt;
@@ -330,6 +330,7 @@ pub struct Client<T=TcpStream>
     http1: Option<ClientH1Connection<MaybeHttpsStream<T>>>,
     http2: Option<ClientH2Connection<MaybeHttpsStream<T>>>,
     ws: Option<ClientWsConnection<MaybeHttpsStream<T>>>,
+    callback_ws: Option<Box<dyn WsTrait + Send>>,
     proxy: Option<ProxyScheme>,
 }
 
@@ -352,6 +353,7 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
             http1: None,
             http2: None,
             ws: None,
+            callback_ws: None,
             proxy: None,
         };
         if client.option.http2_only {
@@ -378,6 +380,14 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
 
     pub fn set_proxy(&mut self, proxy: ProxyScheme) {
         self.proxy = Some(proxy);
+    }
+
+    pub fn set_callback_ws(&mut self, callback_ws: Box<dyn WsTrait + Send>) {
+        self.callback_ws = Some(callback_ws);
+    }
+
+    pub fn take_callback_ws(&mut self) -> Option<Box<dyn WsTrait + Send>> {
+        self.callback_ws.take()
     }
     
     pub fn into_io(self) -> T {
@@ -460,6 +470,7 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
                 None
             }
         }
+        let ws_receiver;
         loop {
             let v = tokio::select! {
                 r = http1_wait(&mut self.http1) => {
@@ -513,8 +524,15 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
                                 return Err(ProtError::ClientUpgradeHttp2(self.option.settings.clone()));
                             }
                         } else if r.headers().is_contains(&"Upgrade", "websocket".as_bytes()) {
+                            if self.callback_ws.is_none() {
+                                return Err(ProtError::Extension("websocket callback is none"));
+                            }
                             if self.http1.is_some() {
                                 self.ws = Some(self.http1.take().unwrap().into_ws());
+                                let (sender, receiver) = channel::<OwnedMessage>(10);
+                                let shake = WsHandshake::new(sender, None, r, None);
+                                self.callback_ws.as_mut().unwrap().on_open(shake)?;
+                                ws_receiver = receiver;
                                 break;
                             } else {
                                 return Err(ProtError::ClientUpgradeHttp2(self.option.settings.clone()));
@@ -526,16 +544,17 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
             };
         }
 
-        // self.inner_oper_ws(f, receiver).await
+        self.inner_oper_ws(ws_receiver).await?;
 
         Ok(())
         
     }
 
-    async fn inner_oper_ws<F>(&mut self, f: &mut F, mut receiver: Receiver<OwnedMessage>) -> ProtResult<()>
-    where
-        F: WsTrait + Send,
+    async fn inner_oper_ws(&mut self, mut receiver: Receiver<OwnedMessage>) -> ProtResult<()>
     {
+        if self.callback_ws.is_none() {
+            return Err(ProtError::Extension("unknow callback websocket"));
+        }
         loop {
             if let Some(ws) = &mut self.ws {
                 tokio::select! {
@@ -546,14 +565,14 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
                             }
                             Some(Ok(msg)) => {
                                 match msg {
-                                    OwnedMessage::Text(_) | OwnedMessage::Binary(_) => f.on_message(msg).await?,
-                                    OwnedMessage::Close(c) => f.on_close(c).await,
+                                    OwnedMessage::Text(_) | OwnedMessage::Binary(_) => self.callback_ws.as_mut().unwrap().on_message(msg).await?,
+                                    OwnedMessage::Close(c) => self.callback_ws.as_mut().unwrap().on_close(c).await,
                                     OwnedMessage::Ping(v) => {
-                                        let p = f.on_ping(v).await?;
+                                        let p = self.callback_ws.as_mut().unwrap().on_ping(v).await?;
                                         ws.send_owned_message(p)?;
                                     },
                                     OwnedMessage::Pong(v) => {
-                                        f.on_pong(v).await;
+                                        self.callback_ws.as_mut().unwrap().on_pong(v).await;
                                     },
                                 }
                             }

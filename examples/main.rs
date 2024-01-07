@@ -78,7 +78,8 @@ impl HttpTrait for Operate {
 
 async fn process(stream: TcpStream, addr: SocketAddr) -> Result<(), Box<dyn Error>> {
     let mut server = Server::new(stream, Some(addr));
-    let _ret = server.incoming(Operate).await;
+    server.set_callback_http(Box::new(Operate));
+    let _ret = server.incoming().await;
     Ok(())
 }
 

@@ -86,8 +86,8 @@ async fn run_main() -> Result<(), Box<dyn Error>> {
             server.middle(HelloMiddleware);
             println!("server size size = {:?}", std::mem::size_of_val(&server));
             // println!("size = {:?}", data_size(&server));
-            let operate = Operate;
-            let e = server.incoming(operate).await;
+            server.set_callback_http(Box::new(Operate));
+            let e = server.incoming().await;
             println!("close server ==== addr = {:?} e = {:?}", addr, e);
         });
     }

@@ -19,15 +19,13 @@ use crate::{Middleware, HttpTrait, ProtResult, RecvRequest, RecvResponse};
 pub struct HttpHelper;
 
 impl HttpHelper {
-    pub async fn handle_request<F>(
+    pub async fn handle_request(
         version: Version,
         addr: &Option<SocketAddr>,
         mut r: RecvRequest,
-        f: &mut F,
+        f: &mut Box<dyn HttpTrait + Send>,
         middles: &mut Vec<Box<dyn Middleware>>,
     ) -> ProtResult<RecvResponse>
-    where
-        F: HttpTrait + Send,
     {
         let (mut gzip, mut deflate, mut br) = (false, false, false);
         if let Some(accept) = r.headers().get_option_value(&HeaderName::ACCEPT_ENCODING) {
