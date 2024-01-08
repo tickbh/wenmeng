@@ -23,7 +23,10 @@ use tokio_util::codec::LengthDelimitedCodec;
 use webparse::http::http2::frame::{Frame, Kind};
 use webparse::http::http2::{frame, Decoder};
 use webparse::http2::DEFAULT_SETTINGS_HEADER_TABLE_SIZE;
-use webparse::{Binary, BinaryMut, BinaryRef, Buf, DataFrame, OwnedMessage, WebError};
+use webparse::{
+    ws::{DataFrame, OwnedMessage},
+    Binary, BinaryMut, BinaryRef, Buf, WebError,
+};
 
 use crate::ProtResult;
 

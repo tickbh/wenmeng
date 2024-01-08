@@ -23,17 +23,16 @@ use tokio::{
     sync::mpsc::{channel, Receiver},
 };
 use webparse::{
-    http::http2::frame::{Reason, StreamIdentifier},
-    Binary, BinaryMut, Version, OwnedMessage,
+    ws::{CloseCode, CloseData, OwnedMessage},
+    Binary, BinaryMut, Version,
 };
 
 use crate::{
-    Builder, HeaderHelper, HttpHelper, Initiator, Middleware, HttpTrait, ProtError, ProtResult,
+    Builder, HeaderHelper, HttpHelper, HttpTrait, Initiator, Middleware, ProtError, ProtResult,
     RecvRequest, RecvResponse, TimeoutLayer,
 };
 
-use super::{WsCodec, Control};
-
+use super::{Control, WsCodec, WsState};
 
 pub struct ServerWsConnection<T> {
     codec: WsCodec<T>,
@@ -42,20 +41,8 @@ pub struct ServerWsConnection<T> {
 }
 
 struct InnerConnection {
-    state: State,
+    state: WsState,
     control: Control,
-}
-
-#[derive(Debug)]
-enum State {
-    /// Currently open in a sane state
-    Open,
-
-    /// The codec must be flushed
-    Closing(Reason, Initiator),
-
-    /// In a closed state
-    Closed(Reason, Initiator),
 }
 
 unsafe impl<T> Sync for ServerWsConnection<T> {}
@@ -70,7 +57,7 @@ where
         ServerWsConnection {
             codec: WsCodec::new(io, false),
             inner: InnerConnection {
-                state: State::Open,
+                state: WsState::Open,
                 control: Control::new(),
             },
             timeout: None,
@@ -172,11 +159,15 @@ where
     pub fn set_handshake_status(&mut self, binary: Binary) {
         self.inner.control.set_handshake_status(binary, false)
     }
-    
+
     pub fn send_owned_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {
         self.inner.control.send_owned_message(msg)
     }
-
+    
+    pub fn receiver_close(&mut self, data: Option<CloseData>) -> ProtResult<()> {
+        self.inner.state.set_closing(data.unwrap_or(CloseData::normal()));
+        Ok(())
+    }
 }
 
 impl<T> Stream for ServerWsConnection<T>
@@ -190,7 +181,7 @@ where
     ) -> Poll<Option<Self::Item>> {
         loop {
             match self.inner.state {
-                State::Open => {
+                WsState::Open => {
                     match self.poll_request(cx) {
                         Poll::Pending => {
                             return Poll::Pending;
@@ -198,17 +189,21 @@ where
                         Poll::Ready(Some(Ok(v))) => {
                             return Poll::Ready(Some(Ok(v)));
                         }
-                        Poll::Ready(v) => {
-                            return Poll::Ready(None);
+                        Poll::Ready(_) => {
+                            let close = OwnedMessage::Close(Some(CloseData::new(
+                                CloseCode::Abnormal,
+                                "network".to_string(),
+                            )));
+                            return Poll::Ready(Some(Ok(close)));
                         }
                     };
                 }
-                State::Closing(reason, initiator) => {
+                WsState::Closing(_) => {
                     ready!(self.codec.shutdown(cx))?;
-                    self.inner.state = State::Closed(reason, initiator);
+                    self.inner.state.set_closed(None);
                 }
-                State::Closed(reason, initiator) => {
-                    // if let Err(e) = self.take_error(reason, initiator) {
+                WsState::Closed(_) => {
+                    // if let Err(e) = self.take_error(_) {
                     //     return Poll::Ready(Some(Err(e)));
                     // }
                     return Poll::Ready(None);

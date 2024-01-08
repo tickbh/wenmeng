@@ -30,7 +30,7 @@ use tokio::{
 use tokio_rustls::TlsConnector;
 use webparse::http2::frame::Settings;
 use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
-use webparse::{Binary, OwnedMessage, Url, WebError, Request};
+use webparse::{Binary, ws::OwnedMessage, Url, WebError, Request};
 
 use super::middle::BaseMiddleware;
 use super::proxy::ProxyScheme;
@@ -578,7 +578,10 @@ where
                             Some(Ok(msg)) => {
                                 match msg {
                                     OwnedMessage::Text(_) | OwnedMessage::Binary(_) => self.callback_ws.as_mut().unwrap().on_message(msg).await?,
-                                    OwnedMessage::Close(c) => self.callback_ws.as_mut().unwrap().on_close(c).await,
+                                    OwnedMessage::Close(c) => {
+                                        self.callback_ws.as_mut().unwrap().on_close(&c).await;
+                                        ws.receiver_close(c)?;
+                                    },
                                     OwnedMessage::Ping(v) => {
                                         let p = self.callback_ws.as_mut().unwrap().on_ping(v).await?;
                                         ws.send_owned_message(p)?;
@@ -592,6 +595,7 @@ where
                         }
                     }
                     msg = receiver.recv() => {
+                        println!("msg recv = {:?}", msg);
                         match msg {
                             None => {
                                 return Ok(());
@@ -602,7 +606,7 @@ where
                         }
                     }
                     _ = WsOption::interval_wait(&mut option) => {
-                        self.callback_ws.as_mut().unwrap().on_interval(&mut option).await;
+                        self.callback_ws.as_mut().unwrap().on_interval(&mut option).await?;
                     }
                 }
             }

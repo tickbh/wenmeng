@@ -23,7 +23,7 @@ use tokio::{
 };
 use tokio_stream::StreamExt;
 use webparse::{
-    http::http2::frame::StreamIdentifier, Binary, BinaryMut, Request, Response, Serialize, OwnedMessage,
+    http::http2::frame::StreamIdentifier, Binary, BinaryMut, Request, Response, Serialize, ws::OwnedMessage,
 };
 
 use super::{http1::ServerH1Connection, middle::BaseMiddleware};
@@ -496,7 +496,10 @@ where
                             Some(Ok(msg)) => {
                                 match msg {
                                     OwnedMessage::Text(_) | OwnedMessage::Binary(_) => self.callback_ws.as_mut().unwrap().on_message(msg).await?,
-                                    OwnedMessage::Close(c) => self.callback_ws.as_mut().unwrap().on_close(c).await,
+                                    OwnedMessage::Close(c) => {
+                                        self.callback_ws.as_mut().unwrap().on_close(&c).await;
+                                        ws.receiver_close(c)?;
+                                    },
                                     OwnedMessage::Ping(v) => {
                                         let p = self.callback_ws.as_mut().unwrap().on_ping(v).await?;
                                         ws.send_owned_message(p)?;
@@ -520,7 +523,7 @@ where
                         }
                     }
                     _ = WsOption::interval_wait(&mut option) => {
-                        self.callback_ws.as_mut().unwrap().on_interval(&mut option).await;
+                        self.callback_ws.as_mut().unwrap().on_interval(&mut option).await?;
                     }
                 }
             }

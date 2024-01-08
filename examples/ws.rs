@@ -1,9 +1,16 @@
-use std::{env, error::Error, time::Duration};
 use async_trait::async_trait;
+use std::{env, error::Error, time::Duration};
 
 use tokio::{net::TcpListener, sync::mpsc::Sender};
-use webparse::{Response, OwnedMessage};
-use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, HttpTrait, Middleware, Body, ws::{WsTrait, WsHandshake, WsOption}};
+use webparse::{
+    ws::{CloseData, OwnedMessage},
+    Response,
+};
+use wenmeng::{
+    self,
+    ws::{WsHandshake, WsOption, WsTrait},
+    Body, HttpTrait, Middleware, ProtResult, RecvRequest, RecvResponse, Server,
+};
 
 // #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -15,21 +22,31 @@ struct Operate {
 
 #[async_trait]
 impl WsTrait for Operate {
-    
     fn on_open(&mut self, shake: WsHandshake) -> ProtResult<Option<WsOption>> {
         self.sender = Some(shake.sender);
-        Ok(Some(WsOption::new(Duration::from_secs(1))))
+        Ok(Some(WsOption::new(Duration::from_secs(10))))
     }
-    
+
     async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {
         println!("callback on message = {:?}", msg);
-        let _ = self.sender.as_mut().unwrap().send(OwnedMessage::Text("from server".to_string())).await;
+        let _ = self
+            .sender
+            .as_mut()
+            .unwrap()
+            .send(OwnedMessage::Text("from server".to_string()))
+            .await;
         let _ = self.sender.as_mut().unwrap().send(msg).await;
         Ok(())
     }
-    
+
     async fn on_interval(&mut self, option: &mut Option<WsOption>) -> ProtResult<()> {
         println!("on_interval!!!!!!!");
+        let _ = self
+            .sender
+            .as_mut()
+            .unwrap()
+            .send(OwnedMessage::Close(Some(CloseData::normal())))
+            .await;
         Ok(())
     }
 }
@@ -54,22 +71,19 @@ async fn run_main() -> Result<(), Box<dyn Error>> {
             let recv = Body::empty();
             println!("recv = {:?}", std::mem::size_of_val(&recv));
             recv.print_debug();
-            let x = vec![0;1900];
+            let x = vec![0; 1900];
             // println!("size = {:?}", s);
             println!("size = {:?}", std::mem::size_of_val(&x));
             let mut server = Server::new(stream, Some(addr));
             println!("server size size = {:?}", std::mem::size_of_val(&server));
             // println!("size = {:?}", data_size(&server));
-            let operate = Operate {
-                sender: None
-            };
+            let operate = Operate { sender: None };
             server.set_callback_ws(Box::new(operate));
             let e = server.incoming().await;
             println!("close server ==== addr = {:?} e = {:?}", addr, e);
         });
     }
 }
-
 
 #[tokio::main]
 async fn main() {

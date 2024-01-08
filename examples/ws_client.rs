@@ -2,10 +2,10 @@ use async_trait::async_trait;
 use std::{env, error::Error, time::Duration};
 
 use tokio::{net::TcpListener, sync::mpsc::Sender};
-use webparse::{OwnedMessage, Request, Response};
+use webparse::{ws::{OwnedMessage, CloseData}, Request, Response};
 use wenmeng::{
     self,
-    ws::{WsHandshake, WsTrait, WsOption},
+    ws::{WsHandshake, WsOption, WsTrait},
     Body, Client, HttpTrait, Middleware, ProtResult, RecvRequest, RecvResponse, Server,
 };
 
@@ -35,12 +35,17 @@ impl WsTrait for Operate {
         let _ = self.sender.as_mut().unwrap().send(msg).await;
         Ok(())
     }
-    
+
     async fn on_interval(&mut self, option: &mut Option<WsOption>) -> ProtResult<()> {
         println!("on_interval!!!!!!!");
+
+        let _ = self
+            .sender
+            .as_mut()
+            .unwrap()
+            .send(OwnedMessage::Close(Some(CloseData::normal()))).await;
         Ok(())
     }
-
 }
 
 async fn run_main() -> ProtResult<()> {

@@ -14,7 +14,7 @@ use std::{task::{Context, Poll, ready}, pin::Pin, collections::LinkedList};
 
 use futures::Stream;
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::{Binary, OwnedMessage};
+use webparse::{Binary, ws::OwnedMessage};
 
 use crate::ProtResult;
 

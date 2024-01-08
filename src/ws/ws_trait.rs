@@ -13,7 +13,10 @@
 use std::any::Any;
 
 use async_trait::async_trait;
-use webparse::{OwnedMessage, CloseData, WebError, WsError};
+use webparse::{
+    ws::{CloseData, OwnedMessage, WsError},
+    WebError,
+};
 
 use crate::{ProtError, ProtResult, RecvRequest, RecvResponse};
 
@@ -29,16 +32,15 @@ pub trait WsTrait: Send {
 
     fn on_open(&mut self, shake: WsHandshake) -> ProtResult<Option<WsOption>>;
 
-    async fn on_close(&mut self, reason: Option<CloseData>) {}
+    async fn on_close(&mut self, reason: &Option<CloseData>) {}
 
     async fn on_error(&mut self, err: ProtError) {}
 
     async fn on_ping(&mut self, val: Vec<u8>) -> ProtResult<OwnedMessage> {
         return Ok(OwnedMessage::Pong(val));
     }
-    
-    async fn on_pong(&mut self, val: Vec<u8>) {
-    }
+
+    async fn on_pong(&mut self, val: Vec<u8>) {}
 
     async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()>;
 
