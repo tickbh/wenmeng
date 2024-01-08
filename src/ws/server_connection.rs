@@ -124,12 +124,13 @@ where
                 is_idle,
             )?;
         }
+
         self.inner.control.poll_request(cx, &mut self.codec)
     }
 
-    // pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<()>> {
-    //     self.inner.control.poll_write(cx, &mut self.codec, false)
-    // }
+    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<()>> {
+        self.inner.control.poll_write(cx, &mut self.codec)
+    }
 
     // pub async fn handle_request<F>(
     //     &mut self,
@@ -176,6 +177,7 @@ where
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
+        // std::pin::Pin::unpin
         loop {
             match self.inner.state {
                 WsState::Open => {
@@ -197,12 +199,10 @@ where
                 }
                 WsState::Closing(_) => {
                     ready!(self.codec.shutdown(cx))?;
+                    ready!(self.poll_write(cx))?;
                     self.inner.state.set_closed(None);
                 }
                 WsState::Closed(_) => {
-                    // if let Err(e) = self.take_error(_) {
-                    //     return Poll::Ready(Some(Err(e)));
-                    // }
                     return Poll::Ready(None);
                 }
             }

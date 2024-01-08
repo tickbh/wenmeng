@@ -127,9 +127,9 @@ where
         self.inner.control.poll_request(cx, &mut self.codec)
     }
 
-    // pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<()>> {
-    //     self.inner.control.poll_write(cx, &mut self.codec, false)
-    // }
+    pub fn poll_write(&mut self, cx: &mut Context<'_>) -> Poll<ProtResult<()>> {
+        self.inner.control.poll_write(cx, &mut self.codec)
+    }
 
     // pub async fn handle_request<F>(
     //     &mut self,
@@ -197,6 +197,7 @@ where
                 }
                 WsState::Closing(_) => {
                     ready!(self.codec.shutdown(cx))?;
+                    ready!(self.poll_write(cx))?;
                     self.inner.state.set_closed(None);
                 }
                 WsState::Closed(_) => {

@@ -521,6 +521,12 @@ where
                                 return Ok(());
                             }
                             Some(msg) => {
+                                match &msg {
+                                    OwnedMessage::Close(data) => {
+                                        ws.receiver_close(data.clone())?;
+                                    },
+                                    _ => {}
+                                }
                                 ws.send_owned_message(msg)?;
                             }
                         }
