@@ -1,20 +1,14 @@
+
 mod framed_read;
 mod framed_write;
 
-use std::{
-    io,
-    pin::Pin,
-    task::{Context, Poll},
-};
+use std::{task::{Context, Poll}, io, pin::Pin};
 
 pub use framed_read::FramedRead;
 pub use framed_write::FramedWrite;
 use futures::Stream;
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::{
-    ws::{DataFrameable, OwnedMessage},
-    BinaryMut,
-};
+use webparse::{BinaryMut, ws::{OwnedMessage, DataFrameable}};
 
 use crate::ProtResult;
 
@@ -32,11 +26,13 @@ where
     pub fn new(io: T, is_client: bool) -> Self {
         let framed_write = FramedWrite::new(io);
         let inner = FramedRead::new(framed_write, is_client);
-        WsCodec { inner }
+        WsCodec {
+            inner,
+        }
     }
 
     pub fn into_io(self) -> T {
-        self.inner.into_io().into_io()
+        self.inner.into_io().into_io()       
     }
 
     pub fn is_write_end(&self) -> bool {
@@ -73,7 +69,7 @@ where
         self.inner.set_cache_buf(read_buf);
         self.framed_write().set_cache_buf(write_buf);
     }
-
+    
     pub fn send_msg(&mut self, msg: OwnedMessage, mask: bool) -> ProtResult<usize> {
         log::trace!("Websocket:发送帧数据: {:?}", msg);
         if mask {
@@ -83,6 +79,7 @@ where
         }
         Ok(0)
     }
+
 }
 
 impl<T> Stream for WsCodec<T>

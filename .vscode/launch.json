@@ -83,15 +83,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug example 'ws'",
+            "name": "Debug example 'ws_server'",
             "cargo": {
                 "args": [
                     "build",
-                    "--example=ws",
+                    "--example=ws_server",
                     "--package=wenmeng"
                 ],
                 "filter": {
-                    "name": "ws",
+                    "name": "ws_server",
                     "kind": "example"
                 }
             },

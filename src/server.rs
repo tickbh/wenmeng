@@ -428,7 +428,7 @@ where
 
     pub async fn incoming(&mut self) -> ProtResult<()>
     {
-        let (ws_receiver, ws_option);
+        let (mut ws_receiver, mut ws_option);
         loop {
             match self.inner_incoming().await {
                 Err(ProtError::ServerUpgradeWs(r)) => {
@@ -456,6 +456,9 @@ where
                     };
                     self.ws = Some(value);
                     ws_receiver = receiver;
+                    if ws_option.is_some() && ws_option.as_mut().unwrap().receiver.is_some() {
+                        ws_receiver = ws_option.as_mut().unwrap().receiver.take().unwrap();
+                    }
                     break;
                 }
                 Err(e) => {

@@ -24,7 +24,7 @@ use tokio::{
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
-    Binary, BinaryMut, Version, Request,
+    Binary, BinaryMut, Version,
 };
 
 use crate::{

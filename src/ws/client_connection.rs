@@ -11,7 +11,6 @@
 // Created Date: 2023/10/07 09:41:03
 
 use std::{
-    net::SocketAddr,
     task::{ready, Context, Poll},
     time::{Duration, Instant},
 };
@@ -20,20 +19,17 @@ use tokio_stream::Stream;
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::mpsc::{channel, Receiver},
 };
 use webparse::{
-    http::http2::frame::{Reason, StreamIdentifier},
     ws::{CloseData, OwnedMessage, CloseCode},
-    Binary, BinaryMut, Version,
+    Binary, BinaryMut,
 };
 
 use crate::{
-    Builder, HeaderHelper, HttpHelper, HttpTrait, Initiator, Middleware, ProtError, ProtResult,
-    RecvRequest, RecvResponse, TimeoutLayer,
+    ProtResult, TimeoutLayer,
 };
 
-use super::{Control, WsCodec, WsState};
+use super::{Control, WsCodec, state::WsState};
 
 pub struct ClientWsConnection<T> {
     codec: WsCodec<T>,

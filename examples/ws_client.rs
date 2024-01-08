@@ -1,12 +1,11 @@
 use async_trait::async_trait;
-use std::{env, error::Error, time::Duration};
+use std::{time::Duration};
 
-use tokio::{net::TcpListener, sync::mpsc::Sender};
-use webparse::{ws::{OwnedMessage, CloseData}, Request, Response};
+use tokio::{sync::mpsc::Sender};
+use webparse::{ws::{OwnedMessage, CloseData}};
 use wenmeng::{
     self,
-    ws::{WsHandshake, WsOption, WsTrait},
-    Body, Client, HttpTrait, Middleware, ProtResult, RecvRequest, RecvResponse, Server,
+    ws::{WsHandshake, WsOption, WsTrait}, Client, ProtResult,
 };
 
 // #[cfg(feature = "dhat-heap")]
@@ -36,7 +35,7 @@ impl WsTrait for Operate {
         Ok(())
     }
 
-    async fn on_interval(&mut self, option: &mut Option<WsOption>) -> ProtResult<()> {
+    async fn on_interval(&mut self, _option: &mut Option<WsOption>) -> ProtResult<()> {
         println!("on_interval!!!!!!!");
 
         let _ = self

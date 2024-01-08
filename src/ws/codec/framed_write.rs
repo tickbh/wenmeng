@@ -18,7 +18,6 @@ use std::{
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use webparse::{
-    http::http2::{FrameSize, DEFAULT_MAX_FRAME_SIZE},
     BinaryMut, Buf,
 };
 

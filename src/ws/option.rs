@@ -10,15 +10,16 @@
 // -----
 // Created Date: 2024/01/08 10:59:59
 
-use tokio::{time::{Duration, Instant, sleep, sleep_until}};
+use tokio::{time::{Duration, Instant, sleep_until}, sync::mpsc::Receiver};
+use webparse::ws::OwnedMessage;
 
-use tokio::time::Sleep;
+
 
 // 存储由on_open返回的配置文件, 如定时器之类等
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct WsOption {
     pub interval: Duration,
-
+    pub receiver: Option<Receiver<OwnedMessage>>,
     next_interval: Instant,
 }
 
@@ -27,6 +28,7 @@ impl WsOption {
         assert!(interval > Duration::from_micros(1));
         Self {
             interval,
+            receiver: None,
             next_interval: Instant::now() + interval,
         }
     }

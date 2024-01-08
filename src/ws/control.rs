@@ -10,21 +10,22 @@
 // -----
 // Created Date: 2024/01/02 10:51:49
 
-use std::{task::{Context, Poll, ready}, pin::Pin, collections::LinkedList};
+use std::{
+    collections::LinkedList,
+    pin::Pin,
+    task::{ready, Context, Poll},
+};
 
 use futures::Stream;
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::{Binary, ws::OwnedMessage};
+use webparse::{ws::OwnedMessage, Binary};
 
 use crate::ProtResult;
 
-use super::{state::{WsStateGoAway, WsStateHandshake, WsStatePingPong}, WsCodec};
+use super::{state::WsStateHandshake, WsCodec};
 
 pub(crate) struct Control {
     handshake: WsStateHandshake,
-    goaway: WsStateGoAway,
-    pingpong: WsStatePingPong,
-
     msgs: LinkedList<OwnedMessage>,
 
     is_client: bool,
@@ -34,9 +35,6 @@ impl Control {
     pub fn new() -> Self {
         Self {
             handshake: WsStateHandshake::new_server(),
-            goaway: WsStateGoAway::new(),
-            pingpong: WsStatePingPong::new(),
-
             msgs: LinkedList::new(),
             is_client: false,
         }
@@ -46,7 +44,7 @@ impl Control {
         self.is_client = is_client;
         self.handshake.set_handshake_status(binary, is_client);
     }
-    
+
     pub fn send_owned_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {
         self.msgs.push_back(msg);
         Ok(())
@@ -66,7 +64,7 @@ impl Control {
         ready!(codec.poll_flush(cx))?;
         Poll::Ready(Ok(()))
     }
-    
+
     pub fn poll_request<T>(
         &mut self,
         cx: &mut Context<'_>,
@@ -78,20 +76,20 @@ impl Control {
         ready!(self.handshake.poll_handle(cx, codec))?;
 
         let _ = self.poll_write(cx, codec);
-        
+
         match Pin::new(&mut *codec).poll_next(cx) {
             Poll::Ready(None) => return Poll::Ready(None),
             Poll::Ready(Some(Ok(msg))) => {
                 println!("msg = {:?}", msg);
                 return Poll::Ready(Some(Ok(msg)));
-            },
+            }
             Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),
             Poll::Pending => return Poll::Pending,
         }
         // let mut has_change;
         Poll::Pending
     }
-    
+
     pub fn is_write_end<T>(&self, codec: &WsCodec<T>) -> bool
     where
         T: AsyncRead + AsyncWrite + Unpin,

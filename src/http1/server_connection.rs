@@ -21,7 +21,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
 };
 use tokio_stream::{Stream, StreamExt};
-use webparse::{Binary, BinaryMut, Response, Serialize, Version};
+use webparse::{Binary, BinaryMut, Version};
 
 use crate::{ProtResult, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer, RecvResponse, RecvRequest, HttpTrait, Middleware, ws::ServerWsConnection};
 

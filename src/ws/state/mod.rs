@@ -11,9 +11,41 @@
 // Created Date: 2023/09/14 09:42:25
 
 mod state_handshake;
-mod state_goaway;
-mod state_ping_pong;
   
 pub use state_handshake::{WsStateHandshake};
-pub use state_goaway::WsStateGoAway;
-pub use state_ping_pong::WsStatePingPong;
+use webparse::ws::CloseData;
+
+
+#[derive(Debug)]
+pub enum WsState {
+    /// Currently open in a sane state
+    Open,
+
+    /// The codec must be flushed
+    Closing(CloseData),
+
+    /// In a closed state
+    Closed(CloseData),
+}
+
+impl WsState {
+    pub fn set_closing(&mut self, data: CloseData) {
+        match self {
+            WsState::Open => {
+                *self = WsState::Closing(data);
+            },
+            _ => {}
+        }
+    }
+    pub fn set_closed(&mut self, data: Option<CloseData>) {
+        match self {
+            WsState::Open => {
+                *self = WsState::Closed(data.unwrap_or(CloseData::normal()));
+            },
+            WsState::Closing(data) => {
+                *self = WsState::Closed(data.clone());
+            },
+            _ => {}
+        }
+    }
+}

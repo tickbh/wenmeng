@@ -1,20 +1,13 @@
 use async_trait::async_trait;
-use std::{env, error::Error, time::Duration};
+use std::{error::Error, time::Duration};
 
 use tokio::{net::TcpListener, sync::mpsc::Sender};
-use webparse::{
-    ws::{CloseData, OwnedMessage},
-    Response,
-};
+use webparse::ws::{CloseData, OwnedMessage};
 use wenmeng::{
     self,
     ws::{WsHandshake, WsOption, WsTrait},
-    Body, HttpTrait, Middleware, ProtResult, RecvRequest, RecvResponse, Server,
+    ProtResult, Server,
 };
-
-// #[cfg(feature = "dhat-heap")]
-#[global_allocator]
-static ALLOC: dhat::Alloc = dhat::Alloc;
 
 struct Operate {
     sender: Option<Sender<OwnedMessage>>,
@@ -39,7 +32,7 @@ impl WsTrait for Operate {
         Ok(())
     }
 
-    async fn on_interval(&mut self, option: &mut Option<WsOption>) -> ProtResult<()> {
+    async fn on_interval(&mut self, _option: &mut Option<WsOption>) -> ProtResult<()> {
         println!("on_interval!!!!!!!");
         let _ = self
             .sender
@@ -53,30 +46,13 @@ impl WsTrait for Operate {
 
 async fn run_main() -> Result<(), Box<dyn Error>> {
     // 在main函数最开头调用这个方法
-    let _file_name = format!("heap-{}.json", std::process::id());
-    // let _profiler = dhat::Profiler::builder().file_name(file_name).build();
-    //
-    // let _profiler = dhat::Profiler::new_heap();
-
-    // env_logger::init();
-    // console_subscriber::init();
-    let addr = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "0.0.0.0:8081".to_string());
+    let addr = "127.0.0.1:8081".to_string();
     let server = TcpListener::bind(&addr).await?;
     println!("Listening on: {}", addr);
     loop {
         let (stream, addr) = server.accept().await?;
         tokio::spawn(async move {
-            let recv = Body::empty();
-            println!("recv = {:?}", std::mem::size_of_val(&recv));
-            recv.print_debug();
-            let x = vec![0; 1900];
-            // println!("size = {:?}", s);
-            println!("size = {:?}", std::mem::size_of_val(&x));
             let mut server = Server::new(stream, Some(addr));
-            println!("server size size = {:?}", std::mem::size_of_val(&server));
-            // println!("size = {:?}", data_size(&server));
             let operate = Operate { sender: None };
             server.set_callback_ws(Box::new(operate));
             let e = server.incoming().await;

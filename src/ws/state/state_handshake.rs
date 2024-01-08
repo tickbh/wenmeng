@@ -10,15 +10,14 @@
 // -----
 // Created Date: 2023/09/14 09:42:25
 
-use crate::{ws::WsCodec, Builder, ProtError, ProtResult};
+use crate::{ws::WsCodec, Builder, ProtResult};
 
 use std::{
-    io,
     pin::Pin,
     task::{ready, Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use webparse::{http::http2::HTTP2_MAGIC, Binary, Buf};
+use tokio::io::{AsyncRead, AsyncWrite};
+use webparse::{Binary, Buf};
 
 pub struct WsStateHandshake {
     /// 默认参数

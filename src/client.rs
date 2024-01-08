@@ -471,7 +471,7 @@ where
                 None
             }
         }
-        let (ws_receiver, ws_option);
+        let (mut ws_receiver, mut ws_option);
         loop {
             let v = tokio::select! {
                 r = http1_wait(&mut self.http1) => {
@@ -544,6 +544,10 @@ where
                                 let shake = WsHandshake::new(sender, None, r, None);
                                 ws_option = self.callback_ws.as_mut().unwrap().on_open(shake)?;
                                 ws_receiver = receiver;
+                                            
+                                if ws_option.is_some() && ws_option.as_mut().unwrap().receiver.is_some() {
+                                    ws_receiver = ws_option.as_mut().unwrap().receiver.take().unwrap();
+                                }
                                 break;
                             } else {
                                 return Err(ProtError::ClientUpgradeHttp2(

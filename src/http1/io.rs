@@ -26,7 +26,7 @@ use crate::{
     HeaderHelper, ProtError, ProtResult, RecvRequest, RecvResponse, Body, SendStream,
 };
 use webparse::{
-    http::http2, http2::frame::Settings, Binary, BinaryMut, Buf, BufMut, Request, Response, Version,
+    http::http2, Binary, BinaryMut, Buf, BufMut, Request, Response, Version,
 };
 
 pub struct IoBuffer<T> {
