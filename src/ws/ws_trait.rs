@@ -17,7 +17,7 @@ use webparse::{OwnedMessage, CloseData, WebError, WsError};
 
 use crate::{ProtError, ProtResult, RecvRequest, RecvResponse};
 
-use super::WsHandshake;
+use super::{WsHandshake, WsOption};
 
 #[async_trait]
 pub trait WsTrait: Send {
@@ -27,7 +27,7 @@ pub trait WsTrait: Send {
         WsHandshake::build_request(req)
     }
 
-    fn on_open(&mut self, shake: WsHandshake) -> ProtResult<()>;
+    fn on_open(&mut self, shake: WsHandshake) -> ProtResult<Option<WsOption>>;
 
     async fn on_close(&mut self, reason: Option<CloseData>) {}
 
@@ -42,6 +42,9 @@ pub trait WsTrait: Send {
 
     async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()>;
 
+    async fn on_interval(&mut self, option: &mut Option<WsOption>) -> ProtResult<()> {
+        Ok(())
+    }
 
     fn as_any(&self) -> Option<&dyn Any> {
         None

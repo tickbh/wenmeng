@@ -28,9 +28,7 @@ mod tests {
     };
     use webparse::{BinaryMut, Buf, Request, Response, Version};
 
-    use wenmeng::{
-        self, Body, Client, HttpTrait, ProtResult, RecvRequest, RecvResponse, Server,
-    };
+    use wenmeng::{self, Body, Client, HttpTrait, ProtResult, RecvRequest, RecvResponse, Server};
 
     struct Operate;
 
@@ -110,7 +108,13 @@ mod tests {
         Ok(addr)
     }
 
-    async fn run_client(addr: SocketAddr, path: &str, must_be: BinaryMut, method: &str, body: Vec<u8>) -> ProtResult<()> {
+    async fn run_client(
+        addr: SocketAddr,
+        path: &str,
+        must_be: BinaryMut,
+        method: &str,
+        body: Vec<u8>,
+    ) -> ProtResult<()> {
         let url = &*format!("http://{}{}", addr, path);
         fn do_build_req(url: &str, method: &str, body: &Vec<u8>) -> Request<Body> {
             let body = BinaryMut::from(body.clone());
@@ -124,7 +128,8 @@ mod tests {
         {
             let client = Client::builder()
                 .http2_only(true)
-                .connect(&*url)
+                .url(&*url)?
+                .connect()
                 .await
                 .unwrap();
 
@@ -138,7 +143,12 @@ mod tests {
         }
         // http1 only
         {
-            let client = Client::builder().http2(false).connect(&*url).await.unwrap();
+            let client = Client::builder()
+                .http2(false)
+                .url(&*url)?
+                .connect()
+                .await
+                .unwrap();
 
             let mut res = client.send_now(do_build_req(url, method, &body)).await?;
             let mut result = BinaryMut::new();
@@ -150,7 +160,7 @@ mod tests {
         }
         // http1 upgrade
         {
-            let client = Client::builder().connect(&*url).await.unwrap();
+            let client = Client::builder().url(&*url)?.connect().await.unwrap();
             let mut res = client.send_now(do_build_req(url, method, &body)).await?;
             let mut result = BinaryMut::new();
             res.body_mut().read_all(&mut result).await;
@@ -165,10 +175,34 @@ mod tests {
     #[tokio::test]
     async fn test_result() -> ProtResult<()> {
         let addr = run_server().await.unwrap();
-        run_client(addr, "/", BinaryMut::from("Hello, World!".to_string()), "GET", vec![]).await.unwrap();
-        run_client(addr, "/plaintext", BinaryMut::from("Hello, World!".to_string()), "GET", vec![]).await.unwrap();
+        run_client(
+            addr,
+            "/",
+            BinaryMut::from("Hello, World!".to_string()),
+            "GET",
+            vec![],
+        )
+        .await
+        .unwrap();
+        run_client(
+            addr,
+            "/plaintext",
+            BinaryMut::from("Hello, World!".to_string()),
+            "GET",
+            vec![],
+        )
+        .await
+        .unwrap();
         let value = vec![1, 2, 3, 4, 5, 6, 7];
-        run_client(addr, "/post", BinaryMut::from(value.clone()), "POST", value.clone()).await.unwrap();
+        run_client(
+            addr,
+            "/post",
+            BinaryMut::from(value.clone()),
+            "POST",
+            value.clone(),
+        )
+        .await
+        .unwrap();
 
         Ok(())
     }

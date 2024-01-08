@@ -50,8 +50,9 @@ async fn test_http2() -> ProtResult<()> {
         // .read_timeout(Duration::new(0, 1))
         // .add_proxy("socks5://wmproxy:wmproxy@127.0.0.1:8090")?
         .add_proxy("http://wmproxy:wmproxy@127.0.0.1:8090")?
+        .url(url)?
         // .write_timeout(Duration::new(0, 1))
-        .connect(url)
+        .connect()
         .await
         .unwrap();
 
@@ -97,8 +98,9 @@ async fn test_https2() -> ProtResult<()> {
     // let req = Request::builder().method("GET").url("http://www.baidu.com/").upgrade_http2().body("").unwrap();
     println!("req = {}", req);
     let client = Client::builder()
+        .url(req.url().clone())?
         // .http2_only(true)
-        .connect(req.url().clone())
+        .connect()
         .await
         .unwrap();
 

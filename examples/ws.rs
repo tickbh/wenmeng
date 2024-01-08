@@ -3,7 +3,7 @@ use async_trait::async_trait;
 
 use tokio::{net::TcpListener, sync::mpsc::Sender};
 use webparse::{Response, OwnedMessage};
-use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, HttpTrait, Middleware, Body, ws::{WsTrait, WsHandshake}};
+use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, HttpTrait, Middleware, Body, ws::{WsTrait, WsHandshake, WsOption}};
 
 // #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -16,15 +16,20 @@ struct Operate {
 #[async_trait]
 impl WsTrait for Operate {
     
-    fn on_open(&mut self, shake: WsHandshake) -> ProtResult<()> {
+    fn on_open(&mut self, shake: WsHandshake) -> ProtResult<Option<WsOption>> {
         self.sender = Some(shake.sender);
-        Ok(())
+        Ok(Some(WsOption::new(Duration::from_secs(1))))
     }
     
     async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {
         println!("callback on message = {:?}", msg);
         let _ = self.sender.as_mut().unwrap().send(OwnedMessage::Text("from server".to_string())).await;
         let _ = self.sender.as_mut().unwrap().send(msg).await;
+        Ok(())
+    }
+    
+    async fn on_interval(&mut self, option: &mut Option<WsOption>) -> ProtResult<()> {
+        println!("on_interval!!!!!!!");
         Ok(())
     }
 }

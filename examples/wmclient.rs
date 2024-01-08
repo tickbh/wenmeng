@@ -10,8 +10,9 @@ async fn test_http2() -> ProtResult<()> {
     println!("url = {:?}", req.get_connect_url());
     let client = Client::builder().
         // http2(false)
+        url(url)?.
         http2_only(true)
-        .connect(url).await.unwrap();
+        .connect().await.unwrap();
 
     let (mut recv, _sender) = client.send2(req.into_type()).await?;
     let mut res = recv.recv().await.unwrap()?;
@@ -42,7 +43,8 @@ async fn test_https2() -> ProtResult<()> {
     println!("req = {}", req);
     let client = Client::builder()
         // .http2_only(true)
-        .connect(req.url().clone())
+        .url(req.url().clone())?
+        .connect()
         .await
         .unwrap();
 

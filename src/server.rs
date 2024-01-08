@@ -28,7 +28,7 @@ use webparse::{
 
 use super::{http1::ServerH1Connection, middle::BaseMiddleware};
 use crate::{
-    ws::{ServerWsConnection, WsHandshake, WsTrait},
+    ws::{ServerWsConnection, WsHandshake, WsTrait, WsOption},
     Body, HttpTrait, Middleware, ProtError, ProtResult, RecvRequest, ServerH2Connection,
     TimeoutLayer,
 };
@@ -428,7 +428,7 @@ where
 
     pub async fn incoming(&mut self) -> ProtResult<()>
     {
-        let ws_receiver;
+        let (ws_receiver, ws_option);
         loop {
             match self.inner_incoming().await {
                 Err(ProtError::ServerUpgradeWs(r)) => {
@@ -445,7 +445,7 @@ where
                     let _ = response.serialize(&mut binary);
                     let (sender, receiver) = channel::<OwnedMessage>(10);
                     let shake = WsHandshake::new(sender, Some(r), response, self.addr.clone());
-                    self.callback_ws.as_mut().unwrap().on_open(shake)?;
+                    ws_option = self.callback_ws.as_mut().unwrap().on_open(shake)?;
     
                     let value = if let Some(h1) = self.http1.take() {
                         h1.into_ws(binary.freeze())
@@ -473,14 +473,14 @@ where
             }
         }
 
-        if let Err(e) = self.inner_oper_ws(ws_receiver).await {
+        if let Err(e) = self.inner_oper_ws(ws_receiver, ws_option).await {
             self.callback_ws.as_mut().unwrap().on_error(e).await;
         }
 
         Ok(())
     }
 
-    async fn inner_oper_ws(&mut self, mut receiver: Receiver<OwnedMessage>) -> ProtResult<()>
+    async fn inner_oper_ws(&mut self, mut receiver: Receiver<OwnedMessage>, mut option: Option<WsOption>) -> ProtResult<()>
     {
         if self.callback_ws.is_none() {
             return Err(ProtError::Extension("websocket callback is none"));
@@ -518,6 +518,9 @@ where
                                 ws.send_owned_message(msg)?;
                             }
                         }
+                    }
+                    _ = WsOption::interval_wait(&mut option) => {
+                        self.callback_ws.as_mut().unwrap().on_interval(&mut option).await;
                     }
                 }
             }

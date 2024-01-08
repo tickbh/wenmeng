@@ -61,7 +61,7 @@ impl Control {
         T: AsyncRead + AsyncWrite + Unpin,
     {
         while let Some(msg) = self.msgs.pop_front() {
-            codec.send_msg(msg)?;
+            codec.send_msg(msg, self.is_client)?;
         }
         ready!(codec.poll_flush(cx))?;
         Poll::Ready(Ok(()))

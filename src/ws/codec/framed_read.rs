@@ -28,7 +28,7 @@ use webparse::{Binary, BinaryMut, BinaryRef, Buf, DataFrame, OwnedMessage, WebEr
 use crate::ProtResult;
 
 #[derive(Debug)]
-struct MyCodec;
+struct MyCodec(bool);
 
 impl tokio_util::codec::Decoder for MyCodec {
     // ...
@@ -40,7 +40,7 @@ impl tokio_util::codec::Decoder for MyCodec {
         let (frame, size) = {
             let mut copy = BinaryRef::from(src.chunk());
             let now_len = copy.remaining();
-            let frame = match DataFrame::read_dataframe_with_limit(&mut copy, false, 100000) {
+            let frame = match DataFrame::read_dataframe_with_limit(&mut copy, !self.0, 100000) {
                 Ok(frame) => frame,
                 Err(WebError::Io(io)) if io.kind() == io::ErrorKind::UnexpectedEof => {
                     return Ok(None)
@@ -75,9 +75,9 @@ impl<T> FramedRead<T>
 where
     T: AsyncRead + Unpin,
 {
-    pub fn new(io: T) -> FramedRead<T> {
+    pub fn new(io: T, is_client: bool) -> FramedRead<T> {
         FramedRead {
-            inner: InnerFramedRead::new(io, MyCodec),
+            inner: InnerFramedRead::new(io, MyCodec(is_client)),
             caches: vec![],
         }
     }

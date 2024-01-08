@@ -25,9 +25,9 @@ where
 {
     /// Returns a new `Codec` with the default max frame size
     #[inline]
-    pub fn new(io: T) -> Self {
+    pub fn new(io: T, is_client: bool) -> Self {
         let framed_write = FramedWrite::new(io);
-        let inner = FramedRead::new(framed_write);
+        let inner = FramedRead::new(framed_write, is_client);
         WsCodec {
             inner,
         }
@@ -72,9 +72,13 @@ where
         self.framed_write().set_cache_buf(write_buf);
     }
     
-    pub fn send_msg(&mut self, msg: OwnedMessage) -> ProtResult<usize> {
-        log::trace!("HTTP2:发送帧数据: {:?}", msg);
-        msg.write_to(self.framed_write().get_mut_bytes(), false);
+    pub fn send_msg(&mut self, msg: OwnedMessage, mask: bool) -> ProtResult<usize> {
+        log::trace!("Websocket:发送帧数据: {:?}", msg);
+        if mask {
+            msg.write_to(self.framed_write().get_mut_bytes(), Some(rand::random()))?;
+        } else {
+            msg.write_to(self.framed_write().get_mut_bytes(), None)?;
+        }
         Ok(0)
     }
 

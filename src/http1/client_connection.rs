@@ -105,7 +105,7 @@ where
         let (io, read_buf, write_buf) = self.io.into();
         let mut connect = ClientWsConnection::new(io);
         connect.set_cache_buf(read_buf, write_buf);
-        connect.set_handshake_status(Binary::from_static(HTTP2_MAGIC));
+        connect.set_handshake_status(Binary::new());
         connect.set_timeout_layer(self.timeout);
         connect
     }

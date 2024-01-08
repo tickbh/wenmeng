@@ -68,7 +68,7 @@ where
 {
     pub fn new(io: T) -> ClientWsConnection<T> {
         ClientWsConnection {
-            codec: WsCodec::new(io),
+            codec: WsCodec::new(io, true),
             inner: InnerConnection {
                 state: State::Open,
                 control: Control::new(),
@@ -170,7 +170,7 @@ where
     }
 
     pub fn set_handshake_status(&mut self, binary: Binary) {
-        self.inner.control.set_handshake_status(binary, false)
+        self.inner.control.set_handshake_status(binary, true)
     }
     
     pub fn send_owned_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {

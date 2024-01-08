@@ -68,7 +68,7 @@ where
 {
     pub fn new(io: T) -> ServerWsConnection<T> {
         ServerWsConnection {
-            codec: WsCodec::new(io),
+            codec: WsCodec::new(io, false),
             inner: InnerConnection {
                 state: State::Open,
                 control: Control::new(),

@@ -95,7 +95,11 @@ impl WsStateHandshake {
     
     pub fn set_handshake_status(&mut self, binary: Binary, is_client: bool) {
         self.is_client = is_client;
-        self.state = WsHandshaking::Flushing(Flush(binary))
+        if binary.is_empty() {
+            self.state = WsHandshaking::Done;
+        } else {
+            self.state = WsHandshaking::Flushing(Flush(binary));
+        }
     }
 }
 

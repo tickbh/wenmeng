@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/10/07 09:41:02
@@ -16,9 +16,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::http2::{self, ClientH2Connection};
-use crate::ws::{ClientWsConnection, WsTrait, WsHandshake};
+use crate::ws::{ClientWsConnection, WsHandshake, WsTrait, WsOption};
 use crate::{http1::ClientH1Connection, ProtError};
-use crate::{ProtResult, TimeoutLayer, RecvResponse, RecvRequest, MaybeHttpsStream, Middleware};
+use crate::{MaybeHttpsStream, Middleware, ProtResult, RecvRequest, RecvResponse, TimeoutLayer, Body};
 use futures::StreamExt;
 use rustls::{ClientConfig, RootCertStore};
 use tokio::net::ToSocketAddrs;
@@ -30,7 +30,7 @@ use tokio::{
 use tokio_rustls::TlsConnector;
 use webparse::http2::frame::Settings;
 use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
-use webparse::{Binary, Url, WebError, OwnedMessage};
+use webparse::{Binary, OwnedMessage, Url, WebError, Request};
 
 use super::middle::BaseMiddleware;
 use super::proxy::ProxyScheme;
@@ -56,11 +56,6 @@ impl Builder {
         self
     }
 
-    pub fn ws(mut self, ws: bool) -> Self {
-        self.inner.ws = ws;
-        self
-    }
-
     pub fn connect_timeout(mut self, connect_timeout: Duration) -> Self {
         if self.inner.timeout.is_none() {
             self.inner.timeout = Some(TimeoutLayer::new());
@@ -76,7 +71,7 @@ impl Builder {
         self.inner.timeout.as_mut().unwrap().ka_timeout = Some(ka_timeout);
         self
     }
-    
+
     pub fn read_timeout(mut self, read_timeout: Duration) -> Self {
         if self.inner.timeout.is_none() {
             self.inner.timeout = Some(TimeoutLayer::new());
@@ -84,7 +79,7 @@ impl Builder {
         self.inner.timeout.as_mut().unwrap().read_timeout = Some(read_timeout);
         self
     }
-    
+
     pub fn write_timeout(mut self, write_timeout: Duration) -> Self {
         if self.inner.timeout.is_none() {
             self.inner.timeout = Some(TimeoutLayer::new());
@@ -100,7 +95,7 @@ impl Builder {
         self.inner.timeout.as_mut().unwrap().timeout = Some(timeout);
         self
     }
-    
+
     pub fn timeout_layer(mut self, timeout: Option<TimeoutLayer>) -> Self {
         self.inner.timeout = timeout;
         self
@@ -112,10 +107,21 @@ impl Builder {
         Ok(self)
     }
 
+    pub fn url<U>(mut self, url: U) -> ProtResult<Self>
+    where
+        Url: TryFrom<U>,
+        <Url as TryFrom<U>>::Error: Into<WebError> {
+        let url = TryInto::<Url>::try_into(url)
+            .map_err(|_e| ProtError::Extension("unknown connection url"))?;
+        
+        self.inner.url = Some(url);
+        Ok(self)
+    }
+
     pub fn value(self) -> ClientOption {
         self.inner
     }
-    
+
     pub fn middle<M: Middleware + 'static>(mut self, middle: M) -> Self {
         self.inner.middles.push(Box::new(middle));
         self
@@ -130,9 +136,7 @@ impl Builder {
             // 获取是否配置了连接超时, 如果有连接超时那么指定timeout
             if let Some(connect) = &self.inner.timeout.as_ref().unwrap().connect_timeout {
                 match tokio::time::timeout(*connect, TcpStream::connect(addr)).await {
-                    Ok(v) => {
-                        return Ok(v?)
-                    }
+                    Ok(v) => return Ok(v?),
                     Err(_) => return Err(ProtError::connect_timeout("client")),
                 }
             }
@@ -141,37 +145,32 @@ impl Builder {
         Ok(tcp)
     }
 
-    pub async fn connect<U>(self, url: U) -> ProtResult<Client>
-    where
-        Url: TryFrom<U>,
-        <Url as TryFrom<U>>::Error: Into<WebError>,
+    pub async fn connect(self) -> ProtResult<Client>
     {
-        self.connect_with_domain(url, "").await
+        self.connect_with_domain("").await
     }
 
-    
-    pub async fn connect_with_domain<U>(self, url: U, domain: &str) -> ProtResult<Client>
-    where
-        Url: TryFrom<U>,
-        <Url as TryFrom<U>>::Error: Into<WebError>,
+    pub async fn connect_with_domain(self, domain: &str) -> ProtResult<Client>
     {
-        let url = TryInto::<Url>::try_into(url)
-            .map_err(|_e| ProtError::Extension("unknown connection url"))?;
-
+        if self.inner.url.is_none() {
+            return Err(ProtError::Extension("unknown connection url"));
+        }
+        let url = self.inner.url.as_ref().unwrap();
         if self.inner.proxies.len() > 0 {
             for p in self.inner.proxies.iter() {
                 match p.connect(&url).await? {
                     Some(tcp) => {
-                        
                         if url.scheme.is_https() {
-                            return self.connect_tls_by_stream_with_domain(tcp, url, domain).await;
+                            return self
+                                .connect_tls_by_stream_with_domain(tcp, domain)
+                                .await;
                         } else {
                             let proxy = p.clone();
                             let mut client = Client::new(self.inner, MaybeHttpsStream::Http(tcp));
                             client.set_proxy(proxy);
-                            return Ok(client)
+                            return Ok(client);
                         }
-                    },
+                    }
                     None => continue,
                 }
             }
@@ -183,14 +182,17 @@ impl Builder {
                     match p.connect(&url).await? {
                         Some(tcp) => {
                             if url.scheme.is_https() {
-                                return self.connect_tls_by_stream_with_domain(tcp, url, domain).await;
+                                return self
+                                    .connect_tls_by_stream_with_domain(tcp, domain)
+                                    .await;
                             } else {
                                 let proxy = p.clone();
-                                let mut client = Client::new(self.inner, MaybeHttpsStream::Http(tcp));
+                                let mut client =
+                                    Client::new(self.inner, MaybeHttpsStream::Http(tcp));
                                 client.set_proxy(proxy);
-                                return Ok(client)
+                                return Ok(client);
                             }
-                        },
+                        }
                         None => continue,
                     }
                 }
@@ -198,90 +200,78 @@ impl Builder {
             if url.scheme.is_https() {
                 let connect = url.get_connect_url();
                 let stream = self.inner_connect(&connect.unwrap()).await?;
-                self.connect_tls_by_stream_with_domain(stream, url, domain).await
+                self.connect_tls_by_stream_with_domain(stream, domain)
+                    .await
             } else {
                 let tcp = self.inner_connect(url.get_connect_url().unwrap()).await?;
                 Ok(Client::new(self.inner, MaybeHttpsStream::Http(tcp)))
             }
         }
-
     }
 
-    pub async fn connect_tls_by_stream<T>(
-        self,
-        stream: TcpStream,
-        url: T,
-    ) -> ProtResult<Client>
-    where
-        T: TryInto<Url>,
+    pub async fn connect_tls_by_stream(self, stream: TcpStream) -> ProtResult<Client>
     {
-        self.connect_tls_by_stream_with_domain(stream, url, "").await
+        self.connect_tls_by_stream_with_domain(stream, "")
+            .await
     }
 
-
-    pub async fn connect_tls_by_stream_with_domain<T>(
-        self,
+    pub async fn connect_tls_by_stream_with_domain(
+        mut self,
         stream: TcpStream,
-        url: T,
         domain: &str,
     ) -> ProtResult<Client>
-    where
-        T: TryInto<Url>,
     {
-        let mut option = self.inner;
-        let url = TryInto::<Url>::try_into(url);
-        if url.is_err() {
+        if self.inner.url.is_none() {
             return Err(ProtError::Extension("unknown connection url"));
-        } else {
-            let url = url.ok().unwrap();
-            let connect = url.get_connect_url();
-            let name = if domain.len() > 0 {
-                domain
-            } else {
-                if url.domain.is_none() || connect.is_none() {
-                    return Err(ProtError::Extension("unknown connection domain"));
-                } else {
-                    &*url.domain.as_ref().unwrap()
-                }
-            };
-            let mut root_store = RootCertStore::empty();
-            root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-                rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-                    ta.subject,
-                    ta.spki,
-                    ta.name_constraints,
-                )
-            }));
-            let mut config = ClientConfig::builder()
-                .with_safe_defaults()
-                .with_root_certificates(root_store)
-                .with_no_client_auth();
-            config.alpn_protocols = option.get_alpn_protocol();
-            let tls_client = Arc::new(config);
-            let connector = TlsConnector::from(tls_client);
-
-            // 这里的域名只为认证设置
-            let domain = rustls::ServerName::try_from(name)
-                .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
-
-            let outbound = connector.connect(domain, stream).await?;
-            let aa = outbound.get_ref().1.alpn_protocol();
-            if aa == Some(&ClientOption::H2_PROTOCOL) {
-                option.http2_only = true;
-            } else {
-                option.http2 = true;
-                option.http2_only = false;
-            }
-            Ok(Client::new(option, MaybeHttpsStream::Https(outbound)))
         }
+        let url = self.inner.url.as_ref().unwrap();
+        let connect = url.get_connect_url();
+        let name = if domain.len() > 0 {
+            domain
+        } else {
+            if url.domain.is_none() || connect.is_none() {
+                return Err(ProtError::Extension("unknown connection domain"));
+            } else {
+                &*url.domain.as_ref().unwrap()
+            }
+        };
+        let mut root_store = RootCertStore::empty();
+        root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
+            rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                ta.subject,
+                ta.spki,
+                ta.name_constraints,
+            )
+        }));
+        let mut config = ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+        config.alpn_protocols = self.inner.get_alpn_protocol();
+        let tls_client = Arc::new(config);
+        let connector = TlsConnector::from(tls_client);
+
+        // 这里的域名只为认证设置
+        let domain = rustls::ServerName::try_from(name)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
+
+        let outbound = connector.connect(domain, stream).await?;
+        let aa = outbound.get_ref().1.alpn_protocol();
+        if aa == Some(&ClientOption::H2_PROTOCOL) {
+            self.inner.http2_only = true;
+        } else {
+            self.inner.http2 = true;
+            self.inner.http2_only = false;
+        }
+        Ok(Client::new(self.inner, MaybeHttpsStream::Https(outbound)))
     }
 }
 
 pub struct ClientOption {
     http2_only: bool,
     http2: bool,
-    ws: bool,
     settings: Settings,
+    url: Option<Url>,
     timeout: Option<TimeoutLayer>,
     proxies: Vec<ProxyScheme>,
     middles: Vec<Box<dyn Middleware>>,
@@ -305,6 +295,14 @@ impl ClientOption {
     pub fn get_http2_setting(&self) -> String {
         self.settings.encode_http_settings()
     }
+
+    pub fn is_ws(&self) -> bool {
+        if let Some(url) = &self.url {
+            url.scheme.is_ws() || url.scheme.is_wss()
+        } else {
+            false
+        }
+    }
 }
 
 impl Default for ClientOption {
@@ -312,7 +310,7 @@ impl Default for ClientOption {
         Self {
             http2_only: false,
             http2: true,
-            ws: false,
+            url: None,
             settings: Default::default(),
             timeout: None,
             proxies: vec![],
@@ -321,8 +319,7 @@ impl Default for ClientOption {
     }
 }
 
-pub struct Client<T=TcpStream>
-{
+pub struct Client<T = TcpStream> {
     option: ClientOption,
     sender: Sender<ProtResult<RecvResponse>>,
     receiver: Option<Receiver<ProtResult<RecvResponse>>>,
@@ -341,7 +338,8 @@ impl Client {
 }
 
 impl<T> Client<T>
-where T: AsyncRead + AsyncWrite + Unpin + 'static + Send 
+where
+    T: AsyncRead + AsyncWrite + Unpin + 'static + Send,
 {
     pub fn new(option: ClientOption, stream: MaybeHttpsStream<T>) -> Self {
         let (sender, receiver) = channel(10);
@@ -372,7 +370,10 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
         client
     }
 
-    fn build_client_h1_connection(&self, stream: MaybeHttpsStream<T>) -> ClientH1Connection<MaybeHttpsStream<T>> {
+    fn build_client_h1_connection(
+        &self,
+        stream: MaybeHttpsStream<T>,
+    ) -> ClientH1Connection<MaybeHttpsStream<T>> {
         let mut client = ClientH1Connection::new(stream);
         client.set_timeout_layer(self.option.timeout.clone());
         client
@@ -389,7 +390,7 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
     pub fn take_callback_ws(&mut self) -> Option<Box<dyn WsTrait>> {
         self.callback_ws.take()
     }
-    
+
     pub fn into_io(self) -> T {
         if self.http1.is_some() {
             self.http1.unwrap().into_io().into_io()
@@ -413,7 +414,7 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
         if let Some(proxy) = &self.proxy {
             proxy.fix_request(&mut req)?;
         }
-        for i in 0usize .. self.option.middles.len() {
+        for i in 0usize..self.option.middles.len() {
             self.option.middles[i].process_request(&mut req).await?;
         }
         if let Some(h) = &mut self.http1 {
@@ -423,7 +424,7 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
         }
         Ok(())
     }
-    
+
     pub fn middle<M: Middleware + 'static>(&mut self, middle: M) {
         self.option.middles.push(Box::new(middle));
     }
@@ -470,7 +471,7 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
                 None
             }
         }
-        let ws_receiver;
+        let (ws_receiver, ws_option);
         loop {
             let v = tokio::select! {
                 r = http1_wait(&mut self.http1) => {
@@ -498,8 +499,10 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
             let result = v.unwrap();
             match result {
                 Ok(None) => {
-                    self.sender.send(Err(ProtError::Extension("close by server"))).await?;
-                    return Ok(())
+                    self.sender
+                        .send(Err(ProtError::Extension("close by server")))
+                        .await?;
+                    return Ok(());
                 }
                 Err(ProtError::ClientUpgradeHttp2(s)) => {
                     if self.http1.is_some() {
@@ -511,17 +514,25 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
                 }
                 Err(e) => {
                     self.sender.send(Err(e)).await?;
-                    return Ok(())
-                },
+                    return Ok(());
+                }
                 Ok(Some(r)) => {
-                    if r.status() == 101 && r .headers().is_contains(&"Connection", "Upgrade".as_bytes()) {
-                        if r.headers().is_contains(&"Upgrade", "h2c".as_bytes())
-                        {
+                    if r.status() == 101
+                        && r.headers().is_contains(&"Connection", "Upgrade".as_bytes())
+                    {
+                        if r.headers().is_contains(&"Upgrade", "h2c".as_bytes()) {
                             if self.http1.is_some() {
-                                self.http2 = Some(self.http1.take().unwrap().into_h2(self.option.settings.clone()));
+                                self.http2 = Some(
+                                    self.http1
+                                        .take()
+                                        .unwrap()
+                                        .into_h2(self.option.settings.clone()),
+                                );
                                 continue;
                             } else {
-                                return Err(ProtError::ClientUpgradeHttp2(self.option.settings.clone()));
+                                return Err(ProtError::ClientUpgradeHttp2(
+                                    self.option.settings.clone(),
+                                ));
                             }
                         } else if r.headers().is_contains(&"Upgrade", "websocket".as_bytes()) {
                             if self.callback_ws.is_none() {
@@ -531,11 +542,13 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
                                 self.ws = Some(self.http1.take().unwrap().into_ws());
                                 let (sender, receiver) = channel::<OwnedMessage>(10);
                                 let shake = WsHandshake::new(sender, None, r, None);
-                                self.callback_ws.as_mut().unwrap().on_open(shake)?;
+                                ws_option = self.callback_ws.as_mut().unwrap().on_open(shake)?;
                                 ws_receiver = receiver;
                                 break;
                             } else {
-                                return Err(ProtError::ClientUpgradeHttp2(self.option.settings.clone()));
+                                return Err(ProtError::ClientUpgradeHttp2(
+                                    self.option.settings.clone(),
+                                ));
                             }
                         }
                     }
@@ -544,14 +557,12 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
             };
         }
 
-        self.inner_oper_ws(ws_receiver).await?;
+        self.inner_oper_ws(ws_receiver, ws_option).await?;
 
         Ok(())
-        
     }
 
-    async fn inner_oper_ws(&mut self, mut receiver: Receiver<OwnedMessage>) -> ProtResult<()>
-    {
+    async fn inner_oper_ws(&mut self, mut receiver: Receiver<OwnedMessage>, mut option: Option<WsOption>) -> ProtResult<()> {
         if self.callback_ws.is_none() {
             return Err(ProtError::Extension("unknow callback websocket"));
         }
@@ -559,6 +570,7 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
             if let Some(ws) = &mut self.ws {
                 tokio::select! {
                     ret = ws.next() => {
+                        println!("ws ret = {:?}", ret);
                         match ret {
                             None => {
                                 return Ok(());
@@ -589,12 +601,36 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
                             }
                         }
                     }
+                    _ = WsOption::interval_wait(&mut option) => {
+                        self.callback_ws.as_mut().unwrap().on_interval(&mut option).await;
+                    }
                 }
             }
         }
     }
 
     async fn inner_operate(mut self, req: RecvRequest) -> ProtResult<()> {
+        self.send_req(req).await?;
+        self.wait_operate().await?;
+        Ok(())
+    }
+
+    pub async fn wait_ws_operate(mut self) -> ProtResult<()> {
+        if self.option.url.is_none() {
+            return Err(ProtError::Extension("unknow url"));
+        }
+        if self.callback_ws.is_none() {
+            return Err(ProtError::Extension("unknow websocket callback"));
+        }
+        let mut req = Request::builder().method("GET").url(self.option.url.clone().unwrap()).body(Body::empty()).unwrap();
+        let header = req.headers_mut();
+        header.insert("Connection", "Upgrade");
+        header.insert("Upgrade", "websocket");
+        let key: [u8; 16] = rand::random();
+        header.insert("Sec-WebSocket-Key", base64::encode(&key));
+        header.insert("Sec-WebSocket-Version", "13");
+        header.insert("Sec-WebSocket-Protocol", "chat, superchat");
+
         self.send_req(req).await?;
         self.wait_operate().await?;
         Ok(())
@@ -609,17 +645,18 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
                 header.insert("Upgrade", "h2c");
                 header.insert("HTTP2-Settings", self.option.get_http2_setting());
             }
-        } else if self.option.ws {
-            if let Some(_) = &self.http1 {
-                let header = req.headers_mut();
-                header.insert("Connection", "Upgrade");
-                header.insert("Upgrade", "websocket");
-                let key: [u8; 16] = rand::random();
-                header.insert("Sec-WebSocket-Key", base64::encode(&key));
-                header.insert("Sec-WebSocket-Version", "13");
-                header.insert("Sec-WebSocket-Protocol", "chat, superchat");
-            }
         }
+        // else if self.option.is_ws() {
+        //     if let Some(_) = &self.http1 {
+        //         let header = req.headers_mut();
+        //         header.insert("Connection", "Upgrade");
+        //         header.insert("Upgrade", "websocket");
+        //         let key: [u8; 16] = rand::random();
+        //         header.insert("Sec-WebSocket-Key", base64::encode(&key));
+        //         header.insert("Sec-WebSocket-Version", "13");
+        //         header.insert("Sec-WebSocket-Protocol", "chat, superchat");
+        //     }
+        // }
     }
 
     pub async fn send(
@@ -651,10 +688,7 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
         Ok((r, s))
     }
 
-    pub async fn send_now(
-        mut self,
-        mut req: RecvRequest,
-    ) -> ProtResult<RecvResponse> {
+    pub async fn send_now(mut self, mut req: RecvRequest) -> ProtResult<RecvResponse> {
         self.rebuild_request(&mut req);
         let (mut r, s) = self.split()?;
         // let _ = self.operate(req).await;
@@ -686,7 +720,6 @@ where T: AsyncRead + AsyncWrite + Unpin + 'static + Send
         }
     }
 }
-
 
 // impl<T> Drop for Client<T>
 // where
