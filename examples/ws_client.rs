@@ -1,26 +1,30 @@
 use async_trait::async_trait;
-use std::{time::Duration};
+use std::{time::Duration, io};
 
-use tokio::{sync::mpsc::Sender};
+use tokio::{sync::mpsc::{Sender, Receiver, channel}};
 use webparse::{ws::{OwnedMessage, CloseData}};
 use wenmeng::{
     self,
     ws::{WsHandshake, WsOption, WsTrait}, Client, ProtResult,
 };
 
-// #[cfg(feature = "dhat-heap")]
-#[global_allocator]
-static ALLOC: dhat::Alloc = dhat::Alloc;
-
 struct Operate {
     sender: Option<Sender<OwnedMessage>>,
+    receiver: Option<Receiver<OwnedMessage>>,
 }
 
 #[async_trait]
 impl WsTrait for Operate {
     fn on_open(&mut self, shake: WsHandshake) -> ProtResult<Option<WsOption>> {
-        self.sender = Some(shake.sender);
-        Ok(Some(WsOption::new(Duration::from_secs(10))))
+        // 将receiver传给控制中心, 以让其用该receiver做接收
+        let mut option = WsOption::new(Duration::from_secs(1000));
+        if self.receiver.is_some() {
+            option.set_receiver(self.receiver.take().unwrap());
+        }
+        if self.sender.is_none() {
+            self.sender = Some(shake.sender);
+        }
+        Ok(Some(option))
     }
 
     async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {
@@ -48,20 +52,26 @@ impl WsTrait for Operate {
 }
 
 async fn run_main() -> ProtResult<()> {
-    // 在main函数最开头调用这个方法
-    let url = "ws://127.0.0.1:8081";
-
-    // let url = "http://localhost:8080/";
-
-    let mut client = Client::builder()
-        .http2(false)
-        .url(url)
-        .unwrap()
-        .connect()
-        .await
-        .unwrap();
-    client.set_callback_ws(Box::new(Operate { sender: None }));
-    client.wait_ws_operate().await?;
+    // 自己手动构建数据对,并将receiver传给服务端
+    let (sender, receiver) = channel(10);
+    let sender_clone = sender.clone();
+    tokio::spawn(async move {
+        let url = "ws://127.0.0.1:8081";
+        let mut client = Client::builder()
+            .url(url)
+            .unwrap()
+            .connect()
+            .await
+            .unwrap();
+        client.set_callback_ws(Box::new(Operate { sender:Some(sender_clone), receiver: Some(receiver) }));
+        client.wait_ws_operate().await.unwrap();
+    });
+    loop {
+        let mut buffer = String::new();
+        let stdin = io::stdin(); // We get `Stdin` here.
+        stdin.read_line(&mut buffer)?;
+        sender.send(OwnedMessage::Text(buffer)).await?;
+    }
     Ok(())
 }
 
@@ -71,4 +81,5 @@ async fn main() {
     if let Err(e) = run_main().await {
         println!("运行wmproxy发生错误:{:?}", e);
     }
+
 }

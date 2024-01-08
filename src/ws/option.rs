@@ -33,6 +33,10 @@ impl WsOption {
         }
     }
 
+    pub fn set_receiver(&mut self, receiver: Receiver<OwnedMessage>) {
+        self.receiver = Some(receiver);
+    }
+
     async fn inner_interval_wait(&mut self) -> Option<()> {
         sleep_until(self.next_interval).await;
         self.next_interval = Instant::now() + self.interval;

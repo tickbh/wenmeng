@@ -45,7 +45,6 @@ impl WsTrait for Operate {
 }
 
 async fn run_main() -> Result<(), Box<dyn Error>> {
-    // 在main函数最开头调用这个方法
     let addr = "127.0.0.1:8081".to_string();
     let server = TcpListener::bind(&addr).await?;
     println!("Listening on: {}", addr);
@@ -54,6 +53,7 @@ async fn run_main() -> Result<(), Box<dyn Error>> {
         tokio::spawn(async move {
             let mut server = Server::new(stream, Some(addr));
             let operate = Operate { sender: None };
+            // 设置服务回调
             server.set_callback_ws(Box::new(operate));
             let e = server.incoming().await;
             println!("close server ==== addr = {:?} e = {:?}", addr, e);
