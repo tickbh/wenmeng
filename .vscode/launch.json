@@ -102,6 +102,25 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug example 'ws_wts'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=ws_wts",
+                    "--package=wenmeng"
+                ],
+                "filter": {
+                    "name": "ws_wts",
+                    "kind": "example"
+                }
+            },
+            "env": {"RUST_LOG": "trace", "RUSTFLAGS": "--cfg tokio_unstable" },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug example 'ws_client'",
             "cargo": {
                 "args": [

@@ -186,9 +186,10 @@ where
                         Poll::Ready(Some(Ok(v))) => {
                             return Poll::Ready(Some(Ok(v)));
                         }
-                        Poll::Ready(_) => {
+                        Poll::Ready(e) => {
+                            println!("client e = {:?}", e);
                             let close = OwnedMessage::Close(Some(CloseData::new(
-                                CloseCode::Abnormal,
+                                CloseCode::Invalid,
                                 "network".to_string(),
                             )));
                             return Poll::Ready(Some(Ok(close)));

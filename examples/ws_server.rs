@@ -17,7 +17,9 @@ struct Operate {
 impl WsTrait for Operate {
     fn on_open(&mut self, shake: WsHandshake) -> ProtResult<Option<WsOption>> {
         self.sender = Some(shake.sender);
-        Ok(Some(WsOption::new(Duration::from_secs(10))))
+        let mut option = WsOption::new();
+        option.set_interval(Duration::from_secs(1000));
+        Ok(Some(option))
     }
 
     async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {
@@ -34,12 +36,6 @@ impl WsTrait for Operate {
 
     async fn on_interval(&mut self, _option: &mut Option<WsOption>) -> ProtResult<()> {
         println!("on_interval!!!!!!!");
-        let _ = self
-            .sender
-            .as_mut()
-            .unwrap()
-            .send(OwnedMessage::Close(Some(CloseData::normal())))
-            .await;
         Ok(())
     }
 }

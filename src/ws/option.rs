@@ -18,19 +18,24 @@ use webparse::ws::OwnedMessage;
 // 存储由on_open返回的配置文件, 如定时器之类等
 #[derive(Debug)]
 pub struct WsOption {
-    pub interval: Duration,
+    pub interval: Option<Duration>,
     pub receiver: Option<Receiver<OwnedMessage>>,
-    next_interval: Instant,
+    next_interval: Option<Instant>,
 }
 
 impl WsOption {
-    pub fn new(interval: Duration) -> Self {
-        assert!(interval > Duration::from_micros(1));
+    pub fn new() -> Self {
         Self {
-            interval,
+            interval: None,
             receiver: None,
-            next_interval: Instant::now() + interval,
+            next_interval: None,
         }
+    }
+    
+    pub fn set_interval(&mut self, interval: Duration) {
+        assert!(interval > Duration::from_millis(1));
+        self.interval = Some(interval);
+        self.next_interval = Some(Instant::now() + interval);
     }
 
     pub fn set_receiver(&mut self, receiver: Receiver<OwnedMessage>) {
@@ -38,13 +43,13 @@ impl WsOption {
     }
 
     async fn inner_interval_wait(&mut self) -> Option<()> {
-        sleep_until(self.next_interval).await;
-        self.next_interval = Instant::now() + self.interval;
+        sleep_until(self.next_interval.unwrap()).await;
+        self.next_interval = Some(Instant::now() + self.interval.unwrap());
         Some(())
     }
 
     pub async fn interval_wait(option: &mut Option<WsOption>) -> Option<()> {
-        if option.is_some() {
+        if option.is_some() && option.as_mut().unwrap().interval.is_some() {
             option.as_mut().unwrap().inner_interval_wait().await
         } else {
             let pend = std::future::pending();

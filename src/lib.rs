@@ -26,6 +26,7 @@ mod consts;
 mod layer;
 mod middle;
 mod proxy;
+pub mod plugins;
 
 use std::any::Any;
 

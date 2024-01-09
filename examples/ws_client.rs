@@ -17,7 +17,8 @@ struct Operate {
 impl WsTrait for Operate {
     fn on_open(&mut self, shake: WsHandshake) -> ProtResult<Option<WsOption>> {
         // 将receiver传给控制中心, 以让其用该receiver做接收
-        let mut option = WsOption::new(Duration::from_secs(1000));
+        let mut option = WsOption::new();
+        option.set_interval(Duration::from_secs(1000));
         if self.receiver.is_some() {
             option.set_receiver(self.receiver.take().unwrap());
         }
@@ -81,5 +82,4 @@ async fn main() {
     if let Err(e) = run_main().await {
         println!("运行wmproxy发生错误:{:?}", e);
     }
-
 }

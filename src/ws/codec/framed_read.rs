@@ -45,9 +45,14 @@ impl tokio_util::codec::Decoder for MyCodec {
             let frame = match DataFrame::read_dataframe_with_limit(&mut copy, !self.0, 100000) {
                 Ok(frame) => frame,
                 Err(WebError::Io(io)) if io.kind() == io::ErrorKind::UnexpectedEof => {
-                    return Ok(None)
+                    println!("is UnexpectedEof decode byte");
+                    return Ok(None);
                 }
-                Err(e) => return Err(e),
+                Err(e) => {
+                    println!("io error = {:?}", e);
+                    return Err(e)
+                }
+
             };
             (frame, now_len - copy.remaining())
         };
@@ -126,14 +131,22 @@ where
         loop {
             let bytes = match ready!(Pin::new(&mut self.inner).poll_next(cx)) {
                 Some(Ok(bytes)) => bytes,
+                Some(Err(WebError::Io(io))) if io.kind() == io::ErrorKind::UnexpectedEof => {
+                    println!("is UnexpectedEof");
+                    return Poll::Pending;
+                }
                 Some(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
-                None => return Poll::Ready(None),
+                None => {
+                    println!("receiver peer close!!!!! none!!!!!!!!!!!! {:?}", std::time::Instant::now());
+                    return Poll::Ready(None)
+                },
             };
 
             let is_finish = bytes.finished;
             self.caches.push(bytes);
             if is_finish {
                 let msg = OwnedMessage::from_dataframes(self.caches.drain(..).collect())?;
+                println!("decode ret = {:?}", msg);
                 return Poll::Ready(Some(Ok(msg)));
             } else {
                 return Poll::Pending;

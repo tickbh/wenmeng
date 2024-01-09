@@ -138,7 +138,9 @@ where
     http2: Option<ServerH2Connection<T>>,
     ws: Option<ServerWsConnection<T>>,
     middles: Vec<Box<dyn Middleware>>,
+    /// http的接口回调, 处理http服务器
     callback_http: Option<Box<dyn HttpTrait>>,
+    /// websocket的接口回调, 处理websocket服务器
     callback_ws: Option<Box<dyn WsTrait>>,
     addr: Option<SocketAddr>,
     timeout: Option<TimeoutLayer>,
