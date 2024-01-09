@@ -1,20 +1,25 @@
 use async_trait::async_trait;
-use std::{time::Duration, io};
+use std::{io, time::Duration};
 
-use tokio::{sync::mpsc::{Sender, Receiver, channel}, net::{TcpListener, tcp}};
-use webparse::{ws::{OwnedMessage, CloseData}};
+use tokio::{
+    net::{tcp, TcpListener},
+    sync::mpsc::{channel, Receiver, Sender},
+};
+use webparse::ws::{CloseData, OwnedMessage};
 use wenmeng::{
     self,
-    ws::{WsHandshake, WsOption, WsTrait}, Client, ProtResult, plugins::StreamToWs,
+    plugins::{StreamToWs, WsToStream},
+    ws::{WsHandshake, WsOption, WsTrait},
+    Client, ProtResult,
 };
 
 async fn run_main() -> ProtResult<()> {
-    let tcp_listener = TcpListener::bind("127.0.0.1:8082").await?;
+    let tcp_listener = TcpListener::bind("127.0.0.1:8081").await?;
     loop {
         let stream = tcp_listener.accept().await?;
-        let stream_to_ws = StreamToWs::new(stream.0, "ws://127.0.0.1:8081")?;
+        let ws_to_stream = WsToStream::new(stream.0, "127.0.0.1:8082")?;
         tokio::spawn(async move {
-            let _ = stream_to_ws.copy_bidirectional().await;
+            let _ = ws_to_stream.copy_bidirectional().await;
         });
     }
     Ok(())
