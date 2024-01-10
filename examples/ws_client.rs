@@ -15,7 +15,7 @@ struct Operate {
 
 #[async_trait]
 impl WsTrait for Operate {
-    fn on_open(&mut self, shake: WsHandshake) -> ProtResult<Option<WsOption>> {
+    async fn on_open(&mut self, shake: WsHandshake) -> ProtResult<Option<WsOption>> {
         // 将receiver传给控制中心, 以让其用该receiver做接收
         let mut option = WsOption::new();
         option.set_interval(Duration::from_secs(1000));

@@ -542,7 +542,7 @@ where
                                 self.ws = Some(self.http1.take().unwrap().into_ws());
                                 let (sender, receiver) = channel::<OwnedMessage>(10);
                                 let shake = WsHandshake::new(sender, None, r, None);
-                                ws_option = self.callback_ws.as_mut().unwrap().on_open(shake)?;
+                                ws_option = self.callback_ws.as_mut().unwrap().on_open(shake).await?;
                                 ws_receiver = receiver;
                                             
                                 if ws_option.is_some() && ws_option.as_mut().unwrap().receiver.is_some() {
@@ -599,7 +599,7 @@ where
                         }
                     }
                     msg = receiver.recv() => {
-                        println!("msg recv = {:?}", msg);
+                        println!("client msg recv = {:?}", msg);
                         match msg {
                             None => {
                                 return Ok(());
@@ -629,12 +629,9 @@ where
         Ok(())
     }
 
-    pub async fn wait_ws_operate(mut self) -> ProtResult<()> {
+    pub async fn wait_ws_operate(self) -> ProtResult<()> {
         if self.option.url.is_none() {
             return Err(ProtError::Extension("unknow url"));
-        }
-        if self.callback_ws.is_none() {
-            return Err(ProtError::Extension("unknow websocket callback"));
         }
         let mut req = Request::builder().method("GET").url(self.option.url.clone().unwrap()).body(Body::empty()).unwrap();
         let header = req.headers_mut();
@@ -644,7 +641,17 @@ where
         header.insert("Sec-WebSocket-Key", base64::encode(&key));
         header.insert("Sec-WebSocket-Version", "13");
         header.insert("Sec-WebSocket-Protocol", "chat, superchat");
+        self.wait_ws_operate_with_req(req).await?;
+        Ok(())
+    }
 
+    pub async fn wait_ws_operate_with_req(mut self, req: RecvRequest) -> ProtResult<()> {
+        if self.option.url.is_none() {
+            return Err(ProtError::Extension("unknow url"));
+        }
+        if self.callback_ws.is_none() {
+            return Err(ProtError::Extension("unknow websocket callback"));
+        }
         self.send_req(req).await?;
         self.wait_operate().await?;
         Ok(())

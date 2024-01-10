@@ -23,19 +23,22 @@ use crate::{
     Client, ProtError, ProtResult,
 };
 
+/// 将tcp的流量转化成websocket的流量
 pub struct StreamToWs<T: AsyncRead + AsyncWrite + Unpin> {
     url: Url,
     io: T,
 }
 
 struct Operate {
+    /// 将tcp来的数据流转发到websocket
     stream_sender: Sender<Vec<u8>>,
+    /// 从websocket那接收信息
     receiver: Option<Receiver<OwnedMessage>>,
 }
 
 #[async_trait]
 impl WsTrait for Operate {
-    fn on_open(&mut self, _shake: WsHandshake) -> ProtResult<Option<WsOption>> {
+    async fn on_open(&mut self, _shake: WsHandshake) -> ProtResult<Option<WsOption>> {
         // 将receiver传给控制中心, 以让其用该receiver做接收
         let mut option = WsOption::new();
         if self.receiver.is_some() {
@@ -76,24 +79,23 @@ impl<T: AsyncRead + AsyncWrite + Unpin> StreamToWs<T> {
         <Url as TryFrom<U>>::Error: Into<WebError>,
     {
         let url = Url::try_from(url).map_err(Into::into)?;
-
         Ok(Self { url, io })
     }
 
     pub async fn copy_bidirectional(self) -> ProtResult<()> {
-        let (ws_sender, ws_receiver) = channel(10);
+        let (ws_sender, ws_receiver) = channel::<OwnedMessage>(10);
         let (stream_sender, stream_receiver) = channel::<Vec<u8>>(10);
         let url = self.url;
         tokio::spawn(async move {
-            let mut client = Client::builder().url(url).unwrap().connect().await.unwrap();
-            client.set_callback_ws(Box::new(Operate {
-                stream_sender,
-                receiver: Some(ws_receiver),
-            }));
-            let e = client.wait_ws_operate().await;
+            if let Ok(mut client) = Client::builder().url(url).unwrap().connect().await {
+                client.set_callback_ws(Box::new(Operate {
+                    stream_sender,
+                    receiver: Some(ws_receiver),
+                }));
+                let _e = client.wait_ws_operate().await;
+            }
         });
-        let x = Self::bind(self.io, ws_sender, stream_receiver).await;
-        println!("???????????????? {:?}", x);
+        Self::bind(self.io, ws_sender, stream_receiver).await?;
         Ok(())
     }
 
@@ -102,8 +104,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin> StreamToWs<T> {
         ws_sender: Sender<OwnedMessage>,
         mut stream_receiver: Receiver<Vec<u8>>,
     ) -> ProtResult<()> {
-        let mut buf = Vec::with_capacity(20480);
-        buf.resize(20480, 0);
+        let mut buf = vec![0; 20480];
         let (mut reader, mut writer) = split(io);
         let (mut read, mut write) = (BinaryMut::new(), BinaryMut::new());
         loop {

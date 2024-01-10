@@ -19,16 +19,18 @@ use std::{
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::TcpStream, sync::mpsc::{channel, Receiver},
+    net::TcpStream,
+    sync::mpsc::{channel, Receiver},
 };
 use tokio_stream::StreamExt;
 use webparse::{
-    http::http2::frame::StreamIdentifier, Binary, BinaryMut, Request, Response, Serialize, ws::OwnedMessage,
+    http::http2::frame::StreamIdentifier, ws::OwnedMessage, Binary, BinaryMut, Request, Response,
+    Serialize,
 };
 
 use super::{http1::ServerH1Connection, middle::BaseMiddleware};
 use crate::{
-    ws::{ServerWsConnection, WsHandshake, WsTrait, WsOption},
+    ws::{ServerWsConnection, WsHandshake, WsOption, WsTrait},
     Body, HttpTrait, Middleware, ProtError, ProtResult, RecvRequest, ServerH2Connection,
     TimeoutLayer,
 };
@@ -337,23 +339,33 @@ where
         Ok(())
     }
 
-    pub async fn handle_request(&mut self, r: RecvRequest) -> ProtResult<Option<bool>>
-    {
+    pub async fn handle_request(&mut self, r: RecvRequest) -> ProtResult<Option<bool>> {
         if self.callback_http.is_none() {
             return Err(ProtError::Extension("http callback is none"));
         }
         let result = if let Some(h1) = &mut self.http1 {
-            h1.handle_request(&self.addr, r, self.callback_http.as_mut().unwrap(), &mut self.middles).await
+            h1.handle_request(
+                &self.addr,
+                r,
+                self.callback_http.as_mut().unwrap(),
+                &mut self.middles,
+            )
+            .await
         } else if let Some(h2) = &mut self.http2 {
-            h2.handle_request(&self.addr, r, self.callback_http.as_mut().unwrap(), &mut self.middles).await
+            h2.handle_request(
+                &self.addr,
+                r,
+                self.callback_http.as_mut().unwrap(),
+                &mut self.middles,
+            )
+            .await
         } else {
             Ok(None)
         };
         return result;
     }
 
-    async fn handle_error(&mut self, err: crate::ProtError) -> ProtResult<()>
-    {
+    async fn handle_error(&mut self, err: crate::ProtError) -> ProtResult<()> {
         if self.callback_http.is_none() {
             return Err(err);
         }
@@ -365,7 +377,12 @@ where
                         self.http2
                             .as_mut()
                             .unwrap()
-                            .handle_request(&self.addr, r, self.callback_http.as_mut().unwrap(), &mut self.middles)
+                            .handle_request(
+                                &self.addr,
+                                r,
+                                self.callback_http.as_mut().unwrap(),
+                                &mut self.middles,
+                            )
                             .await?;
 
                         self.req_num = self.req_num.wrapping_add(1);
@@ -428,8 +445,7 @@ where
         };
     }
 
-    pub async fn incoming(&mut self) -> ProtResult<()>
-    {
+    pub async fn incoming(&mut self) -> ProtResult<()> {
         let (mut ws_receiver, mut ws_option);
         loop {
             match self.inner_incoming().await {
@@ -437,7 +453,7 @@ where
                     if self.callback_ws.is_none() {
                         return Err(ProtError::Extension("websocket callback is none"));
                     }
-                    let mut response = self.callback_ws.as_mut().unwrap().on_request(&r)?;
+                    let mut response = self.callback_ws.as_mut().unwrap().on_request(&r).await?;
                     if response.status() != 101 {
                         self.send_response(response, None).await?;
                         self.flush().await?;
@@ -447,8 +463,8 @@ where
                     let _ = response.serialize(&mut binary);
                     let (sender, receiver) = channel::<OwnedMessage>(10);
                     let shake = WsHandshake::new(sender, Some(r), response, self.addr.clone());
-                    ws_option = self.callback_ws.as_mut().unwrap().on_open(shake)?;
-    
+                    ws_option = self.callback_ws.as_mut().unwrap().on_open(shake).await?;
+
                     let value = if let Some(h1) = self.http1.take() {
                         h1.into_ws(binary.freeze())
                     } else if let Some(h2) = self.http2.take() {
@@ -472,7 +488,10 @@ where
                 }
             }
 
-            if self.req_num >= self.max_req_num || (self.callback_http.is_some() && !self.callback_http.as_mut().unwrap().is_continue_next()) {
+            if self.req_num >= self.max_req_num
+                || (self.callback_http.is_some()
+                    && !self.callback_http.as_mut().unwrap().is_continue_next())
+            {
                 self.flush().await?;
                 return Ok(());
             }
@@ -485,8 +504,11 @@ where
         Ok(())
     }
 
-    async fn inner_oper_ws(&mut self, mut receiver: Receiver<OwnedMessage>, mut option: Option<WsOption>) -> ProtResult<()>
-    {
+    async fn inner_oper_ws(
+        &mut self,
+        mut receiver: Receiver<OwnedMessage>,
+        mut option: Option<WsOption>,
+    ) -> ProtResult<()> {
         if self.callback_ws.is_none() {
             return Err(ProtError::Extension("websocket callback is none"));
         }

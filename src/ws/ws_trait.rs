@@ -25,13 +25,13 @@ use super::{WsHandshake, WsOption};
 pub trait WsTrait: Send {
     /// 通过请求连接构建出返回的握手连接信息
     #[inline]
-    fn on_request(&mut self, req: &RecvRequest) -> ProtResult<RecvResponse> {
+    async fn on_request(&mut self, req: &RecvRequest) -> ProtResult<RecvResponse> {
         // warn!("Handler received request:\n{}", req);
         WsHandshake::build_request(req)
     }
 
     /// 握手完成后之后的回调,服务端返回了Response之后就认为握手成功
-    fn on_open(&mut self, shake: WsHandshake) -> ProtResult<Option<WsOption>>;
+    async fn on_open(&mut self, shake: WsHandshake) -> ProtResult<Option<WsOption>>;
 
     /// 接受到远端的关闭消息
     async fn on_close(&mut self, _reason: &Option<CloseData>) {}

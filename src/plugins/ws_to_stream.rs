@@ -24,19 +24,22 @@ use crate::{
     Client, ProtError, ProtResult, Server,
 };
 
+/// 将websocket的流量转化成的tcp流量
 pub struct WsToStream<T: AsyncRead + AsyncWrite + Unpin + Send + 'static, A: ToSocketAddrs> {
     addr: A,
     io: T,
 }
 
 struct Operate {
+    /// 将tcp来的数据流转发到websocket
     stream_sender: Sender<Vec<u8>>,
+    /// 从websocket那接收信息
     receiver: Option<Receiver<OwnedMessage>>,
 }
 
 #[async_trait]
 impl WsTrait for Operate {
-    fn on_open(&mut self, _shake: WsHandshake) -> ProtResult<Option<WsOption>> {
+    async fn on_open(&mut self, _shake: WsHandshake) -> ProtResult<Option<WsOption>> {
         // 将receiver传给控制中心, 以让其用该receiver做接收
         let mut option = WsOption::new();
         if self.receiver.is_some() {
@@ -90,8 +93,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static, A: ToSocketAddrs> WsToS
             let e = server.incoming().await;
             println!("close server ==== addr = {:?} e = {:?}", 0, e);
         });
-        let x = Self::bind(stream, ws_sender, stream_receiver).await;
-        println!("???????????????? {:?}", x);
+        Self::bind(stream, ws_sender, stream_receiver).await?;
         Ok(())
     }
 
@@ -100,8 +102,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static, A: ToSocketAddrs> WsToS
         ws_sender: Sender<OwnedMessage>,
         mut stream_receiver: Receiver<Vec<u8>>,
     ) -> ProtResult<()> where S: AsyncRead + AsyncWrite + Unpin {
-        let mut buf = Vec::with_capacity(20480);
-        buf.resize(20480, 0);
+        let mut buf = vec![0; 20480];
         let (mut reader, mut writer) = split(io);
         let (mut read, mut write) = (BinaryMut::new(), BinaryMut::new());
         loop {
