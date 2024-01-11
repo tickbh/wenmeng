@@ -587,11 +587,12 @@ where
                                         ws.receiver_close(c)?;
                                     },
                                     OwnedMessage::Ping(v) => {
-                                        let p = self.callback_ws.as_mut().unwrap().on_ping(v).await?;
-                                        ws.send_owned_message(p)?;
+                                        if let Some(p) = self.callback_ws.as_mut().unwrap().on_ping(v).await? {
+                                            ws.send_owned_message(p)?;
+                                        }
                                     },
                                     OwnedMessage::Pong(v) => {
-                                        self.callback_ws.as_mut().unwrap().on_pong(v).await;
+                                        self.callback_ws.as_mut().unwrap().on_pong(v).await?;
                                     },
                                 }
                             }

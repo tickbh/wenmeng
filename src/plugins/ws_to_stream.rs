@@ -10,27 +10,29 @@
 // -----
 // Created Date: 2024/01/09 10:49:38
 
-
 use std::io;
 
+use crate::{
+    ws::{WsHandshake, WsOption, WsTrait},
+    ProtError, ProtResult, RecvRequest, RecvResponse, Server,
+};
 use async_trait::async_trait;
 use tokio::{
     io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    sync::mpsc::{channel, Receiver, Sender}, net::{ToSocketAddrs, TcpStream},
+    net::{TcpStream, ToSocketAddrs},
+    sync::mpsc::{channel, Receiver, Sender},
 };
-use webparse::{ws::OwnedMessage, BinaryMut, Buf, Url, WebError};
-use crate::{
-    ws::{WsHandshake, WsOption, WsTrait},
-    Client, ProtError, ProtResult, Server,
-};
+use webparse::{ws::OwnedMessage, BinaryMut, Buf, Response};
 
 /// 将websocket的流量转化成的tcp流量
 pub struct WsToStream<T: AsyncRead + AsyncWrite + Unpin + Send + 'static, A: ToSocketAddrs> {
     addr: A,
+    domain: Option<String>,
     io: T,
 }
 
 struct Operate {
+    domain: Option<String>,
     /// 将tcp来的数据流转发到websocket
     stream_sender: Sender<Vec<u8>>,
     /// 从websocket那接收信息
@@ -39,6 +41,23 @@ struct Operate {
 
 #[async_trait]
 impl WsTrait for Operate {
+    #[inline]
+    async fn on_request(&mut self, req: &RecvRequest) -> ProtResult<RecvResponse> {
+        if self.domain.is_some() {
+            if req.get_host() != self.domain {
+                Ok(Response::builder()
+                    .status(400)
+                    .body("host not match")?
+                    .into_type())
+            } else {
+                WsHandshake::build_request(req)
+            }
+        } else {
+            WsHandshake::build_request(req)
+        }
+        // warn!("Handler received request:\n{}", req);
+    }
+
     async fn on_open(&mut self, _shake: WsHandshake) -> ProtResult<Option<WsOption>> {
         // 将receiver传给控制中心, 以让其用该receiver做接收
         let mut option = WsOption::new();
@@ -74,9 +93,16 @@ impl WsTrait for Operate {
 }
 
 impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static, A: ToSocketAddrs> WsToStream<T, A> {
-    pub fn new(io: T, addr: A) -> ProtResult<Self>
-    {
-        Ok(Self { addr, io })
+    pub fn new(io: T, addr: A) -> ProtResult<Self> {
+        Ok(Self {
+            addr,
+            io,
+            domain: None,
+        })
+    }
+
+    pub fn set_domain(&mut self, domain: String) {
+        self.domain = Some(domain);
     }
 
     pub async fn copy_bidirectional(self) -> ProtResult<()> {
@@ -89,6 +115,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static, A: ToSocketAddrs> WsToS
             server.set_callback_ws(Box::new(Operate {
                 stream_sender,
                 receiver: Some(ws_receiver),
+                domain: self.domain,
             }));
             let e = server.incoming().await;
             println!("close server ==== addr = {:?} e = {:?}", 0, e);
@@ -101,7 +128,10 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static, A: ToSocketAddrs> WsToS
         io: S,
         ws_sender: Sender<OwnedMessage>,
         mut stream_receiver: Receiver<Vec<u8>>,
-    ) -> ProtResult<()> where S: AsyncRead + AsyncWrite + Unpin {
+    ) -> ProtResult<()>
+    where
+        S: AsyncRead + AsyncWrite + Unpin,
+    {
         let mut buf = vec![0; 20480];
         let (mut reader, mut writer) = split(io);
         let (mut read, mut write) = (BinaryMut::new(), BinaryMut::new());

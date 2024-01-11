@@ -26,6 +26,7 @@ use crate::{
 /// 将tcp的流量转化成websocket的流量
 pub struct StreamToWs<T: AsyncRead + AsyncWrite + Unpin> {
     url: Url,
+    domain: Option<String>,
     io: T,
 }
 
@@ -79,7 +80,7 @@ impl<T: AsyncRead + AsyncWrite + Unpin> StreamToWs<T> {
         <Url as TryFrom<U>>::Error: Into<WebError>,
     {
         let url = Url::try_from(url).map_err(Into::into)?;
-        Ok(Self { url, io })
+        Ok(Self { url, io, domain: None })
     }
 
     pub async fn copy_bidirectional(self) -> ProtResult<()> {
@@ -87,7 +88,12 @@ impl<T: AsyncRead + AsyncWrite + Unpin> StreamToWs<T> {
         let (stream_sender, stream_receiver) = channel::<Vec<u8>>(10);
         let url = self.url;
         tokio::spawn(async move {
-            if let Ok(mut client) = Client::builder().url(url).unwrap().connect().await {
+            let build = if let Some(d) = &self.domain {
+                Client::builder().url(url).unwrap().connect_with_domain(&d).await
+            } else {
+                Client::builder().url(url).unwrap().connect().await
+            };
+            if let Ok(mut client) = build {
                 client.set_callback_ws(Box::new(Operate {
                     stream_sender,
                     receiver: Some(ws_receiver),
@@ -97,6 +103,10 @@ impl<T: AsyncRead + AsyncWrite + Unpin> StreamToWs<T> {
         });
         Self::bind(self.io, ws_sender, stream_receiver).await?;
         Ok(())
+    }
+
+    pub fn set_domain(&mut self, domain: String) {
+        self.domain = Some(domain);
     }
 
     pub async fn bind(

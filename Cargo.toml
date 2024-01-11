@@ -1,12 +1,12 @@
 [package]
 name = "wenmeng"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 authors = [ "tickbh <tickdream125@hotmail.com>" ]
 description = "a http server for rust"
 repository = "https://github.com/tickbh/dianmeng"
 license = "Apache-2.0"
-keywords = ["http2", "parse", "http", "server", "client"]
+keywords = ["http2", "parse", "websocket", "server", "client"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -39,9 +39,9 @@ rand = "*"
 
 #"tokio", "brotli", "deflate", "gzip"
 
-# webparse="0.2.2"
-[dependencies.webparse]
-path="../webparse"
+webparse="0.2.3"
+# [dependencies.webparse]
+# path="../webparse"
 
 [dev-dependencies]
 serde = "1.0"

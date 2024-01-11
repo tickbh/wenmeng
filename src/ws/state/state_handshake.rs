@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2023/09/14 09:42:25
 
-use crate::{ws::WsCodec, Builder, ProtResult};
+use crate::{ws::WsCodec, ProtResult};
 
 use std::{
     pin::Pin,
@@ -20,14 +20,10 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{Binary, Buf};
 
 pub struct WsStateHandshake {
-    /// 默认参数
-    builder: Builder,
     /// 当前握手状态
     state: WsHandshaking,
     /// 是否为客户端
     is_client: bool,
-    /// 握手日志信息
-    span: tracing::Span,
 }
 
 /// 握手状态
@@ -46,21 +42,17 @@ struct Flush(Binary);
 impl WsStateHandshake {
     pub fn new_server() -> WsStateHandshake {
         WsStateHandshake {
-            builder: Builder::new(),
             state: WsHandshaking::Wait,
             is_client: false,
-            span: tracing::trace_span!("server_handshake"),
         }
     }
 
-    pub fn new_client() -> WsStateHandshake {
-        WsStateHandshake {
-            builder: Builder::new(),
-            state: WsHandshaking::Wait,
-            is_client: true,
-            span: tracing::trace_span!("server_handshake"),
-        }
-    }
+    // pub fn new_client() -> WsStateHandshake {
+    //     WsStateHandshake {
+    //         state: WsHandshaking::Wait,
+    //         is_client: true,
+    //     }
+    // }
 
     pub fn poll_handle<T>(
         &mut self,

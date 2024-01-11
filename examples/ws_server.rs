@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use std::{error::Error, time::Duration};
 
 use tokio::{net::TcpListener, sync::mpsc::Sender};
-use webparse::ws::{CloseData, OwnedMessage};
+use webparse::ws::{OwnedMessage};
 use wenmeng::{
     self,
     ws::{WsHandshake, WsOption, WsTrait},

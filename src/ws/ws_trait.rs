@@ -40,12 +40,14 @@ pub trait WsTrait: Send {
     async fn on_error(&mut self, _err: ProtError) {}
 
     /// 收到来在远端的ping消息, 默认返回pong消息
-    async fn on_ping(&mut self, val: Vec<u8>) -> ProtResult<OwnedMessage> {
-        return Ok(OwnedMessage::Pong(val));
+    async fn on_ping(&mut self, val: Vec<u8>) -> ProtResult<Option<OwnedMessage>> {
+        return Ok(Some(OwnedMessage::Pong(val)));
     }
 
     /// 收到来在远端的pong消息, 默认不做任何处理, 可自定义处理如ttl等
-    async fn on_pong(&mut self, _val: Vec<u8>) {}
+    async fn on_pong(&mut self, _val: Vec<u8>) -> ProtResult<()> {
+        Ok(())
+    }
 
     /// 收到来在远端的message消息, 必须覆写该函数
     async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()>;
