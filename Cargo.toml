@@ -33,8 +33,8 @@ brotli = "3.4.0"
 
 toml="0.8.2"
 async-trait = "0.1.74"
-sha1 = "*"
-rand = "*"
+sha1 = "0.10.6"
+rand = "0.8.5"
 # async-compression = {version="0.4.3", features=["all"]}
 
 #"tokio", "brotli", "deflate", "gzip"
