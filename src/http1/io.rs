@@ -273,15 +273,15 @@ where
         Poll::Ready(Ok(size))
     }
 
-    fn receive_body_len(status: &mut SendStatus, body_len: usize) -> bool {
-        if status.left_read_body_len <= body_len {
-            status.left_read_body_len = 0;
-            true
-        } else {
-            status.left_read_body_len -= body_len;
-            false
-        }
-    }
+    // fn receive_body_len(status: &mut SendStatus, body_len: usize) -> bool {
+    //     if status.left_read_body_len <= body_len {
+    //         status.left_read_body_len = 0;
+    //         true
+    //     } else {
+    //         status.left_read_body_len -= body_len;
+    //         false
+    //     }
+    // }
 
     pub fn poll_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtResult<RecvRequest>>> {
         let n = self.poll_write(cx)?;
@@ -291,7 +291,7 @@ where
         match ready!(self.poll_read_all(cx)?) {
             // socket被断开, 提前结束
             0 => {
-                log::trace!("read socket zero, now close socket");
+                log::trace!("收到socket的关闭信号, 关闭当前socket");
                 return Poll::Ready(None);
             }
             // 收到新的消息头, 解析包体消息

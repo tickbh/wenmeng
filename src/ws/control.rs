@@ -86,8 +86,6 @@ impl Control {
             Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),
             Poll::Pending => return Poll::Pending,
         }
-        // let mut has_change;
-        Poll::Pending
     }
 
     pub fn is_write_end<T>(&self, codec: &WsCodec<T>) -> bool

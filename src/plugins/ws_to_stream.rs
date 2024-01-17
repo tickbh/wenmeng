@@ -178,6 +178,5 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static, A: ToSocketAddrs> WsToS
                 }
             }
         }
-        Ok(())
     }
 }

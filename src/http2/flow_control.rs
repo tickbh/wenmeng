@@ -13,6 +13,7 @@
 use webparse::http2::WindowSize;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct FlowControl {
     window_size: i32,
     available: i32,

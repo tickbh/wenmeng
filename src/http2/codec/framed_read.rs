@@ -40,6 +40,7 @@ pub struct FramedRead<T> {
 
 /// Partially loaded headers frame
 #[derive(Debug)]
+#[allow(dead_code)]
 struct Partial {
     /// Empty frame
     frame: Continuable,
@@ -49,6 +50,7 @@ struct Partial {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 enum Continuable {
     Headers(frame::Headers),
     PushPromise(frame::PushPromise),
@@ -122,7 +124,6 @@ where
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
         loop {
-            println!("aaaaaaaaaaaaaaaaaaaaaaaaaaa");
             let bytes = match ready!(Pin::new(&mut self.inner).poll_next(cx)) {
                 Some(Ok(bytes)) => bytes,
                 Some(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
@@ -176,18 +177,3 @@ fn decode_frame(
 
     Ok(Some(frame))
 }
-// /// Partially loaded headers frame
-// #[derive(Debug)]
-// struct Partial {
-//     /// Empty frame
-//     frame: Continuable,
-
-//     /// Partial header payload
-//     buf: BinaryMut,
-// }
-
-// #[derive(Debug)]
-// enum Continuable {
-//     Headers(FrameHeader),
-//     PushPromise(PushPromise),
-// }

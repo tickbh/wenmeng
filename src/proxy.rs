@@ -67,7 +67,7 @@ where
 
     // proxy-authorization
     if let Some(value) = auth {
-        log::debug!("tunnel to {}:{} using basic auth", host, port);
+        log::debug!("建立连接 {}:{} 使用基础加密", host, port);
         buf.extend_from_slice(b"Proxy-Authorization: ");
         buf.extend_from_slice(value.as_bytes());
         buf.extend_from_slice(b"\r\n");

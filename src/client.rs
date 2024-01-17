@@ -19,6 +19,7 @@ use crate::http2::{self, ClientH2Connection};
 use crate::ws::{ClientWsConnection, WsHandshake, WsTrait, WsOption};
 use crate::{http1::ClientH1Connection, ProtError};
 use crate::{MaybeHttpsStream, Middleware, ProtResult, RecvRequest, RecvResponse, TimeoutLayer, Body};
+use base64::prelude::*;
 use futures::StreamExt;
 use rustls::{ClientConfig, RootCertStore};
 use tokio::net::ToSocketAddrs;
@@ -639,7 +640,7 @@ where
         header.insert("Connection", "Upgrade");
         header.insert("Upgrade", "websocket");
         let key: [u8; 16] = rand::random();
-        header.insert("Sec-WebSocket-Key", base64::encode(&key));
+        header.insert("Sec-WebSocket-Key", BASE64_STANDARD.encode(&key));
         header.insert("Sec-WebSocket-Version", "13");
         header.insert("Sec-WebSocket-Protocol", "chat, superchat");
         self.wait_ws_operate_with_req(req).await?;

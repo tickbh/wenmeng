@@ -446,6 +446,11 @@ where
     }
 
     pub async fn incoming(&mut self) -> ProtResult<()> {
+        if let Some(addr) = &self.addr {
+            log::trace!("HTTP服务开始进行服务, 客户端地址:{addr}");
+        } else {
+            log::trace!("HTTP服务开始进行服务, 客户端地址未获取");
+        };
         let (mut ws_receiver, mut ws_option);
         loop {
             match self.inner_incoming().await {

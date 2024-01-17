@@ -16,7 +16,7 @@ use tokio::sync::mpsc::{channel};
 use tokio_util::sync::PollSender;
 use webparse::{
     http::{
-        http2::frame::{Frame, Reason, StreamIdentifier},
+        http2::frame::{Frame, Reason},
         request, response,
     },
     Binary, BinaryMut, Buf, Version,
@@ -28,7 +28,6 @@ use crate::Body;
 
 /// 组成帧的基本数据
 pub struct InnerStream {
-    id: StreamIdentifier,
     frames: LinkedList<Frame<Binary>>,
     sender: Option<PollSender<(bool, Binary)>>,
     content_len: usize,
@@ -40,11 +39,9 @@ pub struct InnerStream {
 
 impl InnerStream {
     pub fn new(frame: Frame<Binary>) -> Self {
-        let id = frame.stream_id();
         let mut frames = LinkedList::new();
         frames.push_back(frame);
         InnerStream {
-            id,
             frames,
             sender: None,
             content_len: 0,

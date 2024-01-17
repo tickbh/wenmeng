@@ -208,6 +208,5 @@ where
                 }
             }
         }
-        Poll::Pending
     }
 }

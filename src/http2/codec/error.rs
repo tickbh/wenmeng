@@ -16,6 +16,7 @@ use crate::ProtError;
 
 /// Errors caused by sending a message
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum SendError {
     Connection(ProtError),
     User(UserError),
@@ -23,6 +24,7 @@ pub enum SendError {
 
 /// Errors caused by users of the library
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum UserError {
     /// The stream ID is no longer accepting frames.
     InactiveStreamId,

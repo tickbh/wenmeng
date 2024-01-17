@@ -226,7 +226,6 @@ impl Control {
 
             match Pin::new(&mut *codec).poll_next(cx) {
                 Poll::Ready(Some(Ok(frame))) => {
-                    has_change = true;
                     match &frame {
                         Frame::Settings(settings) => {
                             self.setting

@@ -12,6 +12,7 @@
 
 use std::net::SocketAddr;
 
+use base64::{engine::general_purpose::STANDARD, Engine};
 use sha1::{Digest, Sha1};
 use tokio::sync::mpsc::Sender;
 use webparse::{
@@ -53,7 +54,7 @@ impl WsHandshake {
     }
 
     pub fn build_accept(key: &str) -> ProtResult<String> {
-        match base64::decode(key) {
+        match STANDARD.decode(key) {
             Ok(vec) => {
                 if vec.len() != 16 {
                     return Err(ProtError::from(WebError::Ws(WsError::ProtocolError(
@@ -68,7 +69,7 @@ impl WsHandshake {
                 concat_key.push_str(MAGIC_GUID);
                 let hash = Sha1::digest(concat_key.as_bytes());
                 let key: [u8; 20] = hash.into();
-                Ok(base64::encode(key))
+                Ok(STANDARD.encode(key))
             }
             Err(_) => {
                 return Err(ProtError::from(WebError::Ws(WsError::ProtocolError(

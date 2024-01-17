@@ -10,7 +10,7 @@
 // -----
 // Created Date: 2023/09/14 09:42:25
 
-use crate::{http2::codec::Codec, Builder, ProtError, ProtResult};
+use crate::{http2::codec::Codec, ProtError, ProtResult};
 
 use std::{
     io,
@@ -21,14 +21,10 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use webparse::{http::http2::HTTP2_MAGIC, Binary, Buf};
 
 pub struct StateHandshake {
-    /// 默认参数
-    builder: Builder,
     /// 当前握手状态
     state: Handshaking,
     /// 是否为客户端
     is_client: bool,
-    /// 握手日志信息
-    span: tracing::Span,
 }
 
 /// 握手状态
@@ -95,19 +91,15 @@ impl ReadPreface {
 impl StateHandshake {
     pub fn new_server() -> StateHandshake {
         StateHandshake {
-            builder: Builder::new(),
             state: Handshaking::None,
             is_client: false,
-            span: tracing::trace_span!("server_handshake"),
         }
     }
 
     pub fn new_client() -> StateHandshake {
         StateHandshake {
-            builder: Builder::new(),
             state: Handshaking::None,
             is_client: true,
-            span: tracing::trace_span!("server_handshake"),
         }
     }
 

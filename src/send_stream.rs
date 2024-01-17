@@ -1,26 +1,24 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/14 09:42:25
 
-use tokio_stream::Stream;
-use std::{fmt::Debug};
+use std::fmt::Debug;
 use std::io::Read;
-use tokio::sync::mpsc::{Sender};
-use webparse::{Binary, BinaryMut, Serialize, Buf, Helper, HttpError, WebError};
+use tokio_stream::Stream;
+use webparse::{Binary, BinaryMut, Buf, Helper, HttpError, Serialize, WebError};
 
-use crate::{ProtResult};
+use crate::ProtResult;
 
 #[derive(Debug)]
 pub struct SendStream {
-    sender: Option<Sender<(bool, Binary)>>,
     pub read_buf: BinaryMut,
     real_read_buf: BinaryMut,
     is_chunked: bool,
@@ -32,7 +30,6 @@ pub struct SendStream {
 impl SendStream {
     pub fn empty() -> SendStream {
         SendStream {
-            sender: None,
             read_buf: BinaryMut::new(),
             real_read_buf: BinaryMut::new(),
             is_end: true,
@@ -42,12 +39,12 @@ impl SendStream {
         }
     }
 
-    pub fn new(sender: Sender<(bool, Binary)>) -> SendStream {
-        SendStream {
-            sender: Some(sender),
-            ..Self::empty()
-        }
-    }
+    // pub fn new(sender: Sender<(bool, Binary)>) -> SendStream {
+    //     SendStream {
+    //         sender: Some(sender),
+    //         ..Self::empty()
+    //     }
+    // }
 
     pub fn set_new_body(&mut self) {
         self.is_end_headers = true;
@@ -65,7 +62,6 @@ impl SendStream {
         self.is_chunked = chunked;
     }
 
-    
     pub fn set_end_headers(&mut self, is_end_headers: bool) {
         self.is_end_headers = is_end_headers;
     }
@@ -73,19 +69,20 @@ impl SendStream {
     pub fn process_data(&mut self) -> ProtResult<()> {
         // 头部数据不做处理
         if !self.is_end_headers {
-            return Ok(())
+            return Ok(());
         }
         loop {
             if self.is_chunked {
                 if self.is_end {
-                    return Ok(())
+                    return Ok(());
                 }
                 // TODO 接收小部分的chunk
                 match Helper::parse_chunk_data(&mut self.read_buf.clone()) {
                     Ok((use_size, chunk_size)) => {
                         self.is_end = chunk_size == 0;
                         self.read_buf.advance(use_size);
-                        self.real_read_buf.put_slice(&self.read_buf.chunk()[..chunk_size]);
+                        self.real_read_buf
+                            .put_slice(&self.read_buf.chunk()[..chunk_size]);
                         self.read_buf.advance(chunk_size);
                         Helper::skip_new_line(&mut self.read_buf)?;
                     }
@@ -95,7 +92,7 @@ impl SendStream {
             } else {
                 let len = std::cmp::min(self.left_read_body_len, self.read_buf.remaining());
                 if len == 0 {
-                    return Ok(())
+                    return Ok(());
                 }
                 self.left_read_body_len -= len;
                 if self.left_read_body_len == 0 {
@@ -109,7 +106,10 @@ impl SendStream {
         Ok(())
     }
 
-    pub fn read_data<B: webparse::Buf + webparse::BufMut>(&mut self, read_data: &mut B) -> ProtResult<usize> {
+    pub fn read_data<B: webparse::Buf + webparse::BufMut>(
+        &mut self,
+        read_data: &mut B,
+    ) -> ProtResult<usize> {
         self.process_data()?;
 
         let mut size = 0;

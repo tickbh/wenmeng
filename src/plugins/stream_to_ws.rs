@@ -160,6 +160,5 @@ impl<T: AsyncRead + AsyncWrite + Unpin> StreamToWs<T> {
                 }
             }
         }
-        Ok(())
     }
 }
