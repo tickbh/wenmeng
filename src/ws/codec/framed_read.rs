@@ -38,18 +38,16 @@ impl tokio_util::codec::Decoder for MyCodec {
     type Error = WebError;
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         use bytes::Buf;
-        println!("src ori size = {}", src.remaining());
         let (frame, size) = {
             let mut copy = BinaryRef::from(src.chunk());
             let now_len = copy.remaining();
             let frame = match DataFrame::read_dataframe_with_limit(&mut copy, !self.0, 100000) {
                 Ok(frame) => frame,
                 Err(WebError::Io(io)) if io.kind() == io::ErrorKind::UnexpectedEof => {
-                    println!("is UnexpectedEof decode byte");
                     return Ok(None);
                 }
                 Err(e) => {
-                    println!("io error = {:?}", e);
+                    log::trace!("io error = {:?}", e);
                     return Err(e)
                 }
 
@@ -57,7 +55,6 @@ impl tokio_util::codec::Decoder for MyCodec {
             (frame, now_len - copy.remaining())
         };
         src.advance(size);
-        println!("src size = {}", src.remaining());
         return Ok(Some(frame));
     }
 }

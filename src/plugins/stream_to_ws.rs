@@ -49,8 +49,6 @@ impl WsTrait for Operate {
     }
 
     async fn on_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {
-        println!("callback on message = {:?}", msg);
-        // let _ = self.sender.send(msg).await;
         match msg {
             OwnedMessage::Text(v) => self
                 .stream_sender

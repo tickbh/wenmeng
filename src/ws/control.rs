@@ -80,7 +80,6 @@ impl Control {
         match Pin::new(&mut *codec).poll_next(cx) {
             Poll::Ready(None) => return Poll::Ready(None),
             Poll::Ready(Some(Ok(msg))) => {
-                println!("msg = {:?}", msg);
                 return Poll::Ready(Some(Ok(msg)));
             }
             Poll::Ready(Some(Err(e))) => return Poll::Ready(Some(Err(e))),
