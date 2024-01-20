@@ -24,7 +24,7 @@ use crate::{
 };
 
 /// 将tcp的流量转化成websocket的流量
-pub struct StreamToWs<T: AsyncRead + AsyncWrite + Unpin + Send> {
+pub struct StreamToWs<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> {
     url: Url,
     domain: Option<String>,
     io: T,
@@ -71,7 +71,7 @@ impl WsTrait for Operate {
     }
 }
 
-impl<T: AsyncRead + AsyncWrite + Unpin + Send> StreamToWs<T> {
+impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> StreamToWs<T> {
     pub fn new<U>(io: T, url: U) -> ProtResult<Self>
     where
         Url: TryFrom<U>,
