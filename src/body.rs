@@ -26,12 +26,12 @@ use std::{
 };
 use tokio::{
     fs::File,
-    io::{AsyncRead, AsyncReadExt, ReadBuf},
+    io::{AsyncRead, AsyncReadExt, ReadBuf, AsyncSeekExt},
     sync::{mpsc::Receiver, OwnedSemaphorePermit, Semaphore},
 };
 use webparse::{Binary, BinaryMut, Buf, Helper, Serialize, WebResult};
 
-use crate::Consts;
+use crate::{Consts, ProtResult};
 
 use super::layer::RateLimitLayer;
 
@@ -55,6 +55,8 @@ struct InnerReceiver {
     file: Option<Box<File>>,
     cache_buf: Vec<u8>,
     data_size: u64,
+    start_pos: Option<u64>,
+    end_pos: Option<u64>,
 }
 
 impl Drop for InnerReceiver {
@@ -72,6 +74,8 @@ impl InnerReceiver {
             file: None,
             cache_buf: vec![],
             data_size: u64::MAX,
+            start_pos: None,
+            end_pos: None
         }
     }
 
@@ -82,6 +86,8 @@ impl InnerReceiver {
             file: None,
             cache_buf: vec,
             data_size: u64::MAX,
+            start_pos: None,
+            end_pos: None
         }
     }
     
@@ -92,7 +98,20 @@ impl InnerReceiver {
             file: Some(Box::new(file)),
             cache_buf: vec,
             data_size,
+            start_pos: None,
+            end_pos: None
         }
+    }
+
+    pub async fn set_start_end(&mut self, start_pos: u64, end_pos: u64) -> ProtResult<()> {
+        assert!(end_pos >= start_pos, "结束位置必须大于起始位置");
+        self.start_pos = Some(start_pos);
+        self.end_pos = Some(end_pos);
+        self.data_size = end_pos - start_pos;
+        if let Some(f) = &mut self.file {
+            f.as_mut().seek(std::io::SeekFrom::Start(start_pos)).await?;
+        }
+        Ok(())
     }
 
     pub fn is_none(&self) -> bool {
@@ -106,11 +125,14 @@ impl InnerReceiver {
 
         if let Some(file) = &mut self.file {
             match file.read(&mut self.cache_buf).await {
-                Ok(n) => {
-                    if n < self.cache_buf.len() {
-                        return Some((true, Binary::from(self.cache_buf[..n].to_vec())));
+                Ok(size) => {
+                    let is_end = size < self.cache_buf.len() || self.data_size <= size as u64;
+                    let read = std::cmp::min(self.data_size as usize, size);
+                    self.data_size -= read as u64;
+                    if is_end {
+                        return Some((true, Binary::from(self.cache_buf[..read].to_vec())));
                     } else {
-                        return Some((false, Binary::from(self.cache_buf[..n].to_vec())));
+                        return Some((false, Binary::from(self.cache_buf[..read].to_vec())));
                     }
                 }
                 Err(_) => return None,
@@ -139,11 +161,14 @@ impl InnerReceiver {
                     
                 }
             };
-            self.data_size -= std::cmp::min(self.data_size, size as u64);
-            let is_end = size < self.cache_buf.len() || self.data_size <= 0;
+            
+            let is_end = size < self.cache_buf.len() || self.data_size <= size as u64;
+            let read = std::cmp::min(self.data_size as usize, size);
+            self.data_size -= read as u64;
+
             return Poll::Ready(Some((
                 is_end,
-                Binary::from(self.cache_buf[..size].to_vec()),
+                Binary::from(self.cache_buf[..read].to_vec()),
             )));
         }
 
@@ -353,7 +378,11 @@ impl Body {
 
     pub fn set_max_read_buf(&mut self, max_read_buf: usize) {
         self.max_read_buf = max_read_buf;
-    } 
+    }
+    
+    pub async fn set_start_end(&mut self, start_pos: u64, end_pos: u64) -> ProtResult<()> {
+        self.receiver.set_start_end(start_pos, end_pos).await
+    }
 
     pub fn binary(&mut self) -> Binary {
         let mut buffer = BinaryMut::new();

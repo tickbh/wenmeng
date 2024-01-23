@@ -39,9 +39,9 @@ rand = "0.8.5"
 
 #"tokio", "brotli", "deflate", "gzip"
 
-webparse="0.2.4"
-# [dependencies.webparse]
-# path="../webparse"
+# webparse="0.2.4"
+[dependencies.webparse]
+path="../webparse"
 
 [dev-dependencies]
 serde = "1.0"
