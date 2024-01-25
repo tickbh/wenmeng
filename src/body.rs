@@ -54,8 +54,11 @@ struct InnerReceiver {
     receiver: Option<Receiver<(bool, Binary)>>,
     file: Option<Box<File>>,
     cache_buf: Vec<u8>,
+    /// 数据包大小
     data_size: u64,
+    /// 文件专用, 起始点
     start_pos: Option<u64>,
+    /// 文件专用, 结束点
     end_pos: Option<u64>,
 }
 
