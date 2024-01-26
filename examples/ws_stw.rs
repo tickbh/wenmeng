@@ -16,7 +16,6 @@ async fn run_main() -> ProtResult<()> {
             let _ = stream_to_ws.copy_bidirectional().await;
         });
     }
-    Ok(())
 }
 
 #[tokio::main]

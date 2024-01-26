@@ -86,6 +86,7 @@ async fn test_http2() -> ProtResult<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn test_https2() -> ProtResult<()> {
     // let req = Request::builder().method("GET").url("http://nghttp2.org/").upgrade_http2(settings).body("").unwrap();
     let req = Request::builder()

@@ -73,7 +73,6 @@ async fn run_main() -> ProtResult<()> {
         stdin.read_line(&mut buffer)?;
         sender.send(OwnedMessage::Text(buffer)).await?;
     }
-    Ok(())
 }
 
 #[tokio::main]

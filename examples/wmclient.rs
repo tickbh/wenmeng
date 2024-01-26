@@ -30,6 +30,7 @@ async fn test_http2() -> ProtResult<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn test_https2() -> ProtResult<()> {
     // let req = Request::builder().method("GET").url("http://nghttp2.org/").upgrade_http2(settings).body("").unwrap();
     let req = Request::builder()
@@ -61,7 +62,7 @@ async fn test_https2() -> ProtResult<()> {
 
 #[tokio::main]
 async fn main() {
-    test_http2().await;
+    let _ = test_http2().await;
     // test_https2().await;
     return;
 }

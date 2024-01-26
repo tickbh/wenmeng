@@ -16,9 +16,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::http2::{self, ClientH2Connection};
-use crate::ws::{ClientWsConnection, WsHandshake, WsTrait, WsOption};
+use crate::ws::{ClientWsConnection, WsHandshake, WsOption, WsTrait};
 use crate::{http1::ClientH1Connection, ProtError};
-use crate::{MaybeHttpsStream, Middleware, ProtResult, RecvRequest, RecvResponse, TimeoutLayer, Body};
+use crate::{
+    Body, MaybeHttpsStream, Middleware, ProtResult, RecvRequest, RecvResponse, TimeoutLayer,
+};
 use base64::prelude::*;
 use futures::StreamExt;
 use rustls::{ClientConfig, RootCertStore};
@@ -31,7 +33,7 @@ use tokio::{
 use tokio_rustls::TlsConnector;
 use webparse::http2::frame::Settings;
 use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
-use webparse::{Binary, ws::OwnedMessage, Url, WebError, Request};
+use webparse::{ws::OwnedMessage, Binary, Request, Url, WebError};
 
 use super::middle::BaseMiddleware;
 use super::proxy::ProxyScheme;
@@ -111,10 +113,11 @@ impl Builder {
     pub fn url<U>(mut self, url: U) -> ProtResult<Self>
     where
         Url: TryFrom<U>,
-        <Url as TryFrom<U>>::Error: Into<WebError> {
+        <Url as TryFrom<U>>::Error: Into<WebError>,
+    {
         let url = TryInto::<Url>::try_into(url)
             .map_err(|_e| ProtError::Extension("unknown connection url"))?;
-        
+
         self.inner.url = Some(url);
         Ok(self)
     }
@@ -146,13 +149,11 @@ impl Builder {
         Ok(tcp)
     }
 
-    pub async fn connect(self) -> ProtResult<Client>
-    {
+    pub async fn connect(self) -> ProtResult<Client> {
         self.connect_with_domain("").await
     }
 
-    pub async fn connect_with_domain(self, domain: &str) -> ProtResult<Client>
-    {
+    pub async fn connect_with_domain(self, domain: &str) -> ProtResult<Client> {
         if self.inner.url.is_none() {
             return Err(ProtError::Extension("unknown connection url"));
         }
@@ -162,9 +163,7 @@ impl Builder {
                 match p.connect(&url).await? {
                     Some(tcp) => {
                         if url.scheme.is_https() {
-                            return self
-                                .connect_tls_by_stream_with_domain(tcp, domain)
-                                .await;
+                            return self.connect_tls_by_stream_with_domain(tcp, domain).await;
                         } else {
                             let proxy = p.clone();
                             let mut client = Client::new(self.inner, MaybeHttpsStream::Http(tcp));
@@ -183,9 +182,7 @@ impl Builder {
                     match p.connect(&url).await? {
                         Some(tcp) => {
                             if url.scheme.is_https() {
-                                return self
-                                    .connect_tls_by_stream_with_domain(tcp, domain)
-                                    .await;
+                                return self.connect_tls_by_stream_with_domain(tcp, domain).await;
                             } else {
                                 let proxy = p.clone();
                                 let mut client =
@@ -201,8 +198,7 @@ impl Builder {
             if url.scheme.is_https() {
                 let connect = url.get_connect_url();
                 let stream = self.inner_connect(&connect.unwrap()).await?;
-                self.connect_tls_by_stream_with_domain(stream, domain)
-                    .await
+                self.connect_tls_by_stream_with_domain(stream, domain).await
             } else {
                 let tcp = self.inner_connect(url.get_connect_url().unwrap()).await?;
                 Ok(Client::new(self.inner, MaybeHttpsStream::Http(tcp)))
@@ -210,50 +206,45 @@ impl Builder {
         }
     }
 
-    pub async fn connect_tls_by_stream(self, stream: TcpStream) -> ProtResult<Client>
-    {
-        self.connect_tls_by_stream_with_domain(stream, "")
-            .await
+    pub async fn connect_tls_by_stream(self, stream: TcpStream) -> ProtResult<Client> {
+        self.connect_tls_by_stream_with_domain(stream, "").await
     }
 
     pub async fn connect_tls_by_stream_with_domain(
         mut self,
         stream: TcpStream,
         domain: &str,
-    ) -> ProtResult<Client>
-    {
+    ) -> ProtResult<Client> {
         if self.inner.url.is_none() {
             return Err(ProtError::Extension("unknown connection url"));
         }
         let url = self.inner.url.as_ref().unwrap();
         let connect = url.get_connect_url();
         let name = if domain.len() > 0 {
-            domain
+            domain.to_string()
         } else {
             if url.domain.is_none() || connect.is_none() {
                 return Err(ProtError::Extension("unknown connection domain"));
             } else {
-                &*url.domain.as_ref().unwrap()
+                url.domain.clone().unwrap()
             }
         };
-        let mut root_store = RootCertStore::empty();
-        root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-            rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-                ta.subject,
-                ta.spki,
-                ta.name_constraints,
-            )
-        }));
+        let mut roots = RootCertStore::empty();
+        roots.extend(
+            webpki_roots::TLS_SERVER_ROOTS
+                .iter()
+                .cloned(),
+        );
+        
         let mut config = ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(root_store)
+            .with_root_certificates(roots)
             .with_no_client_auth();
         config.alpn_protocols = self.inner.get_alpn_protocol();
         let tls_client = Arc::new(config);
         let connector = TlsConnector::from(tls_client);
 
         // 这里的域名只为认证设置
-        let domain = rustls::ServerName::try_from(name)
+        let domain = rustls::pki_types::ServerName::try_from(name)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid dnsname"))?;
 
         let outbound = connector.connect(domain, stream).await?;
@@ -543,11 +534,15 @@ where
                                 self.ws = Some(self.http1.take().unwrap().into_ws());
                                 let (sender, receiver) = channel::<OwnedMessage>(10);
                                 let shake = WsHandshake::new(sender, None, r, None);
-                                ws_option = self.callback_ws.as_mut().unwrap().on_open(shake).await?;
+                                ws_option =
+                                    self.callback_ws.as_mut().unwrap().on_open(shake).await?;
                                 ws_receiver = receiver;
-                                            
-                                if ws_option.is_some() && ws_option.as_mut().unwrap().receiver.is_some() {
-                                    ws_receiver = ws_option.as_mut().unwrap().receiver.take().unwrap();
+
+                                if ws_option.is_some()
+                                    && ws_option.as_mut().unwrap().receiver.is_some()
+                                {
+                                    ws_receiver =
+                                        ws_option.as_mut().unwrap().receiver.take().unwrap();
                                 }
                                 break;
                             } else {
@@ -567,7 +562,11 @@ where
         Ok(())
     }
 
-    async fn inner_oper_ws(&mut self, mut receiver: Receiver<OwnedMessage>, mut option: Option<WsOption>) -> ProtResult<()> {
+    async fn inner_oper_ws(
+        &mut self,
+        mut receiver: Receiver<OwnedMessage>,
+        mut option: Option<WsOption>,
+    ) -> ProtResult<()> {
         if self.callback_ws.is_none() {
             return Err(ProtError::Extension("unknow callback websocket"));
         }
@@ -635,7 +634,11 @@ where
         if self.option.url.is_none() {
             return Err(ProtError::Extension("unknow url"));
         }
-        let mut req = Request::builder().method("GET").url(self.option.url.clone().unwrap()).body(Body::empty()).unwrap();
+        let mut req = Request::builder()
+            .method("GET")
+            .url(self.option.url.clone().unwrap())
+            .body(Body::empty())
+            .unwrap();
         let header = req.headers_mut();
         header.insert("Connection", "Upgrade");
         header.insert("Upgrade", "websocket");
