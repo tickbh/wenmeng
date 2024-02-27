@@ -17,19 +17,15 @@ use std::{
 
 use tokio_stream::Stream;
 
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-};
+use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{
-    ws::{CloseData, OwnedMessage, CloseCode},
+    ws::{CloseCode, CloseData, OwnedMessage},
     Binary, BinaryMut,
 };
 
-use crate::{
-    ProtResult, TimeoutLayer,
-};
+use crate::{ProtResult, TimeoutLayer};
 
-use super::{Control, WsCodec, state::WsState};
+use super::{state::WsState, Control, WsCodec};
 
 pub struct ClientWsConnection<T> {
     codec: WsCodec<T>,
@@ -160,9 +156,11 @@ where
     pub fn send_owned_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {
         self.inner.control.send_owned_message(msg)
     }
-    
+
     pub fn receiver_close(&mut self, data: Option<CloseData>) -> ProtResult<()> {
-        self.inner.state.set_closing(data.unwrap_or(CloseData::normal()));
+        self.inner
+            .state
+            .set_closing(data.unwrap_or(CloseData::normal()));
         Ok(())
     }
 }
@@ -186,8 +184,7 @@ where
                         Poll::Ready(Some(Ok(v))) => {
                             return Poll::Ready(Some(Ok(v)));
                         }
-                        Poll::Ready(e) => {
-                            println!("client e = {:?}", e);
+                        Poll::Ready(_e) => {
                             let close = OwnedMessage::Close(Some(CloseData::new(
                                 CloseCode::Invalid,
                                 "network".to_string(),

@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/14 09:42:25
@@ -13,19 +13,17 @@
 use std::pin::Pin;
 use std::task::{ready, Poll};
 
-use bytes::{BytesMut, BufMut};
-use tokio_stream::Stream;
+use bytes::{BufMut, BytesMut};
 use tokio::io::AsyncRead;
-use tokio_util::codec::{FramedRead as InnerFramedRead};
-use tokio_util::codec::{LengthDelimitedCodec};
+use tokio_stream::Stream;
+use tokio_util::codec::FramedRead as InnerFramedRead;
+use tokio_util::codec::LengthDelimitedCodec;
 use webparse::http::http2::frame::{Frame, Kind};
 use webparse::http::http2::{frame, Decoder};
 use webparse::http2::DEFAULT_SETTINGS_HEADER_TABLE_SIZE;
 use webparse::{Binary, BinaryMut, Buf};
 
 use crate::ProtResult;
-
-
 
 #[derive(Debug)]
 pub struct FramedRead<T> {
@@ -56,12 +54,11 @@ enum Continuable {
     PushPromise(frame::PushPromise),
 }
 
-
 impl<T> FramedRead<T> {
     pub fn get_mut(&mut self) -> &mut T {
         self.inner.get_mut()
     }
-    
+
     pub fn get_ref(&self) -> &T {
         self.inner.get_ref()
     }
@@ -72,7 +69,6 @@ where
     T: AsyncRead + Unpin,
 {
     pub fn new(delimited: InnerFramedRead<T, LengthDelimitedCodec>) -> FramedRead<T> {
-
         FramedRead {
             inner: delimited,
             decoder: Decoder::new(),
@@ -88,7 +84,7 @@ where
     pub fn into_io(self) -> T {
         self.inner.into_inner()
     }
-    
+
     pub fn set_cache_buf(&mut self, read_buf: BinaryMut) {
         self.inner.read_buffer_mut().put_slice(read_buf.chunk());
     }
@@ -96,8 +92,9 @@ where
 
 impl<T> AsyncRead for FramedRead<T>
 where
-    T: AsyncRead + Unpin, {
-        fn poll_read(
+    T: AsyncRead + Unpin,
+{
+    fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
@@ -107,7 +104,7 @@ where
             let read = std::cmp::min(buf.remaining(), self.inner.read_buffer_mut().remaining());
             buf.put_slice(&self.inner.read_buffer_mut().chunk()[..read]);
             self.inner.read_buffer_mut().advance(read);
-            return Poll::Ready(Ok(()))
+            return Poll::Ready(Ok(()));
         }
         Pin::new(self.get_mut().get_mut()).poll_read(cx, buf)
     }
@@ -128,10 +125,8 @@ where
                 Some(Ok(bytes)) => bytes,
                 Some(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
                 None => {
-                    println!("recv frame none!!!!!!!!");
                     return Poll::Ready(None);
                 }
-                
             };
 
             let Self {
@@ -140,7 +135,7 @@ where
                 ref mut partial,
                 ..
             } = *self;
-            
+
             if let Some(frame) = decode_frame(decoder, max_header_list_size, partial, bytes)? {
                 log::trace!("HTTP2:收到帧数据: {:?}", frame);
                 println!("HTTP2:收到帧数据: {:?}", frame);

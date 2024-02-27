@@ -1,6 +1,6 @@
 [package]
 name = "wenmeng"
-version = "0.2.6"
+version = "0.2.7"
 edition = "2021"
 authors = [ "tickbh <tickdream125@hotmail.com>" ]
 description = "a http server for rust"
@@ -39,7 +39,7 @@ rand = "0.8.5"
 
 #"tokio", "brotli", "deflate", "gzip"
 
-webparse="0.2.6"
+webparse="0.2.7"
 # [dependencies.webparse]
 # path="../webparse"
 

@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/14 09:42:25
@@ -13,13 +13,11 @@
 use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::{http::http2::frame::Settings};
+use webparse::http::http2::frame::Settings;
 
 use crate::ServerH2Connection;
 
 use super::ClientH2Connection;
-
-
 
 #[derive(Clone, Debug)]
 pub struct Builder {
@@ -42,8 +40,6 @@ pub struct Builder {
     /// Maximum amount of bytes to "buffer" for writing per stream.
     pub max_send_buffer_size: usize,
 }
-
-
 
 impl Builder {
     pub fn new() -> Builder {
@@ -93,8 +89,6 @@ impl Builder {
         self
     }
 
-    
-
     pub fn max_pending_accept_reset_streams(mut self, max: usize) -> Self {
         self.pending_accept_reset_stream_max = max;
         self
@@ -118,14 +112,15 @@ impl Builder {
 
     pub fn server_connection<T>(self, io: T) -> ServerH2Connection<T>
     where
-        T: AsyncRead + AsyncWrite + Unpin, {
-            ServerH2Connection::new(io, self)
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
+        ServerH2Connection::new(io, self)
     }
 
     pub fn client_connection<T>(self, io: T) -> ClientH2Connection<T>
     where
-        T: AsyncRead + AsyncWrite + Unpin, {
-            ClientH2Connection::new(io, self)
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
+        ClientH2Connection::new(io, self)
     }
-
 }

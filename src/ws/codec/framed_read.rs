@@ -19,12 +19,9 @@ use tokio::io::AsyncRead;
 use tokio_stream::Stream;
 use tokio_util::codec::FramedRead as InnerFramedRead;
 
-
-
-
-
 use webparse::{
-    ws::{DataFrame, OwnedMessage}, BinaryMut, BinaryRef, Buf, WebError,
+    ws::{DataFrame, OwnedMessage},
+    BinaryMut, BinaryRef, Buf, WebError,
 };
 
 use crate::ProtResult;
@@ -48,9 +45,8 @@ impl tokio_util::codec::Decoder for MyCodec {
                 }
                 Err(e) => {
                     log::trace!("io error = {:?}", e);
-                    return Err(e)
+                    return Err(e);
                 }
-
             };
             (frame, now_len - copy.remaining())
         };
@@ -134,16 +130,14 @@ where
                 }
                 Some(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
                 None => {
-                    println!("receiver peer close!!!!! none!!!!!!!!!!!! {:?}", std::time::Instant::now());
-                    return Poll::Ready(None)
-                },
+                    return Poll::Ready(None);
+                }
             };
 
             let is_finish = bytes.finished;
             self.caches.push(bytes);
             if is_finish {
                 let msg = OwnedMessage::from_dataframes(self.caches.drain(..).collect())?;
-                println!("decode ret = {:?}", msg);
                 return Poll::Ready(Some(Ok(msg)));
             } else {
                 return Poll::Pending;

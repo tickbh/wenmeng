@@ -66,7 +66,6 @@ impl WsTrait for Operate {
     }
 
     async fn on_interval(&mut self, _option: &mut Option<WsOption>) -> ProtResult<()> {
-        println!("on_interval!!!!!!!");
         Ok(())
     }
 }
@@ -137,7 +136,6 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> StreamToWs<T> {
                     }
                 }
                 r = stream_receiver.recv() => {
-                    println!("stream receiver = {:?}", r);
                     if let Some(v) = r {
                         write.put_slice(&v);
                     } else {

@@ -83,10 +83,6 @@ impl WsHandshake {
         let key = req.headers().get_str_value(&"Sec-WebSocket-Key");
         let protocol = req.headers().get_str_value(&"Sec-WebSocket-Protocol");
         let version = req.headers().get_str_value(&"Sec-WebSocket-Version");
-        println!(
-            "key = {:?}, protocol = {:?} version = {:?}",
-            key, protocol, version
-        );
         if key.is_none() || version.as_ref().map(|s| &**s) != Some("13") {
             return Ok(Response::builder()
                 .status(400)

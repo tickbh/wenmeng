@@ -76,7 +76,7 @@ where
             .length_adjustment(9)
             .num_skip(0) // Don't skip the header
             .new_read(framed_write);
-
+        let header_index = Arc::new(RwLock::new(HeaderIndex::new()));
         let inner = FramedRead::new(delimited);
 
         // Use FramedRead's method since it checks the value is within range.
@@ -84,7 +84,7 @@ where
 
         Codec {
             inner,
-            header_index: Arc::new(RwLock::new(HeaderIndex::new())),
+            header_index,
             header_table_size: DEFAULT_SETTINGS_HEADER_TABLE_SIZE,
             max_send_frame_size: DEFAULT_MAX_FRAME_SIZE as usize,
         }
