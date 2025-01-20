@@ -10,18 +10,19 @@
 // -----
 // Created Date: 2024/01/09 10:49:38
 
-use std::{io};
+use std::io;
 
+use crate::{
+    ws::{WsHandshake, WsOption, WsTrait},
+    Client, ProtError, ProtResult,
+};
+use algorithm::buf::{BinaryMut, Bt};
 use async_trait::async_trait;
 use tokio::{
     io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     sync::mpsc::{channel, Receiver, Sender},
 };
-use webparse::{ws::OwnedMessage, BinaryMut, Buf, Url, WebError};
-use crate::{
-    ws::{WsHandshake, WsOption, WsTrait},
-    Client, ProtError, ProtResult,
-};
+use webparse::{ws::OwnedMessage, Url, WebError};
 
 /// 将tcp的流量转化成websocket的流量
 pub struct StreamToWs<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> {
@@ -77,7 +78,11 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> StreamToWs<T> {
         <Url as TryFrom<U>>::Error: Into<WebError>,
     {
         let url = Url::try_from(url).map_err(Into::into)?;
-        Ok(Self { url, io, domain: None })
+        Ok(Self {
+            url,
+            io,
+            domain: None,
+        })
     }
 
     pub async fn copy_bidirectional(self) -> ProtResult<()> {
@@ -86,7 +91,11 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> StreamToWs<T> {
         let url = self.url;
         tokio::spawn(async move {
             let build = if let Some(d) = &self.domain {
-                Client::builder().url(url).unwrap().connect_with_domain(&d).await
+                Client::builder()
+                    .url(url)
+                    .unwrap()
+                    .connect_with_domain(&d)
+                    .await
             } else {
                 Client::builder().url(url).unwrap().connect().await
             };

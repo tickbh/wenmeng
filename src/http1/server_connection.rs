@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/10/07 09:41:02
@@ -13,17 +13,20 @@
 use std::{
     net::SocketAddr,
     pin::Pin,
-    task::{Context, Poll}, time::Duration,
+    task::{Context, Poll},
+    time::Duration,
 };
 
+use algorithm::buf::{Binary, BinaryMut};
 // use futures_core::{Stream};
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_stream::{Stream, StreamExt};
-use webparse::{Binary, BinaryMut, Version};
+use webparse::Version;
 
-use crate::{ProtResult, ServerH2Connection, HttpHelper, HeaderHelper, TimeoutLayer, RecvResponse, RecvRequest, HttpTrait, Middleware, ws::ServerWsConnection};
+use crate::{
+    ws::ServerWsConnection, HeaderHelper, HttpHelper, HttpTrait, Middleware, ProtResult,
+    RecvRequest, RecvResponse, ServerH2Connection, TimeoutLayer,
+};
 
 use super::IoBuffer;
 
@@ -44,14 +47,11 @@ where
             timeout: None,
         }
     }
-    
+
     pub fn new_by_cache(io: T, binary: BinaryMut) -> Self {
         let mut io = IoBuffer::new(io, true);
         io.set_read_cache(binary);
-        ServerH1Connection {
-            io,
-            timeout: None,
-        }
+        ServerH1Connection { io, timeout: None }
     }
 
     pub fn into_io(self) -> T {
@@ -62,14 +62,20 @@ where
         if self.timeout.is_none() {
             self.timeout = Some(TimeoutLayer::new());
         }
-        self.timeout.as_mut().unwrap().set_read_timeout(read_timeout);
+        self.timeout
+            .as_mut()
+            .unwrap()
+            .set_read_timeout(read_timeout);
     }
 
     pub fn set_write_timeout(&mut self, write_timeout: Option<Duration>) {
         if self.timeout.is_none() {
             self.timeout = Some(TimeoutLayer::new());
         }
-        self.timeout.as_mut().unwrap().set_write_timeout(write_timeout);
+        self.timeout
+            .as_mut()
+            .unwrap()
+            .set_write_timeout(write_timeout);
     }
 
     pub fn set_timeout(&mut self, timeout: Option<Duration>) {
@@ -94,10 +100,7 @@ where
         self.io.poll_write(cx)
     }
 
-    pub fn poll_request(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtResult<RecvRequest>>> {
+    pub fn poll_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtResult<RecvRequest>>> {
         self.io.poll_request(cx)
     }
 
@@ -124,20 +127,15 @@ where
         addr: &Option<SocketAddr>,
         r: RecvRequest,
         f: &mut Box<dyn HttpTrait>,
-        middles: &mut Vec<Box<dyn Middleware>>
-    ) -> ProtResult<Option<bool>>
-    {
-        
+        middles: &mut Vec<Box<dyn Middleware>>,
+    ) -> ProtResult<Option<bool>> {
         let mut res = HttpHelper::handle_request(Version::Http11, addr, r, f, middles).await?;
         HeaderHelper::process_response_header(Version::Http11, false, &mut res)?;
         self.send_response(res).await?;
         return Ok(None);
     }
 
-    pub async fn incoming(
-        &mut self,
-    ) -> ProtResult<Option<RecvRequest>>
-    {
+    pub async fn incoming(&mut self) -> ProtResult<Option<RecvRequest>> {
         let req = self.next().await;
 
         match req {
@@ -164,8 +162,20 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         if self.timeout.is_some() {
-            let (ready_time, is_read_end, is_write_end, is_idle) = (*self.io.get_ready_time(), self.io.is_read_end(), self.io.is_write_end(), self.io.is_idle());
-            self.timeout.as_mut().unwrap().poll_ready(cx, "server", ready_time, is_read_end, is_write_end, is_idle)?;
+            let (ready_time, is_read_end, is_write_end, is_idle) = (
+                *self.io.get_ready_time(),
+                self.io.is_read_end(),
+                self.io.is_write_end(),
+                self.io.is_idle(),
+            );
+            self.timeout.as_mut().unwrap().poll_ready(
+                cx,
+                "server",
+                ready_time,
+                is_read_end,
+                is_write_end,
+                is_idle,
+            )?;
         }
         Pin::new(&mut self.io).poll_request(cx)
     }

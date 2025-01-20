@@ -1,32 +1,27 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/14 09:42:25
 
+use algorithm::buf::{Binary, BinaryMut, Bt};
 use webparse::http::http2::frame::PushPromise;
 
 use std::task::Context;
-use tokio::sync::mpsc::{Sender};
-use webparse::{BinaryMut, Buf, HeaderMap, HeaderValue, HeaderName};
+use tokio::sync::mpsc::Sender;
 use webparse::{
-    http::http2::{
-        frame::{
-            Data, Flag, Frame, FrameHeader, Headers, Kind,
-            StreamIdentifier,
-        },
-    },
-    Binary, Method,
+    http::http2::frame::{Data, Flag, Frame, FrameHeader, Headers, Kind, StreamIdentifier},
+    Method,
 };
+use webparse::{HeaderMap, HeaderName, HeaderValue};
 
 use crate::{ProtResult, RecvResponse};
-
 
 #[derive(Debug)]
 pub struct SendResponse {
@@ -59,16 +54,21 @@ impl SendResponse {
         }
     }
 
-    pub fn encode_headers(response: & RecvResponse) -> (HeaderMap, bool) {
+    pub fn encode_headers(response: &RecvResponse) -> (HeaderMap, bool) {
         let mut headers = HeaderMap::new();
         let mut is_end = false;
-        headers.insert(":status", HeaderValue::from_static(response.status().as_str()));
+        headers.insert(
+            ":status",
+            HeaderValue::from_static(response.status().as_str()),
+        );
         for h in response.headers().iter() {
             // if h.0 != HeaderName::TRANSFER_ENCODING {
             //     headers.insert(h.0.clone(), h.1.clone());
             // }
             headers.insert(h.0.clone(), h.1.clone());
-            if h.0 == HeaderName::CONTENT_LENGTH && TryInto::<isize>::try_into(&h.1).unwrap_or(0) == 0{
+            if h.0 == HeaderName::CONTENT_LENGTH
+                && TryInto::<isize>::try_into(&h.1).unwrap_or(0) == 0
+            {
                 is_end = true;
             }
         }
@@ -79,9 +79,10 @@ impl SendResponse {
         let mut result = vec![];
         if !self.encode_header {
             if let Some(push_id) = &self.push_id {
-                let header = FrameHeader::new(Kind::PushPromise, Flag::end_headers(), self.stream_id);
+                let header =
+                    FrameHeader::new(Kind::PushPromise, Flag::end_headers(), self.stream_id);
                 let (fields, is_end) = Self::encode_headers(&self.response);
-                
+
                 let mut push = PushPromise::new(header, push_id.clone(), fields);
                 if is_end {
                     push.flags_mut().set_end_stream();
@@ -122,7 +123,6 @@ impl SendResponse {
 
         (self.is_end_stream, result)
     }
-
 }
 
 #[derive(Debug, Clone)]
@@ -145,14 +145,10 @@ impl SendControl {
         }
     }
 
-    pub async fn send_response(
-        &mut self,
-        res: RecvResponse
-    ) -> ProtResult<()> {
+    pub async fn send_response(&mut self, res: RecvResponse) -> ProtResult<()> {
         let _ = self.sender.send((self.stream_id, res)).await;
         Ok(())
     }
-
 }
 
 unsafe impl Sync for SendControl {}

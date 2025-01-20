@@ -12,8 +12,9 @@
 
 use std::fmt::Debug;
 use std::io::Read;
+use algorithm::buf::{Binary, BinaryMut, Bt, BtMut};
 use tokio_stream::Stream;
-use webparse::{Binary, BinaryMut, Buf, Helper, HttpError, Serialize, WebError};
+use webparse::{Helper, HttpError, Serialize, WebError};
 
 use crate::ProtResult;
 
@@ -106,7 +107,7 @@ impl SendStream {
         Ok(())
     }
 
-    pub fn read_data<B: webparse::Buf + webparse::BufMut>(
+    pub fn read_data<B: Bt + BtMut>(
         &mut self,
         read_data: &mut B,
     ) -> ProtResult<usize> {
@@ -158,7 +159,7 @@ impl Read for SendStream {
 }
 
 impl Serialize for SendStream {
-    fn serialize<B: webparse::Buf + webparse::BufMut>(
+    fn serialize<B: Bt + BtMut>(
         &mut self,
         _buffer: &mut B,
     ) -> webparse::WebResult<usize> {

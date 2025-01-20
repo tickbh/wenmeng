@@ -14,6 +14,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{ready, Poll};
 
+use algorithm::buf::{BinaryMut, BinaryRef, Bt};
 use bytes::{BufMut, BytesMut};
 use tokio::io::AsyncRead;
 use tokio_stream::Stream;
@@ -21,7 +22,7 @@ use tokio_util::codec::FramedRead as InnerFramedRead;
 
 use webparse::{
     ws::{DataFrame, OwnedMessage},
-    BinaryMut, BinaryRef, Buf, WebError,
+    WebError,
 };
 
 use crate::ProtResult;

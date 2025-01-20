@@ -1,21 +1,25 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/14 09:42:25
 
-use std::{fmt::{Display, Pointer}, io};
+use std::{
+    fmt::{Display, Pointer},
+    io,
+};
 
+use algorithm::buf::Binary;
 use tokio::sync::mpsc::error::SendError;
-use webparse::{WebError, Binary, http::http2::frame::Reason, http2::frame::Settings};
+use webparse::{http::http2::frame::Reason, http2::frame::Settings, WebError};
 
-use crate::{RecvRequest};
+use crate::RecvRequest;
 
 pub type ProtResult<T> = Result<T, ProtError>;
 
@@ -26,22 +30,21 @@ pub enum TimeoutError {
     Write(&'static str),
     Time(&'static str),
     KeepAlive(&'static str),
-    Extension(&'static str)
+    Extension(&'static str),
 }
 
 impl TimeoutError {
-
     pub fn is_read(&self) -> (bool, bool) {
         match self {
             TimeoutError::Read(info) => (true, info == &"client"),
-            _ => (false, false)
+            _ => (false, false),
         }
     }
 
     pub fn is_write(&self) -> (bool, bool) {
         match self {
             TimeoutError::Write(info) => (true, info == &"client"),
-            _ => (false, false)
+            _ => (false, false),
         }
     }
 
@@ -55,7 +58,7 @@ impl TimeoutError {
             TimeoutError::Extension(info) => info == &"client",
         }
     }
-    
+
     pub fn is_server(&self) -> bool {
         match self {
             TimeoutError::Connect(info) => info == &"server",
@@ -90,7 +93,6 @@ pub enum ProtError {
     GoAway(Binary, Reason, Initiator),
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Initiator {
     User,
@@ -115,14 +117,13 @@ impl Display for ProtError {
     }
 }
 
-impl From<io::Error>  for ProtError {
+impl From<io::Error> for ProtError {
     fn from(value: io::Error) -> Self {
         ProtError::IoError(value)
     }
 }
 
-
-impl From<WebError>  for ProtError {
+impl From<WebError> for ProtError {
     fn from(value: WebError) -> Self {
         ProtError::WebError(value)
     }
@@ -134,13 +135,9 @@ impl<T> From<SendError<T>> for ProtError {
     }
 }
 
-unsafe impl Send for ProtError {
-    
-}
+unsafe impl Send for ProtError {}
 
-unsafe impl Sync for ProtError {
-    
-}
+unsafe impl Sync for ProtError {}
 
 impl ProtError {
     pub(crate) fn library_go_away(reason: Reason) -> Self {
@@ -160,14 +157,14 @@ impl ProtError {
             _ => false,
         }
     }
-    
+
     pub fn is_read_timeout(&self) -> (bool, bool) {
         match self {
             Self::Timeout(timeout) => timeout.is_read(),
             _ => (false, false),
         }
     }
-    
+
     pub fn is_write_timeout(&self) -> (bool, bool) {
         match self {
             Self::Timeout(timeout) => timeout.is_read(),
@@ -181,7 +178,7 @@ impl ProtError {
             _ => false,
         }
     }
-    
+
     pub fn is_server_upgrade_ws(&self) -> bool {
         match self {
             Self::ServerUpgradeWs(_) => true,
@@ -192,19 +189,19 @@ impl ProtError {
     pub fn connect_timeout(val: &'static str) -> Self {
         Self::Timeout(TimeoutError::Connect(val))
     }
-    
+
     pub fn read_timeout(val: &'static str) -> Self {
         Self::Timeout(TimeoutError::Read(val))
     }
-    
+
     pub fn write_timeout(val: &'static str) -> Self {
         Self::Timeout(TimeoutError::Write(val))
     }
-    
+
     pub fn time_timeout(val: &'static str) -> Self {
         Self::Timeout(TimeoutError::Time(val))
     }
-    
+
     pub fn ka_timeout(val: &'static str) -> Self {
         Self::Timeout(TimeoutError::KeepAlive(val))
     }

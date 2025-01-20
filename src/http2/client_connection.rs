@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/10/07 09:41:02
@@ -16,8 +16,9 @@ use std::{
     time::Duration,
 };
 
-use tokio_stream::Stream;
+use algorithm::buf::{Binary, BinaryMut};
 use std::future::Future;
+use tokio_stream::Stream;
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -26,12 +27,12 @@ use tokio::{
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
     http2::frame::Settings,
-    Binary, BinaryMut, Request, Response, Serialize,
+    Request, Response, Serialize,
 };
 
 use crate::{
-    ProtError, ProtResult,
-    Builder, Initiator, Body, TimeoutLayer, RecvResponse, RecvRequest, ws::ClientWsConnection,
+    ws::ClientWsConnection, Body, Builder, Initiator, ProtError, ProtResult, RecvRequest,
+    RecvResponse, TimeoutLayer,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -97,7 +98,7 @@ where
     pub fn into_io(self) -> T {
         self.codec.into_io()
     }
-    
+
     pub fn into_ws(self) -> ClientWsConnection<T> {
         let (io, read_buf, write_buf) = self.codec.into_io_with_cache();
         let mut connect = ClientWsConnection::new(io);
@@ -149,10 +150,7 @@ where
         Poll::Pending
     }
 
-    pub fn poll_request(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtResult<RecvRequest>>> {
+    pub fn poll_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtResult<RecvRequest>>> {
         self.inner.control.poll_request(cx, &mut self.codec)
     }
 
@@ -227,10 +225,7 @@ where
         }
     }
 
-    fn handle_poll_result(
-        &mut self,
-        result: Option<ProtResult<RecvResponse>>,
-    ) -> ProtResult<()> {
+    fn handle_poll_result(&mut self, result: Option<ProtResult<RecvResponse>>) -> ProtResult<()> {
         match result {
             // 收到空包, 则关闭连接
             None => {

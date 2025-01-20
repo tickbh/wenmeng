@@ -16,11 +16,9 @@ use std::{
     task::{ready, Context, Poll},
 };
 
+use algorithm::buf::{BinaryMut, Bt};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use webparse::{
-    http::http2::{FrameSize, DEFAULT_MAX_FRAME_SIZE},
-    BinaryMut, Buf,
-};
+use webparse::http::http2::{FrameSize, DEFAULT_MAX_FRAME_SIZE};
 
 #[derive(Debug)]
 pub struct FramedWrite<T> {
@@ -55,7 +53,7 @@ where
     pub fn get_mut_bytes(&mut self) -> &mut BinaryMut {
         &mut self.binary
     }
-    
+
     pub fn get_bytes(&self) -> &BinaryMut {
         &self.binary
     }

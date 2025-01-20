@@ -13,6 +13,7 @@
 use std::pin::Pin;
 use std::task::{ready, Poll};
 
+use algorithm::buf::{Binary, BinaryMut, Bt};
 use bytes::{BufMut, BytesMut};
 use tokio::io::AsyncRead;
 use tokio_stream::Stream;
@@ -21,7 +22,6 @@ use tokio_util::codec::LengthDelimitedCodec;
 use webparse::http::http2::frame::{Frame, Kind};
 use webparse::http::http2::{frame, Decoder};
 use webparse::http2::DEFAULT_SETTINGS_HEADER_TABLE_SIZE;
-use webparse::{Binary, BinaryMut, Buf};
 
 use crate::ProtResult;
 

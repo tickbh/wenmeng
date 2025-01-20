@@ -1,26 +1,31 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/10/07 09:41:02
 
 use std::{
     pin::Pin,
-    task::{Context, Poll}, time::{Duration},
+    task::{Context, Poll},
+    time::Duration,
 };
 
+use algorithm::buf::Binary;
 use tokio_stream::Stream;
 
-use tokio::{io::{AsyncRead, AsyncWrite}};
-use webparse::{Binary, http2::{HTTP2_MAGIC, frame::Settings}};
+use tokio::io::{AsyncRead, AsyncWrite};
+use webparse::http2::{frame::Settings, HTTP2_MAGIC};
 
-use crate::{ProtResult, http2::ClientH2Connection, TimeoutLayer, RecvResponse, RecvRequest, ws::ClientWsConnection};
+use crate::{
+    http2::ClientH2Connection, ws::ClientWsConnection, ProtResult, RecvRequest, RecvResponse,
+    TimeoutLayer,
+};
 
 use super::IoBuffer;
 
@@ -55,14 +60,20 @@ where
         if self.timeout.is_none() {
             self.timeout = Some(TimeoutLayer::new());
         }
-        self.timeout.as_mut().unwrap().set_read_timeout(read_timeout);
+        self.timeout
+            .as_mut()
+            .unwrap()
+            .set_read_timeout(read_timeout);
     }
 
     pub fn set_write_timeout(&mut self, write_timeout: Option<Duration>) {
         if self.timeout.is_none() {
             self.timeout = Some(TimeoutLayer::new());
         }
-        self.timeout.as_mut().unwrap().set_write_timeout(write_timeout);
+        self.timeout
+            .as_mut()
+            .unwrap()
+            .set_write_timeout(write_timeout);
     }
 
     pub fn set_timeout(&mut self, timeout: Option<Duration>) {
@@ -83,10 +94,7 @@ where
         self.io.poll_write(cx)
     }
 
-    pub fn poll_request(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<ProtResult<RecvRequest>>> {
+    pub fn poll_request(&mut self, cx: &mut Context<'_>) -> Poll<Option<ProtResult<RecvRequest>>> {
         self.io.poll_request(cx)
     }
 
@@ -100,7 +108,7 @@ where
         connect.set_timeout_layer(self.timeout);
         connect
     }
-    
+
     pub fn into_ws(self) -> ClientWsConnection<T> {
         let (io, read_buf, write_buf) = self.io.into();
         let mut connect = ClientWsConnection::new(io);
@@ -110,17 +118,11 @@ where
         connect
     }
 
-
-    pub async fn handle_response(
-        &mut self,
-        r: RecvResponse,
-    ) -> ProtResult<Option<RecvResponse>>
-    {
+    pub async fn handle_response(&mut self, r: RecvResponse) -> ProtResult<Option<RecvResponse>> {
         return Ok(Some(r));
     }
 
-    pub async fn incoming(&mut self) -> ProtResult<Option<RecvResponse>>
-    {
+    pub async fn incoming(&mut self) -> ProtResult<Option<RecvResponse>> {
         use tokio_stream::StreamExt;
         let req = self.next().await;
 
@@ -155,8 +157,20 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
         if self.timeout.is_some() {
-            let (ready_time, is_read_end, is_write_end, is_idle) = (*self.io.get_ready_time(), self.io.is_read_end(), self.io.is_write_end(), self.io.is_idle());
-            self.timeout.as_mut().unwrap().poll_ready(cx, "client", ready_time, is_read_end, is_write_end, is_idle)?;
+            let (ready_time, is_read_end, is_write_end, is_idle) = (
+                *self.io.get_ready_time(),
+                self.io.is_read_end(),
+                self.io.is_write_end(),
+                self.io.is_idle(),
+            );
+            self.timeout.as_mut().unwrap().poll_ready(
+                cx,
+                "client",
+                ready_time,
+                is_read_end,
+                is_write_end,
+                is_idle,
+            )?;
         }
         Pin::new(&mut self.io).poll_response(cx)
     }

@@ -1,21 +1,23 @@
-
 #![warn(rust_2018_idioms)]
 
+use algorithm::buf::BinaryMut;
 use async_trait::async_trait;
 use flate2::GzBuilder;
-use webparse::{BinaryMut, Response, HeaderName};
+use webparse::{HeaderName, Response};
 #[macro_use]
 extern crate serde_derive;
 use std::{
     env,
     error::Error,
-    io::{self}, net::SocketAddr,
+    io::{self},
+    net::SocketAddr,
 };
 use tokio::{
-    net::{TcpListener, TcpStream}, fs::File,
+    fs::File,
+    net::{TcpListener, TcpStream},
 };
 
-use wenmeng::{self, ProtResult, Body, Server, RecvRequest, RecvResponse, HttpTrait};
+use wenmeng::{self, Body, HttpTrait, ProtResult, RecvRequest, RecvResponse, Server};
 
 struct Operate;
 

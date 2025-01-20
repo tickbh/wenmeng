@@ -10,11 +10,12 @@
 // -----
 // Created Date: 2023/12/07 03:05:04
 
+use algorithm::buf::{BinaryMut, BtMut};
 use lazy_static::lazy_static;
 use std::{net::SocketAddr, env, collections::HashSet, fmt::Display};
 
 use tokio::{net::TcpStream, io::{AsyncRead, AsyncWrite}};
-use webparse::{Url, HeaderValue, BinaryMut, Scheme};
+use webparse::{Url, HeaderValue, Scheme};
 
 use crate::{ProtError, ProtResult, RecvRequest};
 
@@ -283,7 +284,6 @@ impl ProxyScheme {
         T: AsyncRead + AsyncWrite + Unpin,
     {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        use webparse::BufMut;
         let mut binary = BinaryMut::new();
         let mut data = vec![0;1024];
         if let Some(_auth) = auth {

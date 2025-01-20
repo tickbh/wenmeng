@@ -17,17 +17,14 @@ use std::{
     time::Instant,
 };
 
+use algorithm::buf::{Binary, BinaryMut, Bt, BtMut};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     sync::mpsc::Sender,
 };
 
-use crate::{
-    HeaderHelper, ProtError, ProtResult, RecvRequest, RecvResponse, Body, SendStream,
-};
-use webparse::{
-    http::http2, Binary, BinaryMut, Buf, BufMut, Request, Response, Version,
-};
+use crate::{Body, HeaderHelper, ProtError, ProtResult, RecvRequest, RecvResponse, SendStream};
+use webparse::{http::http2, Request, Response, Version};
 
 pub struct IoBuffer<T> {
     io: T,

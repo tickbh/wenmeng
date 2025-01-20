@@ -12,11 +12,11 @@
 
 use std::{task::{Context, Poll}, collections::HashMap};
 
+use algorithm::buf::Binary;
 use rbtree::RBTree;
 use tokio::io::{AsyncRead, AsyncWrite};
 use webparse::{
     http::http2::{frame::{Frame, Priority, PriorityFrame, StreamIdentifier}, WindowSize},
-    Binary,
 };
 
 use crate::ProtResult;

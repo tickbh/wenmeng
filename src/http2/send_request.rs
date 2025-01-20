@@ -1,30 +1,24 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/10/07 09:41:02
 
 use std::task::Context;
 
-use webparse::{BinaryMut, Buf, HeaderMap};
-use webparse::{
-    http::http2::{
-        frame::{
-            Data, Flag, Frame, FrameHeader, Headers, Kind,
-            StreamIdentifier,
-        },
-    },
-    Binary,
+use algorithm::buf::{Binary, BinaryMut, Bt};
+use webparse::http::http2::frame::{
+    Data, Flag, Frame, FrameHeader, Headers, Kind, StreamIdentifier,
 };
+use webparse::HeaderMap;
 
-use crate::{RecvRequest};
-
+use crate::RecvRequest;
 
 #[derive(Debug)]
 pub struct SendRequest {
@@ -36,11 +30,7 @@ pub struct SendRequest {
 }
 
 impl SendRequest {
-    pub fn new(
-        stream_id: StreamIdentifier,
-        request: RecvRequest,
-        is_end_stream: bool,
-    ) -> Self {
+    pub fn new(stream_id: StreamIdentifier, request: RecvRequest, is_end_stream: bool) -> Self {
         SendRequest {
             stream_id,
             request,
@@ -50,7 +40,7 @@ impl SendRequest {
         }
     }
 
-    pub fn encode_headers(request: & RecvRequest) -> HeaderMap {
+    pub fn encode_headers(request: &RecvRequest) -> HeaderMap {
         let mut headers = HeaderMap::new();
         headers.insert(":method", request.method().as_str().to_string());
         headers.insert(":path", request.path().clone());
@@ -103,5 +93,4 @@ impl SendRequest {
 
         (self.is_end_stream, result)
     }
-
 }

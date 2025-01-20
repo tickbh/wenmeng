@@ -15,6 +15,7 @@
 
 #[cfg(test)]
 mod tests {
+    use algorithm::buf::{BinaryMut, Bt};
     use async_trait::async_trait;
     use serde::Serialize;
     use std::{
@@ -26,7 +27,7 @@ mod tests {
         fs::File,
         net::{TcpListener, TcpStream},
     };
-    use webparse::{BinaryMut, Buf, Request, Response, Version};
+    use webparse::{Request, Response, Version};
 
     use wenmeng::{self, Body, Client, HttpTrait, ProtResult, RecvRequest, RecvResponse, Server};
 

@@ -21,6 +21,7 @@ use crate::{http1::ClientH1Connection, ProtError};
 use crate::{
     Body, MaybeHttpsStream, Middleware, ProtResult, RecvRequest, RecvResponse, TimeoutLayer,
 };
+use algorithm::buf::Binary;
 use base64::prelude::*;
 use futures::StreamExt;
 use rustls::{ClientConfig, RootCertStore};
@@ -33,7 +34,7 @@ use tokio::{
 use tokio_rustls::TlsConnector;
 use webparse::http2::frame::Settings;
 use webparse::http2::{DEFAULT_INITIAL_WINDOW_SIZE, DEFAULT_MAX_FRAME_SIZE, HTTP2_MAGIC};
-use webparse::{ws::OwnedMessage, Binary, Request, Url, WebError};
+use webparse::{ws::OwnedMessage, Request, Url, WebError};
 
 use super::middle::BaseMiddleware;
 use super::proxy::ProxyScheme;

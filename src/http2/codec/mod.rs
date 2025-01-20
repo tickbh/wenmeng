@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/14 09:42:25
@@ -19,19 +19,20 @@ use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
 
-use tokio_stream::Stream;
+use algorithm::buf::BinaryMut;
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio_stream::Stream;
 use tokio_util::codec::length_delimited;
-use webparse::BinaryMut;
 use webparse::http::http2::encoder::Encoder;
 use webparse::http::http2::frame::Frame;
-use webparse::http::http2::{HeaderIndex, DEFAULT_MAX_FRAME_SIZE, DEFAULT_SETTINGS_HEADER_TABLE_SIZE};
+use webparse::http::http2::{
+    HeaderIndex, DEFAULT_MAX_FRAME_SIZE, DEFAULT_SETTINGS_HEADER_TABLE_SIZE,
+};
 
 use crate::ProtResult;
 
 pub use self::framed_read::FramedRead;
 pub use self::framed_write::FramedWrite;
-
 
 #[derive(Debug)]
 pub struct Codec<T> {
@@ -61,7 +62,7 @@ where
 
     pub fn into_io(self) -> T {
         // self.inner.get_mut().get_bytes()
-        self.inner.into_io().into_io()       
+        self.inner.into_io().into_io()
     }
 
     /// Returns a new `Codec` with the given maximum frame size
@@ -132,9 +133,8 @@ where
         if let Ok(mut header) = self.header_index.write() {
             header.set_max_table_size(size);
         }
-
     }
-    
+
     pub fn set_max_send_frame_size(&mut self, size: usize) {
         self.max_send_frame_size = size;
     }

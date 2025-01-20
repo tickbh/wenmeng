@@ -16,6 +16,7 @@ use std::{
     time::Duration,
 };
 
+use algorithm::buf::{Binary, BinaryMut};
 use tokio_stream::Stream;
 
 use tokio::{
@@ -24,12 +25,12 @@ use tokio::{
 };
 use webparse::{
     http::http2::frame::{Reason, StreamIdentifier},
-    Binary, BinaryMut, Version,
+    Version,
 };
 
 use crate::{
-    Builder, HeaderHelper, HttpHelper, Initiator, Middleware, HttpTrait, ProtError, ProtResult,
-    RecvRequest, RecvResponse, TimeoutLayer, ws::ServerWsConnection,
+    ws::ServerWsConnection, Builder, HeaderHelper, HttpHelper, HttpTrait, Initiator, Middleware,
+    ProtError, ProtResult, RecvRequest, RecvResponse, TimeoutLayer,
 };
 
 use super::{codec::Codec, control::ControlConfig, Control};
@@ -97,7 +98,7 @@ where
     pub fn into_io(self) -> T {
         self.codec.into_io()
     }
-    
+
     pub fn into_ws(self, binary: Binary) -> ServerWsConnection<T> {
         let (io, read_buf, write_buf) = self.codec.into_io_with_cache();
         let mut connect = ServerWsConnection::new(io);
@@ -182,8 +183,7 @@ where
         mut r: RecvRequest,
         f: &mut Box<dyn HttpTrait>,
         middles: &mut Vec<Box<dyn Middleware>>,
-    ) -> ProtResult<Option<bool>>
-    {
+    ) -> ProtResult<Option<bool>> {
         let stream_id: Option<StreamIdentifier> = r.extensions_mut().remove::<StreamIdentifier>();
 
         let res = HttpHelper::handle_request(Version::Http2, addr, r, f, middles).await?;
@@ -192,10 +192,7 @@ where
         return Ok(None);
     }
 
-    pub async fn incoming(
-        &mut self,
-    ) -> ProtResult<Option<RecvRequest>>
-    {
+    pub async fn incoming(&mut self) -> ProtResult<Option<RecvRequest>> {
         use tokio_stream::StreamExt;
         loop {
             let mut receiver = self.inner.receiver_push.take().unwrap();

@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/14 09:42:25
@@ -14,10 +14,11 @@ use std::{
     collections::{HashMap, HashSet, LinkedList},
     pin::Pin,
     sync::{Arc, Mutex},
-    task::{Context, Poll, ready},
+    task::{ready, Context, Poll},
     time::{Duration, Instant},
 };
 
+use algorithm::buf::Binary;
 use tokio_stream::Stream;
 
 use tokio::{
@@ -26,10 +27,10 @@ use tokio::{
 };
 use webparse::{
     http::http2::frame::{Frame, GoAway, Reason, Settings, StreamIdentifier},
-    Binary, Request,
+    Request,
 };
 
-use crate::{ProtError, ProtResult, RecvResponse, RecvRequest};
+use crate::{ProtError, ProtResult, RecvRequest, RecvResponse};
 
 use super::{
     codec::Codec, inner_stream::InnerStream, send_response::SendControl, state::StateHandshake,
@@ -129,7 +130,9 @@ impl Control {
         T: AsyncRead + AsyncWrite + Unpin,
     {
         if self.is_server {
-            self.send_frames.is_empty() && codec.is_write_end() && self.response_queue.lock().unwrap().is_empty()
+            self.send_frames.is_empty()
+                && codec.is_write_end()
+                && self.response_queue.lock().unwrap().is_empty()
         } else {
             self.send_frames.is_empty() && codec.is_write_end() && self.request_queue.is_empty()
         }
@@ -145,7 +148,7 @@ impl Control {
     pub fn encode_response(&mut self, cx: &mut Context) -> ProtResult<()> {
         let mut list = self.response_queue.lock().unwrap();
         if list.len() == 0 {
-            return Ok(())
+            return Ok(());
         }
         let mut new_list = vec![];
         // let vals = (*list).drain(..).collect::<Vec<SendResponse>>();

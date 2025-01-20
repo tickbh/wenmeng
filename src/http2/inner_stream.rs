@@ -1,28 +1,32 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/14 09:42:25
 
-use std::{task::{Context, Poll}, collections::LinkedList};
+use std::{
+    collections::LinkedList,
+    task::{Context, Poll},
+};
 
-use tokio::sync::mpsc::{channel};
+use algorithm::buf::{Binary, BinaryMut, Bt};
+use tokio::sync::mpsc::channel;
 use tokio_util::sync::PollSender;
 use webparse::{
     http::{
         http2::frame::{Frame, Reason},
         request, response,
     },
-    Binary, BinaryMut, Buf, Version,
+    Version,
 };
 
-use crate::{HeaderHelper, ProtError, ProtResult, RecvResponse, RecvRequest};
+use crate::{HeaderHelper, ProtError, ProtResult, RecvRequest, RecvResponse};
 
 use crate::Body;
 
@@ -57,7 +61,6 @@ impl InnerStream {
     }
 
     pub fn poll_push(&mut self, frame: Frame<Binary>, cx: &mut Context<'_>) -> ProtResult<bool> {
-        
         if frame.is_end_headers() {
             self.end_headers = true;
         }
@@ -130,7 +133,7 @@ impl InnerStream {
         } else {
             let (sender, receiver) = channel::<(bool, Binary)>(20);
             self.sender = Some(PollSender::new(sender));
-            
+
             Body::new(receiver, binary, is_end_stream)
         };
         self.content_len = builder.get_body_len() as usize;

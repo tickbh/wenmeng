@@ -29,7 +29,8 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, ReadBuf, AsyncSeekExt},
     sync::{mpsc::Receiver, OwnedSemaphorePermit, Semaphore},
 };
-use webparse::{Binary, BinaryMut, Buf, Helper, Serialize, WebResult};
+use algorithm::buf::{Binary, BinaryMut, Bt, BtMut};
+use webparse::{Helper, Serialize, WebResult};
 
 use crate::{Consts, ProtResult};
 
@@ -552,7 +553,7 @@ impl Body {
         }
     }
 
-    fn inner_encode_write_data<B: webparse::Buf + webparse::BufMut>(
+    fn inner_encode_write_data<B: Bt + BtMut>(
         buffer: &mut B,
         data: &[u8],
         is_chunked: bool,
@@ -679,7 +680,7 @@ impl Body {
         }
     }
 
-    pub fn poll_encode_write<B: webparse::Buf + webparse::BufMut>(
+    pub fn poll_encode_write<B: Bt + BtMut>(
         &mut self,
         cx: &mut Context<'_>,
         buffer: &mut B,
@@ -822,7 +823,7 @@ impl Body {
         Poll::Ready(Ok(0))
     }
 
-    pub fn read_data<B: webparse::Buf + webparse::BufMut>(
+    pub fn read_data<B: Bt + BtMut>(
         &mut self,
         read_data: &mut B,
     ) -> WebResult<usize> {
@@ -852,7 +853,7 @@ impl AsyncRead for Body {
 }
 
 impl Serialize for Body {
-    fn serialize<B: webparse::Buf + webparse::BufMut>(
+    fn serialize<B: Bt + BtMut>(
         &mut self,
         buffer: &mut B,
     ) -> webparse::WebResult<usize> {

@@ -15,13 +15,11 @@ use std::{
     time::{Duration, Instant},
 };
 
+use algorithm::buf::{Binary, BinaryMut};
 use tokio_stream::Stream;
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::{
-    ws::{CloseCode, CloseData, OwnedMessage},
-    Binary, BinaryMut,
-};
+use webparse::ws::{CloseCode, CloseData, OwnedMessage};
 
 use crate::{ProtResult, TimeoutLayer};
 

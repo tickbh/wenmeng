@@ -16,13 +16,14 @@ use crate::{
     ws::{WsHandshake, WsOption, WsTrait},
     ProtError, ProtResult, RecvRequest, RecvResponse, Server,
 };
+use algorithm::buf::{BinaryMut, Bt};
 use async_trait::async_trait;
 use tokio::{
     io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::{TcpStream, ToSocketAddrs},
     sync::mpsc::{channel, Receiver, Sender},
 };
-use webparse::{ws::OwnedMessage, BinaryMut, Buf, Response};
+use webparse::{ws::OwnedMessage, Response};
 
 /// 将websocket的流量转化成的tcp流量
 pub struct WsToStream<T: AsyncRead + AsyncWrite + Unpin + Send + 'static, A: ToSocketAddrs> {

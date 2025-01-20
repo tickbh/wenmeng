@@ -16,10 +16,8 @@ use std::{
     task::{ready, Context, Poll},
 };
 
+use algorithm::buf::{BinaryMut, Bt};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use webparse::{
-    BinaryMut, Buf,
-};
 
 #[derive(Debug)]
 pub struct FramedWrite<T> {
@@ -27,7 +25,6 @@ pub struct FramedWrite<T> {
     inner: T,
 
     binary: BinaryMut,
-
 }
 
 impl<T> FramedWrite<T>

@@ -1,11 +1,11 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/14 09:42:25
@@ -17,8 +17,9 @@ use std::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
+use algorithm::buf::{Binary, Bt};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use webparse::{http::http2::HTTP2_MAGIC, Binary, Buf};
+use webparse::http::http2::HTTP2_MAGIC;
 
 pub struct StateHandshake {
     /// 当前握手状态
@@ -65,7 +66,8 @@ impl ReadPreface {
 
         while rem > 0 {
             let mut buf = ReadBuf::new(&mut buf[..rem]);
-            ready!(Pin::new(codec.get_reader()).poll_read(cx, &mut buf)).map_err(ProtError::from)?;
+            ready!(Pin::new(codec.get_reader()).poll_read(cx, &mut buf))
+                .map_err(ProtError::from)?;
             let n = buf.filled().len();
             if n == 0 {
                 return Poll::Ready(Err(ProtError::from(io::Error::new(
@@ -146,7 +148,7 @@ impl StateHandshake {
             }
         }
     }
-    
+
     pub fn set_handshake_status(&mut self, binary: Binary, is_client: bool) {
         self.is_client = is_client;
         self.state = Handshaking::Flushing(Flush(binary))

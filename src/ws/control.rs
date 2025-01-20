@@ -16,9 +16,10 @@ use std::{
     task::{ready, Context, Poll},
 };
 
+use algorithm::buf::Binary;
 use futures::Stream;
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::{ws::OwnedMessage, Binary};
+use webparse::{ws::OwnedMessage};
 
 use crate::ProtResult;
 

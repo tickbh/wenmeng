@@ -1,7 +1,7 @@
+use algorithm::buf::BinaryMut;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::{Compression};
-use webparse::BinaryMut;
+use flate2::Compression;
 use std::io;
 use std::io::prelude::*;
 
@@ -9,7 +9,8 @@ use std::io::prelude::*;
 fn main() {
     let mut e = GzEncoder::new(Vec::new(), Compression::default());
     for i in 0..100 {
-        e.write_all(format!(";Hello World {}", i).as_bytes()).unwrap();
+        e.write_all(format!(";Hello World {}", i).as_bytes())
+            .unwrap();
     }
     let bytes = e.finish().unwrap();
     println!("{}", decode_reader(bytes).unwrap());

@@ -15,21 +15,15 @@ use std::{
     time::{Duration, Instant},
 };
 
+use algorithm::buf::{Binary, BinaryMut};
 use tokio_stream::Stream;
 
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-};
-use webparse::{
-    ws::{CloseCode, CloseData, OwnedMessage},
-    Binary, BinaryMut,
-};
+use tokio::io::{AsyncRead, AsyncWrite};
+use webparse::ws::{CloseCode, CloseData, OwnedMessage};
 
-use crate::{
-    ProtResult, TimeoutLayer,
-};
+use crate::{ProtResult, TimeoutLayer};
 
-use super::{Control, WsCodec, state::WsState};
+use super::{state::WsState, Control, WsCodec};
 
 pub struct ServerWsConnection<T> {
     codec: WsCodec<T>,
@@ -161,9 +155,11 @@ where
     pub fn send_owned_message(&mut self, msg: OwnedMessage) -> ProtResult<()> {
         self.inner.control.send_owned_message(msg)
     }
-    
+
     pub fn receiver_close(&mut self, data: Option<CloseData>) -> ProtResult<()> {
-        self.inner.state.set_closing(data.unwrap_or(CloseData::normal()));
+        self.inner
+            .state
+            .set_closing(data.unwrap_or(CloseData::normal()));
         Ok(())
     }
 }

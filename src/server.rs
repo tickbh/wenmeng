@@ -17,6 +17,7 @@ use std::{
     time::Duration,
 };
 
+use algorithm::buf::{Binary, BinaryMut};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -24,8 +25,7 @@ use tokio::{
 };
 use tokio_stream::StreamExt;
 use webparse::{
-    http::http2::frame::StreamIdentifier, ws::OwnedMessage, Binary, BinaryMut, Request, Response,
-    Serialize,
+    http::http2::frame::StreamIdentifier, ws::OwnedMessage, Request, Response, Serialize,
 };
 
 use super::{http1::ServerH1Connection, middle::BaseMiddleware};

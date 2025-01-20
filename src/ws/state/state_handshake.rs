@@ -1,23 +1,23 @@
 // Copyright 2022 - 2023 Wenmeng See the COPYRIGHT
 // file at the top-level directory of this distribution.
-// 
+//
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-// 
+//
 // Author: tickbh
 // -----
 // Created Date: 2023/09/14 09:42:25
 
 use crate::{ws::WsCodec, ProtResult};
 
+use algorithm::buf::{Binary, Bt};
 use std::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
 use tokio::io::{AsyncRead, AsyncWrite};
-use webparse::{Binary, Buf};
 
 pub struct WsStateHandshake {
     /// 当前握手状态
@@ -83,7 +83,7 @@ impl WsStateHandshake {
             }
         }
     }
-    
+
     pub fn set_handshake_status(&mut self, binary: Binary, is_client: bool) {
         self.is_client = is_client;
         if binary.is_empty() {
