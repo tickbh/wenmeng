@@ -10,9 +10,9 @@
 // -----
 // Created Date: 2023/09/12 02:36:35
 
-use std::time::{Instant};
+use std::time::Instant;
 use webparse::{HeaderName, Request};
-use wenmeng::{Client, ProtResult};
+use wmhttp::{Client, ProtResult};
 
 async fn test_http2() -> ProtResult<()> {
     let url = "http://nghttp2.org/";
@@ -41,7 +41,7 @@ async fn test_http2() -> ProtResult<()> {
         req.get_connect_url(),
         Instant::now()
     );
-    
+
     let client = Client::builder()
         // .http2(false)
         // .http2_only(true)

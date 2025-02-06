@@ -365,6 +365,15 @@ where
         return result;
     }
 
+    
+    pub async fn handle_close(&mut self) -> ProtResult<()> {
+        if self.callback_http.is_none() {
+            return Err(ProtError::Extension("http callback is none"));
+        }
+        self.callback_http.as_mut().unwrap().close_connect().await;
+        Ok(())
+    }
+
     async fn handle_error(&mut self, err: crate::ProtError) -> ProtResult<()> {
         if self.callback_http.is_none() {
             return Err(err);
@@ -486,8 +495,12 @@ where
                 }
                 Err(e) => {
                     self.handle_error(e).await?;
+                    self.handle_close().await?;
                 }
-                Ok(None) => return Ok(()),
+                Ok(None) => {
+                    self.handle_close().await?;
+                    return Ok(())
+                },
                 Ok(Some(r)) => {
                     self.handle_request(r).await?;
                 }
@@ -498,6 +511,7 @@ where
                     && !self.callback_http.as_mut().unwrap().is_continue_next())
             {
                 self.flush().await?;
+                self.handle_close().await?;
                 return Ok(());
             }
         }

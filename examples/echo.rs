@@ -1,9 +1,9 @@
-use std::{env, error::Error, time::Duration};
 use async_trait::async_trait;
+use std::{env, error::Error, time::Duration};
 
-use tokio::{net::TcpListener};
-use webparse::{Response};
-use wenmeng::{self, ProtResult, Server, RecvRequest, RecvResponse, HttpTrait, Middleware, Body};
+use tokio::net::TcpListener;
+use webparse::Response;
+use wmhttp::{self, Body, HttpTrait, Middleware, ProtResult, RecvRequest, RecvResponse, Server};
 
 // #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -13,7 +13,7 @@ struct Operate;
 
 #[async_trait]
 impl HttpTrait for Operate {
-    async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
+    async fn operate(&mut self, req: RecvRequest) -> ProtResult<RecvResponse> {
         tokio::time::sleep(Duration::new(1, 1)).await;
         let response = Response::builder()
             .version(req.version().clone())
@@ -25,12 +25,15 @@ impl HttpTrait for Operate {
 struct HelloMiddleware;
 #[async_trait]
 impl Middleware for HelloMiddleware {
-    async fn process_request(&mut self, request: &mut RecvRequest) -> ProtResult<Option<RecvResponse>> {
+    async fn process_request(
+        &mut self,
+        request: &mut RecvRequest,
+    ) -> ProtResult<Option<RecvResponse>> {
         println!("hello request {}", request.url());
         Ok(None)
     }
 
-    async fn process_response(&mut self, _request: &mut RecvRequest, response: &mut RecvResponse) -> ProtResult<()> {
+    async fn process_response(&mut self, response: &mut RecvResponse) -> ProtResult<()> {
         println!("hello response {}", response.status());
         Ok(())
     }
@@ -79,7 +82,7 @@ async fn run_main() -> Result<(), Box<dyn Error>> {
             let recv = Body::empty();
             println!("recv = {:?}", std::mem::size_of_val(&recv));
             recv.print_debug();
-            let x = vec![0;1900];
+            let x = vec![0; 1900];
             // println!("size = {:?}", s);
             println!("size = {:?}", std::mem::size_of_val(&x));
             let mut server = Server::new(stream, Some(addr));
@@ -92,7 +95,6 @@ async fn run_main() -> Result<(), Box<dyn Error>> {
         });
     }
 }
-
 
 #[tokio::main]
 async fn main() {

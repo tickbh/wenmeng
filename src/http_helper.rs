@@ -14,7 +14,7 @@ use std::net::SocketAddr;
 
 use webparse::{HeaderName, Response, Version};
 
-use crate::{Middleware, HttpTrait, ProtResult, RecvRequest, RecvResponse};
+use crate::{HttpTrait, Middleware, ProtResult, RecvRequest, RecvResponse};
 
 pub struct HttpHelper;
 
@@ -25,8 +25,7 @@ impl HttpHelper {
         mut r: RecvRequest,
         f: &mut Box<dyn HttpTrait>,
         middles: &mut Vec<Box<dyn Middleware>>,
-    ) -> ProtResult<RecvResponse>
-    {
+    ) -> ProtResult<RecvResponse> {
         let (mut gzip, mut deflate, mut br) = (false, false, false);
         if let Some(accept) = r.headers().get_option_value(&HeaderName::ACCEPT_ENCODING) {
             if accept.contains("gzip".as_bytes()) {
@@ -58,7 +57,7 @@ impl HttpHelper {
         }
 
         if response.is_none() {
-            let res = match f.operate(&mut r).await {
+            let res = match f.operate(r).await {
                 Ok(mut res) => {
                     *res.version_mut() = version;
                     // 如果外部有设置编码，内部不做改变，如果有body大小值，不做任何改变，因为改变会变更大小值
@@ -85,7 +84,7 @@ impl HttpHelper {
                 Err(e) => {
                     log::info!("处理数据时出错:{:?}", e);
                     for i in 0usize..middles.len() {
-                        middles[i].process_error(Some(&mut r), &e).await;
+                        middles[i].process_error(None, &e).await;
                     }
                     Response::builder()
                         .status(500)
@@ -98,7 +97,7 @@ impl HttpHelper {
         }
         let mut response = response.unwrap();
         for i in (0usize..middles.len()).rev() {
-            middles[i].process_response(&mut r, &mut response).await?;
+            middles[i].process_response(&mut response).await?;
         }
         Ok(response)
     }

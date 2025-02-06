@@ -10,7 +10,7 @@
 use std::{env, error::Error};
 use tokio::net::TcpListener;
 use webparse::{Request, Response};
-use wenmeng::{self, ProtResult, RecvStream, Server, RecvRequest};
+use wmhttp::{self, ProtResult, RecvStream, Server, RecvRequest};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 > http1/http2通用, recv可以接收多个返回及服务端的推送信息
 ```rust
 use webparse::Request;
-use wenmeng::{Client, ProtResult};
+use wmhttp::{Client, ProtResult};
 
 async fn test_http2() -> ProtResult<()> {
     let url = "http://nghttp2.org/"; //"http://127.0.0.1:8080/"

@@ -29,13 +29,13 @@ mod tests {
     };
     use webparse::{Request, Response, Version};
 
-    use wenmeng::{self, Body, Client, HttpTrait, ProtResult, RecvRequest, RecvResponse, Server};
+    use wmhttp::{self, Body, Client, HttpTrait, ProtResult, RecvRequest, RecvResponse, Server};
 
     struct Operate;
 
     #[async_trait]
     impl HttpTrait for Operate {
-        async fn operate(&mut self, req: &mut RecvRequest) -> ProtResult<RecvResponse> {
+        async fn operate(&mut self, mut req: RecvRequest) -> ProtResult<RecvResponse> {
             let mut builder = Response::builder().version(req.version().clone());
             let body = match &*req.url().path {
                 "/plaintext" | "/" => {

@@ -34,7 +34,6 @@ impl Middleware for BaseMiddleware {
     }
     async fn process_response(
         &mut self,
-        _request: &mut RecvRequest,
         response: &mut RecvResponse,
     ) -> ProtResult<()> {
         HeaderHelper::process_response_header(response.version(), self.is_client, response)?;

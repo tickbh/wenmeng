@@ -3,7 +3,7 @@ use std::{time::Duration, io};
 
 use tokio::{sync::mpsc::{Sender, Receiver, channel}};
 use webparse::{ws::{OwnedMessage, CloseData}};
-use wenmeng::{
+use wmhttp::{
     self,
     ws::{WsHandshake, WsOption, WsTrait}, Client, ProtResult,
 };

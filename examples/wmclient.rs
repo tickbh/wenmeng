@@ -1,5 +1,5 @@
 use webparse::Request;
-use wenmeng::{Client, ProtResult};
+use wmhttp::{Client, ProtResult};
 
 async fn test_http2() -> ProtResult<()> {
     let url = "http://nghttp2.org/";
