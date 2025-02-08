@@ -21,7 +21,6 @@ use tokio::time::Sleep;
 
 use crate::ProtResult;
 
-#[derive(Debug)]
 pub struct TimeoutLayer {
     pub connect_timeout: Option<Duration>,
     pub read_timeout: Option<Duration>,

@@ -376,6 +376,29 @@ impl Body {
         }
     }
 
+
+    pub fn set_file(&mut self, file: String, data_size: u64) {
+        let f = std::fs::File::open(file);
+        match f {
+            Ok(f) => {
+                self.origin_buf = None;
+                self.receiver = InnerReceiver::new_file(f.into(), data_size);
+                self.is_end = false;
+            }
+            Err(_) => {
+                self.origin_buf = Some(BinaryMut::from("not found file"));
+            }
+        }
+    }
+
+    pub fn set_data(&mut self, data: Vec<u8>) {
+        self.origin_buf = Some(BinaryMut::from(data));
+    }
+
+    pub fn set_text(&mut self, text: String) {
+        self.origin_buf = Some(BinaryMut::from(text));
+    }
+
     pub fn set_rate_limit(&mut self, rate: RateLimitLayer) {
         self.rate_limit = Some(rate);
     }

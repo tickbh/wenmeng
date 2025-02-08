@@ -365,7 +365,6 @@ where
         return result;
     }
 
-    
     pub async fn handle_close(&mut self) -> ProtResult<()> {
         if self.callback_http.is_none() {
             return Err(ProtError::Extension("http callback is none"));
@@ -494,13 +493,19 @@ where
                     break;
                 }
                 Err(e) => {
-                    self.handle_error(e).await?;
-                    self.handle_close().await?;
+                    // 升级协议错误处理不关闭
+                    match self.handle_error(e).await {
+                        Err(e) => {
+                            self.handle_close().await?;
+                            return Err(e);
+                        }
+                        Ok(_) => {}
+                    };
                 }
                 Ok(None) => {
                     self.handle_close().await?;
-                    return Ok(())
-                },
+                    return Ok(());
+                }
                 Ok(Some(r)) => {
                     self.handle_request(r).await?;
                 }
